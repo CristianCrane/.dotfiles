@@ -17,7 +17,7 @@ in
     fzf		# fuzzy finder
     jq		# json on the command line
     lazygit
-    inputs.herdr.packages.${pkgs.system}.default
+    inputs.herdr.packages.${pkgs.stdenv.hostPlatform.system}.default
     nodejs
     pnpm
     stdenv.cc
@@ -38,12 +38,11 @@ in
     enable = true;
     autosuggestion.enable = true;
     syntaxHighlighting.enable = true;
-    initContent = ''
-      bindkey '^f' autosuggest-accept
-    '';
     shellAliases = {
       ".." = "cd ..";
-      add = "git add .";
+      gs = "git status";
+      ga = "git add .";
+      gc = ''gc() { git commit -m "$1" }; gc'';
       push = "git push";
       pull = "git pull";
       rebuild = "~/.dotfiles/rebuild.sh";
