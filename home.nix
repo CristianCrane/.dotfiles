@@ -18,7 +18,10 @@ in
     jq		# json on the command line
     lazygit
     inputs.herdr.packages.${pkgs.system}.default
+    nodejs
     pnpm
+    stdenv.cc
+    pkg-config
   ];
 
   fonts.fontconfig.enable = true;
