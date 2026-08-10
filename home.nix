@@ -33,6 +33,13 @@ in
     settings.user.email = "12250662+CristianCrane@users.noreply.github.com";
     settings.init.defaultBranch = "main";
   };
+  
+  programs.eza = {
+    enable = true;
+    enableZshIntegration = true;
+    git = true;
+    icons = "auto";
+  };
 
   programs.zsh = {
     enable = true;
@@ -46,6 +53,7 @@ in
       push = "git push";
       pull = "git pull";
       rebuild = "~/.dotfiles/rebuild.sh";
+      l = "eza -l --icons -a -F --group-directories-first";
     };
   };
 
@@ -55,8 +63,8 @@ in
       add_newline = false;
       format = "$directory$git_branch$git_status$cmd_duration$line_break$character";
       character = {
-        success_symbol = "[›](purple)";
-	error_symbol = "[›](red)";
+        success_symbol = "[❯](purple)";
+	error_symbol = "[❯](red)";
       };
     };
   };
