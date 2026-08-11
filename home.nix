@@ -53,7 +53,7 @@ in
       push = "git push";
       pull = "git pull";
       rebuild = "~/.dotfiles/rebuild.sh";
-      l = "eza -l --icons -a -F --group-directories-first";
+      l = ''eza -TL2 -I "node_modules"'';
     };
   };
 
