@@ -8,14 +8,14 @@ in
   home.stateVersion = "26.05";
 
   home.packages = with pkgs; [
-    ripgrep	# fast search
-    fd		# fast find
+    ripgrep     # fast search
+    fd          # fast find
     git
     neovim
     curl
     wget 
-    fzf		# fuzzy finder
-    jq		# json on the command line
+    fzf         # fuzzy finder
+    jq          # json on the command line
     lazygit
     inputs.herdr.packages.${pkgs.stdenv.hostPlatform.system}.default
     nodejs
