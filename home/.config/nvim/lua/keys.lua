@@ -43,11 +43,26 @@ map("n", "<leader>xq", vim.diagnostic.setloclist, { desc = "Quickfix List" })
 map("n", "[d", vim.diagnostic.goto_prev, { desc = "Previous Diagnostic" })
 map("n", "]d", vim.diagnostic.goto_next, { desc = "Next Diagnostic" })
 
--- save by pressing escape
-vim.keymap.set('n', '<Esc>', ':w<CR>', { desc = 'Save' })
+-- ===================================================================
+-- Normalize Copy/Pasting
+-- ===================================================================
+
+vim.opt.clipboard = "unnamedplus" -- sync default register with system clipboard
+
+vim.keymap.set(
+  "x", "p", 'p:let @+=@0<CR>:let @"=@0<CR>', 
+  {
+    silent = true,
+    desc = "Paste without overwriting clipboard"
+  }
+) -- Pasting over selected text keeps your original clipboard
+
+-- ===================================================================
+-- Misc
+-- ===================================================================
 
 -- select all
 vim.keymap.set('n', '<C-a>', 'ggVG', { desc = 'Select All' })
 
--- pasting over a selection no longer clobbers clipboard
-vim.cmd([[ xnoremap <expr> p 'pgv"'.v:register.'y' ]])
+-- save by pressing escape
+vim.keymap.set('n', '<Esc>', ':w<CR>', { desc = 'Save' })

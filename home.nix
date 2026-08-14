@@ -54,7 +54,7 @@ in
       push = "git push";
       pull = "git pull";
       rebuild = "~/.dotfiles/rebuild.sh";
-      l = ''eza -TL2 -I "node_modules"'';
+      l = ''eza --long -F -a --group-directories-first --no-permissions --no-user --no-time --no-filesize'';
     };
   };
 
