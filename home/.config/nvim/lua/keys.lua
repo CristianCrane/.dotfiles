@@ -48,14 +48,7 @@ map("n", "]d", vim.diagnostic.goto_next, { desc = "Next Diagnostic" })
 -- ===================================================================
 
 vim.opt.clipboard = "unnamedplus" -- sync default register with system clipboard
-
-vim.keymap.set(
-  "x", "p", 'p:let @+=@0<CR>:let @"=@0<CR>', 
-  {
-    silent = true,
-    desc = "Paste without overwriting clipboard"
-  }
-) -- Pasting over selected text keeps your original clipboard
+vim.keymap.set("x", "p", 'P', { desc = "Paste without overwriting clipboard" })
 
 -- ===================================================================
 -- Misc
