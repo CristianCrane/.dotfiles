@@ -1,15 +1,16 @@
 return {
   "neovim/nvim-lspconfig",
+  event = { "BufReadPre", "BufNewFile" },
   config = function()
     vim.lsp.config('vtsls', {
       cmd = { 'vtsls', '--stdio' },
       filetypes = {
         'javascript',
         'javascriptreact',
-        'javascript.jsx',
+        'javascript',
         'typescript',
         'typescriptreact',
-        'typescript.tsx',
+        'typescript',
       },
       root_markers = { 'tsconfig.json', 'package.json', 'jsconfig.json', '.git' },
     })

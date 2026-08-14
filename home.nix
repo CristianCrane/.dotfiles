@@ -22,6 +22,7 @@ in
     pnpm
     stdenv.cc
     pkg-config
+    vtsls       # typescript lsp
   ];
 
   fonts.fontconfig.enable = true;
