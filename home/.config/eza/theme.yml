@@ -1,0 +1,55 @@
+colour_scale:
+  size:
+    major: {foreground: "#abb2bf"}
+    minor: {foreground: "#5c6370"}
+filekinds:
+  normal: {foreground: "#abb2bf"}
+  directory: {foreground: "#61afef", font: bold}
+  symlink: {foreground: "#56b6c2"}
+  pipe: {foreground: "#d19a66"}
+  block_device: {foreground: "#e5c07b"}
+  char_device: {foreground: "#e5c07b"}
+  fifo: {foreground: "#d19a66"}
+  special: {foreground: "#c678dd"}
+  executable: {foreground: "#98c379", font: bold}
+  mount_point: {foreground: "#61afef", font: bold}
+perms:
+  user_read: {foreground: "#abb2bf"}
+  user_write: {foreground: "#e06c75"}
+  user_execute: {foreground: "#98c379"}
+  group_read: {foreground: "#5c6370"}
+  group_write: {foreground: "#5c6370"}
+  group_execute: {foreground: "#5c6370"}
+  other_read: {foreground: "#5c6370"}
+  other_write: {foreground: "#5c6370"}
+  other_execute: {foreground: "#5c6370"}
+  special_user_execution: {foreground: "#c678dd"}
+  special_other_execution: {foreground: "#c678dd"}
+size:
+  major: {foreground: "#abb2bf"}
+  minor: {foreground: "#5c6370"}
+  number_byte: {foreground: "#d19a66"}
+  number_kilo: {foreground: "#d19a66"}
+  number_mega: {foreground: "#e5c07b"}
+  number_giga: {foreground: "#c678dd"}
+  number_huge: {foreground: "#e06c75"}
+  unit_byte: {foreground: "#5c6370"}
+  unit_kilo: {foreground: "#5c6370"}
+  unit_mega: {foreground: "#5c6370"}
+  unit_giga: {foreground: "#5c6370"}
+  unit_huge: {foreground: "#5c6370"}
+users:
+  user_you: {foreground: "#e06c75"}
+  user_other: {foreground: "#c678dd"}
+  group_yours: {foreground: "#e5c07b"}
+  group_other: {foreground: "#5c6370"}
+links:
+  normal: {foreground: "#56b6c2"}
+  multi_link_file: {foreground: "#56b6c2"}
+git:
+  new: {foreground: "#98c379"}
+  modified: {foreground: "#e5c07b"}
+  deleted: {foreground: "#e06c75"}
+  renamed: {foreground: "#61afef"}
+  typechange: {foreground: "#c678dd"}
+  ignored: {foreground: "#5c6370"}

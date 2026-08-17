@@ -38,8 +38,6 @@ in
   programs.eza = {
     enable = true;
     enableZshIntegration = true;
-    git = true;
-    icons = "auto";
   };
 
   programs.zsh = {
@@ -78,4 +76,7 @@ in
 
   home.file.".config/herdr".source =
     config.lib.file.mkOutOfStoreSymlink "${dotfiles}/home/.config/herdr";
+  
+  home.file.".config/eza".source =
+    config.lib.file.mkOutOfStoreSymlink "${dotfiles}/home/.config/eza";
 }
