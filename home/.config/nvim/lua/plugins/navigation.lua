@@ -9,7 +9,30 @@ return {
     },
     lazy = false, -- neo-tree will lazily load itself
     keys = {
-      { "<leader>e", ":Neotree toggle<CR>", desc = "File tree", silent = true },
+      { "<leader>e",
+        function()
+          local neo_tree_win = nil
+          -- check if neotree is open already by finding its window
+          for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+            local buf = vim.api.nvim_win_get_buf(win)
+            if vim.bo[buf].filetype == "neo-tree" then
+              neo_tree_win = win
+              break
+            end
+          end
+          
+          local current_win = vim.api.nvim_get_current_win()
+          
+          if neo_tree_win and current_win == neo_tree_win then
+            vim.cmd("Neotree close")
+          elseif neo_tree_win then
+            vim.api.nvim_set_current_win(neo_tree_win)
+          else
+            vim.cmd("Neotree show focus")
+          end
+        end,
+        desc = "File tree"
+      },
     },
     opts = {
       close_if_last_window = true,

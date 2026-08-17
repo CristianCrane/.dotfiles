@@ -59,3 +59,10 @@ vim.keymap.set('n', '<C-a>', 'ggVG', { desc = 'Select All' })
 
 -- save by pressing escape
 vim.keymap.set('n', '<Esc>', ':w<CR>', { desc = 'Save' })
+
+-- reload theme
+map("n", "<leader>r", function()
+  package.loaded["theme"] = nil
+  require("theme")
+  print("Theme reloaded!")
+end, { desc = "Reload theme" })

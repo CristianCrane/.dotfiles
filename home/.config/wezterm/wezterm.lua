@@ -7,7 +7,7 @@ config.default_cwd = [[\\wsl.localhost\NixOS\home\cris]]
 config.color_scheme = "OneDark (base16)"
 
 config.font = wezterm.font("Hack Nerd Font")
-config.font_size = 12.0
+config.font_size = 11.0
 
 config.window_background_opacity = 0.8
 config.win32_system_backdrop = 'Acrylic'
