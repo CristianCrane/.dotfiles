@@ -54,6 +54,24 @@ return {
           ["<space>"] = "none",
         },
       },
+      default_component_configs = {
+        git_status = {
+          symbols = {
+            -- Change type indicators
+            added     = "󰐕",
+            modified  = "󰏫",
+            deleted   = "󰍵",
+            renamed   = "󰁕",
+
+            -- Staging / state status indicators
+            untracked = "󰋗",
+            ignored   = "󰈉",
+            unstaged  = "󰄱",
+            staged    = "󰄵",
+            conflict  = "",
+          },
+        },
+      },
     },
   },
   {

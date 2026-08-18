@@ -2,3 +2,4 @@
 # herdr runtime logs and temporary session state
 home/.config/herdr/*.log
 home/.config/herdr/session.json
+.git

@@ -44,21 +44,40 @@ map("n", "[d", vim.diagnostic.goto_prev, { desc = "Previous Diagnostic" })
 map("n", "]d", vim.diagnostic.goto_next, { desc = "Next Diagnostic" })
 
 -- ===================================================================
+-- Git Keymaps (<leader>g prefix)
+-- ===================================================================
+
+-- Open Neogit interface
+map("n", "<leader>gg", function()
+  require("neogit").open()
+end, { desc = "Neogit Status" })
+
+-- Neo-tree Git Status (Uncommitted changes vs HEAD)
+map("n", "<leader>gs", "<cmd>Neotree float git_status<CR>", {
+  desc = "Git Status Float (HEAD)",
+})
+
+-- Neo-tree Git Status (Cumulative changes vs main branch)
+map("n", "<leader>gb", "<cmd>Neotree float git_status git_base=main<CR>", {
+  desc = "Git Status Float (vs main)",
+})
+
+-- ===================================================================
 -- Normalize Copy/Pasting
 -- ===================================================================
 
 vim.opt.clipboard = "unnamedplus" -- sync default register with system clipboard
-vim.keymap.set("x", "p", 'P', { desc = "Paste without overwriting clipboard" })
+map("x", "p", 'P', { desc = "Paste without overwriting clipboard" })
 
 -- ===================================================================
 -- Misc
 -- ===================================================================
 
 -- select all
-vim.keymap.set('n', '<C-a>', 'ggVG', { desc = 'Select All' })
+map('n', '<C-a>', 'ggVG', { desc = 'Select All' })
 
 -- save by pressing escape
-vim.keymap.set('n', '<Esc>', ':w<CR>', { desc = 'Save' })
+map('n', '<Esc>', ':w<CR>', { desc = 'Save' })
 
 -- reload theme
 map("n", "<leader>r", function()
