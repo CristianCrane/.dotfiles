@@ -27,7 +27,11 @@ in
   ];
 
   fonts.fontconfig.enable = true;
-  home.sessionVariables.EDITOR = "nvim";
+  
+  home.sessionVariables = {
+    EDITOR = "nvim";
+    EZA_COLORS = "reset:da=38;2;248;215;117:di=38;2;248;215;117:fi=0:ex=0";
+  };
 
   programs.git = {
     enable = true;
@@ -39,6 +43,7 @@ in
   programs.eza = {
     enable = true;
     enableZshIntegration = true;
+    icons = "auto";
   };
 
   programs.zsh = {
@@ -59,14 +64,6 @@ in
 
   programs.starship = {
     enable = true;
-    settings = {
-      add_newline = false;
-      format = "$directory$git_branch$git_status$cmd_duration$line_break$character";
-      character = {
-        success_symbol = "[❯](purple)";
-	error_symbol = "[❯](red)";
-      };
-    };
   };
 
   home.file.".config/wezterm".source = 
@@ -77,7 +74,7 @@ in
 
   home.file.".config/herdr".source =
     config.lib.file.mkOutOfStoreSymlink "${dotfiles}/home/.config/herdr";
-  
-  home.file.".config/eza".source =
-    config.lib.file.mkOutOfStoreSymlink "${dotfiles}/home/.config/eza";
+
+  home.file.".config/starship.toml".source =
+    config.lib.file.mkOutOfStoreSymlink "${dotfiles}/home/.config/starship/starship.toml";
 }
