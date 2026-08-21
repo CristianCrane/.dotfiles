@@ -35,6 +35,13 @@ map("n", "<leader>ci", function()
   })
 end, { desc = "Add Missing Imports" })
 
+map("n", "<leader>cf", function()
+  require("conform").format({
+    async = true,
+    lsp_fallback = true,
+  })
+end, { desc = "Format current file" })
+
 -- ===================================================================
 -- 3. <leader>x: Diagnostics / Line Inspection
 -- ===================================================================
