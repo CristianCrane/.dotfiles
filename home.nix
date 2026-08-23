@@ -23,6 +23,7 @@ in
     stdenv.cc
     pkg-config
     vtsls       # typescript lsp
+    lua-language-server
     tree-sitter # cli parser generator required by nvim-treesitter
   ];
 

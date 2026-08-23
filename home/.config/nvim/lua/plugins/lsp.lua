@@ -10,10 +10,8 @@ return {
       filetypes = {
         'javascript',
         'javascriptreact',
-        'javascript',
         'typescript',
         'typescriptreact',
-        'typescript',
       },
       root_markers = { 'tsconfig.json', 'package.json', 'jsconfig.json', '.git' },
       capabilities = capabilities,
@@ -31,5 +29,31 @@ return {
     })
 
     vim.lsp.enable('vtsls')
+
+    -- lua_ls Configuration
+    vim.lsp.config('lua_ls', {
+      cmd = { 'lua-language-server' },
+      filetypes = { 'lua' },
+      root_markers = {
+        '.luarc.json',
+        '.luarc.jsonc',
+        '.stylua.toml',
+        'stylua.toml'
+      },
+      capabilities = capabilities,
+      settings = {
+        Lua = {
+          diagnostics = {
+            globals = { 'vim' } -- whats this
+          },
+          workspace = {
+            library = vim.api.nvim_get_runtime_file("", true),
+            checkThirdParty = false,
+          },
+          telemetry = { enable = false },
+        },
+      },
+    })
+    vim.lsp.enable('lua_ls')
   end,
 }

@@ -52,6 +52,10 @@ return {
       window = {
         mappings = {
           ["<space>"] = "none",
+          ["i"] = function() vim.cmd("normal! k") end, -- Up
+          ["k"] = function() vim.cmd("normal! j") end, -- Down
+          ["j"] = function() vim.cmd("normal! h") end, -- Left
+          ["l"] = function() vim.cmd("normal! l") end, -- Right
         },
       },
       default_component_configs = {

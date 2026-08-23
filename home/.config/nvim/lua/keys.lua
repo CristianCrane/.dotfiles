@@ -1,13 +1,27 @@
 local map = vim.keymap.set
 
 -- ===================================================================
+-- base movement (ijkl = left, up, down, right) 
+-- ===================================================================
+map({'n', 'v', 'o'}, 'j', 'h', { remap = false }) -- left
+map({'n', 'v', 'o'}, 'i', 'k', { remap = false }) -- up
+map({'n', 'v', 'o'}, 'k', 'j', { remap = false }) -- down
+map({'n', 'v', 'o'}, 'l', 'l', { remap = false }) -- right
+
+-- 2. Directional Insert Mode (Shift + ijkl)
+map('n', 'J', 'i', { remap = false }) -- Insert Left
+map('n', 'L', 'a', { remap = false }) -- Insert Right
+map('n', 'I', 'O', { remap = false }) -- Insert Up (new line above)
+map('n', 'K', 'o', { remap = false }) -- Insert Down (new line below)
+
+-- ===================================================================
 -- 1. Unleadered Fast Navigation (Vim Defaults / Conventions)
 -- ===================================================================
 map("n", "gd", vim.lsp.buf.definition, { desc = 'Go to Definition' })
 map("n", "gr", vim.lsp.buf.references, { desc = 'Go to References' })
 map("n", "gI", vim.lsp.buf.implementation, { desc = 'Go to Implementation' })
 map("n", "gy", vim.lsp.buf.type_definition, { desc = 'Go to Type Definition' })
-map("n", "K", vim.lsp.buf.hover, { desc = 'Hover Documentation' })
+map("n", "gq", vim.lsp.buf.hover, { desc = 'Hover Documentation' })
 
 -- ===================================================================
 -- 2. <leader>c: Code Actions & Refactoring
