@@ -1,14 +1,24 @@
 local map = vim.keymap.set
 
--- ===================================================================
--- base movement (ijkl = left, up, down, right) 
--- ===================================================================
+-- base movement
 map({'n', 'v', 'o'}, 'j', 'h', { remap = false }) -- left
 map({'n', 'v', 'o'}, 'i', 'k', { remap = false }) -- up
 map({'n', 'v', 'o'}, 'k', 'j', { remap = false }) -- down
 map({'n', 'v', 'o'}, 'l', 'l', { remap = false }) -- right
 
--- 2. Directional Insert Mode (Shift + ijkl)
+-- word movement
+vim.keymap.set({'n', 'v', 'o'}, 'u', 'b', { remap = false, desc = "Word Back" })
+vim.keymap.set({'n', 'v', 'o'}, 'U', 'B', { remap = false, desc = "WORD Back" })
+vim.keymap.set({'n', 'v', 'o'}, 'o', 'w', { remap = false, desc = "Word Forward" })
+vim.keymap.set({'n', 'v', 'o'}, 'O', 'W', { remap = false, desc = "WORD Forward" })
+vim.keymap.set({'n', 'v', 'o'}, 'p', 'e', { remap = false, desc = "Word End" })
+vim.keymap.set({'n', 'v', 'o'}, 'P', 'E', { remap = false, desc = "WORD End" })
+
+-- commands
+vim.keymap.set('n', 'z', 'u', { remap = false, desc = "Undo" })
+vim.keymap.set('n', 'Z', '<C-r>', { remap = false, desc = "Redo" })
+
+-- Directional Insert Mode (Shift + ijkl)
 map('n', 'J', 'i', { remap = false }) -- Insert Left
 map('n', 'L', 'a', { remap = false }) -- Insert Right
 map('n', 'I', 'O', { remap = false }) -- Insert Up (new line above)
