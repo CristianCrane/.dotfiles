@@ -18,7 +18,7 @@ map({'n', 'v', 'o'}, 'O', 'E', { remap = false, desc = "WORD Forward" })
 map('n', 'z', 'u', { remap = false, desc = "undo" })
 map('n', 'Z', '<C-r>', { remap = false, desc = "redo" })
 map('n', 'r', '.', { remap = false, desc = "repeat last change" })
--
+
 -- cut, copy, paste, delete
 map({'n', 'v'}, 'c', '"+y', { remap = false, desc = "Copy (Yank to System Clipboard)" })
 map('n', 'cc', '"+yy', { remap = false, desc = "Copy Current Line" })
