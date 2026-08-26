@@ -5,24 +5,55 @@ map({'n', 'v', 'o'}, 'j', 'h', { remap = false }) -- left
 map({'n', 'v', 'o'}, 'i', 'k', { remap = false }) -- up
 map({'n', 'v', 'o'}, 'k', 'j', { remap = false }) -- down
 map({'n', 'v', 'o'}, 'l', 'l', { remap = false }) -- right
+map({'n', 'v', 'o'}, 'm', '^', { remap = false, desc = "Line Home (first character)" })
+map({'n', 'v', 'o'}, '.', '$', { remap = false, desc = "Line End" })
 
 -- word movement
-vim.keymap.set({'n', 'v', 'o'}, 'u', 'b', { remap = false, desc = "Word Back" })
-vim.keymap.set({'n', 'v', 'o'}, 'U', 'B', { remap = false, desc = "WORD Back" })
-vim.keymap.set({'n', 'v', 'o'}, 'o', 'w', { remap = false, desc = "Word Forward" })
-vim.keymap.set({'n', 'v', 'o'}, 'O', 'W', { remap = false, desc = "WORD Forward" })
-vim.keymap.set({'n', 'v', 'o'}, 'p', 'e', { remap = false, desc = "Word End" })
-vim.keymap.set({'n', 'v', 'o'}, 'P', 'E', { remap = false, desc = "WORD End" })
+map({'n', 'v', 'o'}, 'u', 'b', { remap = false, desc = "word Back" })
+map({'n', 'v', 'o'}, 'U', 'B', { remap = false, desc = "WORD Back" })
+map({'n', 'v', 'o'}, 'o', 'e', { remap = false, desc = "word Forward" })
+map({'n', 'v', 'o'}, 'O', 'E', { remap = false, desc = "WORD Forward" })
 
 -- commands
-vim.keymap.set('n', 'z', 'u', { remap = false, desc = "Undo" })
-vim.keymap.set('n', 'Z', '<C-r>', { remap = false, desc = "Redo" })
+map('n', 'z', 'u', { remap = false, desc = "undo" })
+map('n', 'Z', '<C-r>', { remap = false, desc = "redo" })
+map('n', 'r', '.', { remap = false, desc = "repeat last change" })
+-
+-- cut, copy, paste, delete
+map({'n', 'v'}, 'c', '"+y', { remap = false, desc = "Copy (Yank to System Clipboard)" })
+map('n', 'cc', '"+yy', { remap = false, desc = "Copy Current Line" })
+map({'n', 'v'}, 'x', '"+d', { remap = false, desc = "Cut (Delete to System Clipboard)" })
+map('n', 'xx', '"+dd', { remap = false, desc = "Cut Current Line" })
+map('n', 'v', '"+p', { remap = false, desc = "Paste from System Clipboard" })
+map('x', 'v', '"_d"+P', { remap = false, desc = "Paste Over Selection (Preserve Clipboard)" })
+map({'n', 'v'}, 'd', '"_d', { remap = false, desc = "Pure Delete (Black Hole)" })
+map('n', 'dd', '"_dd', { remap = false, desc = "Pure Delete Current Line" })
 
--- Directional Insert Mode (Shift + ijkl)
+-- directional insert modes
 map('n', 'J', 'i', { remap = false }) -- Insert Left
 map('n', 'L', 'a', { remap = false }) -- Insert Right
 map('n', 'I', 'O', { remap = false }) -- Insert Up (new line above)
 map('n', 'K', 'o', { remap = false }) -- Insert Down (new line below)
+
+-- select (visual mode)
+-- 's' enters Characterwise Visual mode (replaces native 'v')
+map('n', 's', 'v', { remap = false, desc = "Visual Select (Character)" })
+-- 'S' enters Linewise Visual mode (replaces native 'V')
+map('n', 'S', 'V', { remap = false, desc = "Visual Select (Line)" })
+-- 'Ctrl+s' enters Blockwise Visual mode (replaces native '<C-v>')
+map('n', '<C-s>', '<C-v>', { remap = false, desc = "Visual Select (Block)" })
+
+-- alter (change operator) deletes text into Black Hole register ("_) so clipboard is never clobbered
+-- 'a' acts as the Alter operator taking any motion (e.g., aw", aw(, a., am)
+vim.keymap.set({'n', 'v'}, 'a', '"_c', { remap = false, desc = "Alter (Delete & Insert, Black Hole)" })
+-- 'aa' alters the entire line (equivalent to native cc)
+vim.keymap.set('n', 'aa', '"_cc', { remap = false, desc = "Alter Entire Line" })
+-- 'A' alters from cursor to end of line (equivalent to native c$)
+vim.keymap.set('n', 'A', '"_c$', { remap = false, desc = "Alter to End of Line" })
+
+-- text objects
+map({'o', 'x'}, 'w', 'i', { remap = false, desc = "Within (Inner / Exclusive)" })
+map({'o', 'x'}, 'W', 'a', { remap = false, desc = "Within (Around / Inclusive)" })
 
 -- ===================================================================
 -- 1. Unleadered Fast Navigation (Vim Defaults / Conventions)
@@ -97,8 +128,6 @@ map("n", "<leader>gb", "<cmd>Neotree float git_status git_base=main<CR>", {
 -- Normalize Copy/Pasting
 -- ===================================================================
 
-vim.opt.clipboard = "unnamedplus" -- sync default register with system clipboard
-map("x", "p", 'P', { desc = "Paste without overwriting clipboard" })
 
 -- ===================================================================
 -- Misc

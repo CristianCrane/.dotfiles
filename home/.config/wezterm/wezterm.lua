@@ -4,8 +4,6 @@ local config = wezterm.config_builder()
 config.default_domain = 'WSL:NixOS'
 config.default_cwd = [[\\wsl.localhost\NixOS\home\cris]]
 
-config.color_scheme = "OneDark (base16)"
-
 config.font = wezterm.font_with_fallback({
   "JetBrains Mono",
   "Hack Nerd Font"
