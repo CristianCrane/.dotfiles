@@ -9,12 +9,11 @@ return {
       },
       mappings = {
         status = {
-          -- 2. Map ijkl movements using custom function callbacks
+          ["I"] = "InitRepo",
           ["i"] = "MoveUp",
           ["k"] = "MoveDown",
-
-          -- 3. Rebind the displaced Ignore command (formerly 'i') to another key
-          ["I"] = "InitRepo",
+          ["j"] = "Toggle",
+          ["l"] = "Toggle",
         },
       },
     },
