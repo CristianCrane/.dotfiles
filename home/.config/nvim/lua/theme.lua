@@ -5,7 +5,7 @@ local text = "#a7b6c5"
 local keyword = "#cb7731"
 
 -- background / text color
-set(0, "Normal", { bg = "#2b2b2b", fg = text })
+set(0, "Normal", { bg = "#090909", fg = text })
 set(0, "Keyword", { fg = keyword })
 set(0, "Identifier", { fg = text })
 set(0, "DiagnosticUnderlineError", { fg = "#b33e3b" })
