@@ -9,3 +9,4 @@ o.smartcase = true		-- case-sensitive only when typing a capital
 o.clipboard = 'unnamedplus' 	-- share system clipboard
 o.scrolloff = 16		-- keep cursor away from screen edge
 o.undofile = true		-- persistent undo across sessions
+o.hlsearch = false              -- disable search highlighting
