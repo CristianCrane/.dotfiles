@@ -1,7 +1,7 @@
 return {
   "stevearc/conform.nvim",
   event = { "BufWritePre" },
-  cmd = { "ConformInfo" }, 
+  cmd = { "ConformInfo" },
   opts = {
     formatters_by_ft = {
       javascript = { "prettier" },
@@ -13,6 +13,10 @@ return {
       json = { "prettier" },
       yaml = { "prettier" },
       markdown = { "prettier" },
+    },
+    format_on_save = {
+      lsp_format = "fallback",
+      timeout_ms = 500,
     },
   },
 }
