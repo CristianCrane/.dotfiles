@@ -6,7 +6,7 @@ return {
     "MunifTanjim/nui.nvim",
     "nvim-tree/nvim-web-devicons",
   },
-  lazy = false,   -- neo-tree will lazily load itself
+  lazy = false, -- neo-tree will lazily load itself
   keys = {
     {
       "<leader>d",
@@ -50,10 +50,13 @@ return {
     window = {
       mappings = {
         ["<space>"] = "none",
-        ["i"] = function() vim.cmd("normal! k") end,   -- Up
-        ["k"] = function() vim.cmd("normal! j") end,   -- Down
-        ["j"] = function() vim.cmd("normal! h") end,   -- Left
-        ["l"] = function() vim.cmd("normal! l") end,   -- Right
+        -- vertical cursor navigation
+        ["i"] = function() vim.cmd("normal! k") end,
+        ["k"] = function() vim.cmd("normal! j") end,
+        -- directory tree collapse / expand
+        ["j"] = "close_node",
+        ["l"] = "open",
+        ["h"] = "none",
       },
     },
     default_component_configs = {
