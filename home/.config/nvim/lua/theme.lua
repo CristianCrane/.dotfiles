@@ -12,7 +12,7 @@ set(0, "DiagnosticUnderlineError", { fg = "#b33e3b" })
 set(0, "String", { fg = "#698253" })
 set(0, "Comment", { fg = "#808080" })
 set(0, "Delimiter", { fg = text })
-set(0, "Special", { fg = keyword }) 
+set(0, "Special", { fg = keyword })
 set(0, "Type", { fg = text })
 set(0, "Operator", { fg = text })
 set(0, "Function", { fg = "#ffc66d" })
@@ -23,13 +23,13 @@ set(0, "@variable.member.typescript", { fg = "#8f75a9" })
 set(0, "@lsp.type.property", { link = "@variable.member.typescript" })
 
 -- neotree
-set(0, "NeoTreeDirectoryName", { fg ="#f8d775" })
-set(0, "NeoTreeDirectoryIcon", { fg ="#f8d775" })
-set(0, "NeoTreeGitAdded",     { fg = "#98c379" }) -- Pale Green (Staged / Added)
+set(0, "NeoTreeDirectoryName", { fg = text })
+set(0, "NeoTreeDirectoryIcon", { fg = "#f8d775" })
+set(0, "NeoTreeGitAdded", { fg = "#98c379" })     -- Pale Green (Staged / Added)
 set(0, "NeoTreeGitUntracked", { fg = "#e06c75" }) -- Pale Red   (Untracked)
-set(0, "NeoTreeGitModified",  { fg = "#82aaff" }) -- Pale Blue  (Modified)
-set(0, "NeoTreeGitDeleted",   { fg = "#5c6370" }) -- Pale Grey  (Deleted)
-set(0, "NeoTreeGitIgnored",   { fg = "#5c6370" }) -- Pale Grey  (Ignored)
+set(0, "NeoTreeGitModified", { fg = "#82aaff" })  -- Pale Blue  (Modified)
+set(0, "NeoTreeGitDeleted", { fg = "#5c6370" })   -- Pale Grey  (Deleted)
+set(0, "NeoTreeGitIgnored", { fg = "#5c6370" })   -- Pale Grey  (Ignored)
 
 -- neogit
-set(0, "NeoGitDiffHighlight", { fg ="#ffffff" }) -- Slightly lighter green for more contrast
+set(0, "NeoGitDiffHighlight", { fg = "#ffffff" }) -- Slightly lighter green for more contrast
