@@ -25,6 +25,8 @@ in
     vtsls       # typescript lsp
     lua-language-server
     tree-sitter # cli parser generator required by nvim-treesitter
+    gnumake
+    cmake
   ];
 
   fonts.fontconfig.enable = true;
