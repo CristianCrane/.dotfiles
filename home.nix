@@ -62,6 +62,7 @@ in
       pull = "git pull";
       rebuild = "~/.dotfiles/rebuild.sh";
       l = ''eza --long -F -a --group-directories-first --no-permissions --no-user --no-time --no-filesize'';
+      q = "exit";
     };
   };
 
