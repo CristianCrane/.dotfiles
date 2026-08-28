@@ -1,5 +1,8 @@
 local map = vim.keymap.set
 
+-- Remap '/' to open the command prompt (replaces ':')
+map({ "n", "v" }, "/", ":", { noremap = true, desc = "Command line prompt" })
+
 -- base movement
 map({ 'n', 'v', 'o' }, 'j', 'h', { remap = false }) -- left
 map({ 'n', 'v', 'o' }, 'i', 'k', { remap = false }) -- up
@@ -17,6 +20,7 @@ map({ 'n', 'v', 'o' }, 'O', 'W', { remap = false, desc = "WORD Forward" })
 -- commands
 map('n', 'z', 'u', { remap = false, desc = "undo" })
 map('n', 'Z', '<C-r>', { remap = false, desc = "redo" })
+map({ "n", "v" }, "<C-f>", "/", { noremap = true, desc = "Search forward in buffer" })
 
 -- cut, copy, paste, delete
 map({ 'n', 'v' }, 'c', '"+y', { remap = false, desc = "Copy (Yank to System Clipboard)" })
