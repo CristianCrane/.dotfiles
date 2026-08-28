@@ -11,13 +11,12 @@ map({ 'n', 'v', 'o' }, '.', '$', { remap = false, desc = "Line End" })
 -- word movement
 map({ 'n', 'v', 'o' }, 'u', 'b', { remap = false, desc = "word Back" })
 map({ 'n', 'v', 'o' }, 'U', 'B', { remap = false, desc = "WORD Back" })
-map({ 'n', 'v', 'o' }, 'o', 'e', { remap = false, desc = "word Forward" })
-map({ 'n', 'v', 'o' }, 'O', 'E', { remap = false, desc = "WORD Forward" })
+map({ 'n', 'v', 'o' }, 'o', 'w', { remap = false, desc = "word Forward" })
+map({ 'n', 'v', 'o' }, 'O', 'W', { remap = false, desc = "WORD Forward" })
 
 -- commands
 map('n', 'z', 'u', { remap = false, desc = "undo" })
 map('n', 'Z', '<C-r>', { remap = false, desc = "redo" })
-map('n', 'r', '.', { remap = false, desc = "repeat last change" })
 
 -- cut, copy, paste, delete
 map({ 'n', 'v' }, 'c', '"+y', { remap = false, desc = "Copy (Yank to System Clipboard)" })
@@ -42,20 +41,23 @@ map('n', 's', 'v', { remap = false, desc = "Visual Select (Character)" })
 map('n', 'S', 'V', { remap = false, desc = "Visual Select (Line)" })
 map('n', '<C-s>', '<C-v>', { remap = false, desc = "Visual Select (Block)" })
 
--- Backspace (change operator)
-map({ 'n', 'v' }, '<BS>', '"_c', { remap = false, desc = "Delete & Insert" })
-map('n', '<BS><BS>', '"_cc', { remap = false, desc = "Delete Entire Line & Insert" })
-map('n', '<S-BS>', '"_c$', { remap = false, desc = "Delete to End of Line & Insert" })
+-- ===================================================================
+-- CHANGE OPERATOR (r)
+-- ===================================================================
+map({ 'n', 'v' }, 'r', '"_c', { remap = false, desc = "Delete & Insert (Change)" })
+map('n', 'rr', '"_cc', { remap = false, desc = "Delete Entire Line & Insert" })
+map('n', '<S-r>', '"_c$', { remap = false, desc = "Delete to End of Line & Insert" })
 
--- text objects
+-- ===================================================================
+-- TEXT OBJECTS (w) and (e)
+-- ===================================================================
 map({ 'o', 'x' }, 'w', 'i', { remap = false, desc = "Within (Inside)" })
 map({ 'o', 'x' }, 'e', 'a', { remap = false, desc = "Entire (Around)" })
 
 -- ===================================================================
--- 2. <leader>c: Code Actions & Refactoring
+-- CODE ACTION KEYMAPS
 -- ===================================================================
 map({ "n", "v" }, "<leader>ca", vim.lsp.buf.code_action, { desc = "Code Action" })
-map("n", "<leader>cr", vim.lsp.buf.rename, { desc = "Rename Symbol" })
 
 map("n", "<leader>co", function()
   vim.lsp.buf.code_action({
@@ -67,22 +69,23 @@ map("n", "<leader>co", function()
   })
 end, { desc = "Organize Imports" })
 
-map("n", "<leader>ci", function()
-  vim.lsp.buf.code_action({
-    apply = true,
-    context = {
-      only = { "source.addMissingImports" },
-      diagnostics = {},
-    },
-  })
-end, { desc = "Add Missing Imports" })
-
 map("n", "<leader>cf", function()
   require("conform").format({
     async = true,
     lsp_fallback = true,
   })
 end, { desc = "Format current file" })
+
+-- ===================================================================
+-- ERROR KEYMAPS
+-- ===================================================================
+map("n", "]e", function()
+  vim.diagnostic.jump({ count = 1, severity = vim.diagnostic.severity.ERROR, float = { focusable = true, autofocus = true } })
+end, { desc = "Next Error" })
+
+map("n", "[e", function()
+  vim.diagnostic.jump({ count = -1, severity = vim.diagnostic.severity.ERROR, float = { focusable = true, autofocus = true } })
+end, { desc = "Previous Error" })
 
 -- ===================================================================
 -- NEOGIT KEYMAPS
@@ -102,13 +105,15 @@ map("n", "<leader>gb", "<cmd>Neotree float git_status git_base=main<CR>", {
 -- ===================================================================
 -- TELESCOPE KEYMAPS
 -- ===================================================================
-map("n", "<leader>f", function()
+map("n", "<leader>sf", function()
   local builtin = require("telescope.builtin")
   builtin.find_files({
     cwd = vim.fn.getcwd(),
     hidden = true,
   })
-end, { desc = "Telescope Find Files (CWD)" })
+end, { desc = "Search files (current working dir)" })
+
+map('n', '<leader>st', require('telescope.builtin').live_grep, { desc = "Search text (current working dir)" })
 
 -- ===================================================================
 -- SEARCH AND REPLACE
@@ -134,25 +139,47 @@ map('v', '<leader>r', '"hy:%s/<C-r>h//gc<Left><Left><Left>', {
 -- ctrl commands
 -- ===================================================================
 map('n', '<C-a>', 'ggVG', { desc = 'Select All' })
-map('n', '<C-w>', '<cmd>w<CR>', { remap = false, desc = "Save File" })
-map('i', '<C-w>', '<cmd>w<CR>', { remap = false, desc = "Save File" })
-map('v', '<C-w>', '<cmd>w<CR>', { remap = false, desc = "Save File" })
 map('n', '<C-q>', '<cmd>q<CR>', { remap = false, desc = "Quit Current Window" })
 
 -- ===================================================================
 -- WINDOW KEYMAPS
 -- ===================================================================
 -- Window Creation & Splits
-map('n', '<leader>wv', '<cmd>vsplit<CR>', { remap = false, desc = "Split Window Vertically" })
-map('n', '<leader>wh', '<cmd>split<CR>', { remap = false, desc = "Split Window Horizontally" })
 map('n', '<leader>wc', '<cmd>close<CR>', { remap = false, desc = "Close Current Window" })
 map('n', '<leader>wo', '<cmd>only<CR>', { remap = false, desc = "Close All Other Windows" })
--- Directional Focus Switching (using ijkl)
-map('n', '<leader>wi', '<C-w>k', { remap = false, desc = "Focus Window Up" })
-map('n', '<leader>wk', '<C-w>j', { remap = false, desc = "Focus Window Down" })
-map('n', '<leader>wj', '<C-w>h', { remap = false, desc = "Focus Window Left" })
-map('n', '<leader>wl', '<C-w>l', { remap = false, desc = "Focus Window Right" })
+-- Normal Mode: <Tab> cycles forward through open windows/UI splits
+map("n", "<Tab>", "<C-w>w", { desc = "Focus next window/UI" })
+-- Normal Mode: <Shift-Tab> cycles backward through open windows/UI splits
+map("n", "<S-Tab>", "<C-w>W", { desc = "Focus previous window/UI" })
 
 -- ===================================================================
--- MISC KEYMAPS
+-- TERMINAL KEYMAPS
 -- ===================================================================
+map("n", "<C-t>", function()
+  local pane_id = os.getenv("WEZTERM_PANE")
+
+  -- Get directory of the currently active buffer file
+  local current_file_dir = vim.fn.expand("%:p:h")
+
+  -- Fallback to workspace root if no buffer/file is open
+  if current_file_dir == "" then
+    current_file_dir = vim.fn.getcwd()
+  end
+
+  if pane_id then
+    vim.fn.system(
+      string.format(
+        "wezterm.exe cli split-pane --pane-id %s --bottom --percent 30 --cwd %s",
+        pane_id,
+        vim.fn.shellescape(current_file_dir)
+      )
+    )
+  else
+    vim.fn.system(
+      string.format(
+        "wezterm.exe cli split-pane --bottom --percent 30 --cwd %s",
+        vim.fn.shellescape(current_file_dir)
+      )
+    )
+  end
+end, { desc = "Open Terminal in current directory" })
