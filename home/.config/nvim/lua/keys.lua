@@ -1,49 +1,58 @@
 local map = vim.keymap.set
 
--- Remap '/' to open the command prompt (replaces ':')
-map({ "n", "v" }, "/", ":", { noremap = true, desc = "Command line prompt" })
+-- ===================================================================
+-- COMMAND PROMPT (/)
+-- ===================================================================
+map({ "n", "v" }, "/", ":", { noremap = true, desc = "Command prompt" })
 
--- base movement
-map({ 'n', 'v', 'o' }, 'j', 'h', { remap = false }) -- left
-map({ 'n', 'v', 'o' }, 'i', 'k', { remap = false }) -- up
-map({ 'n', 'v', 'o' }, 'k', 'j', { remap = false }) -- down
-map({ 'n', 'v', 'o' }, 'l', 'l', { remap = false }) -- right
+-- ===================================================================
+-- BASE MOVEMENT (i, j, k, l)
+-- ===================================================================
+map({ 'n', 'v', 'o' }, 'j', 'h', { remap = false })
+map({ 'n', 'v', 'o' }, 'i', 'k', { remap = false })
+map({ 'n', 'v', 'o' }, 'k', 'j', { remap = false })
+map({ 'n', 'v', 'o' }, 'l', 'l', { remap = false })
 map({ 'n', 'v', 'o' }, 'm', '^', { remap = false, desc = "Line Home (first character)" })
 map({ 'n', 'v', 'o' }, '.', '$', { remap = false, desc = "Line End" })
 
--- word movement
+-- ===================================================================
+-- WORD MOVEMENT (u, o)
+-- ===================================================================
 map({ 'n', 'v', 'o' }, 'u', 'b', { remap = false, desc = "word Back" })
 map({ 'n', 'v', 'o' }, 'U', 'B', { remap = false, desc = "WORD Back" })
 map({ 'n', 'v', 'o' }, 'o', 'w', { remap = false, desc = "word Forward" })
 map({ 'n', 'v', 'o' }, 'O', 'W', { remap = false, desc = "WORD Forward" })
 
--- commands
-map('n', 'z', 'u', { remap = false, desc = "undo" })
-map('n', 'Z', '<C-r>', { remap = false, desc = "redo" })
-map({ "n", "v" }, "<C-f>", "/", { noremap = true, desc = "Search forward in buffer" })
-
--- cut, copy, paste, delete
-map({ 'n', 'v' }, 'c', '"+y', { remap = false, desc = "Copy (Yank to System Clipboard)" })
+-- ===================================================================
+-- UNDO (z), REDO (Z), COPY (c), PASTE (p), DELETE (d)
+-- ===================================================================
+map('n', 'z', 'u', { remap = false, desc = "Undo" })
+map('n', 'Z', '<C-r>', { remap = false, desc = "Redo" })
+map({ 'n', 'v' }, 'c', '"+y', { remap = false, desc = "Copy" })
 map('n', 'cc', '"+yy', { remap = false, desc = "Copy Current Line" })
-map({ 'n', 'v' }, 'x', '"+d', { remap = false, desc = "Cut (Delete to System Clipboard)" })
+map({ 'n', 'v' }, 'x', '"+d', { remap = false, desc = "Cut" })
 map('n', 'xx', '"+dd', { remap = false, desc = "Cut Current Line" })
-map('n', 'v', '"+p', { remap = false, desc = "Paste from System Clipboard" })
-map('x', 'v', '"_d"+P', { remap = false, desc = "Paste Over Selection (Preserve Clipboard)" })
-map({ 'n', 'v' }, 'd', '"_d', { remap = false, desc = "Pure Delete (Black Hole)" })
-map('n', 'dd', '"_dd', { remap = false, desc = "Pure Delete Current Line" })
+map('n', 'v', '"+p', { remap = false, desc = "Paste" })
+map('x', 'v', '"_d"+P', { remap = false, desc = "Paste Over Selection" })
+map({ 'n', 'v' }, 'd', '"_d', { remap = false, desc = "Delete" })
+map('n', 'dd', '"_dd', { remap = false, desc = "Delete Current Line" })
 
--- directional insert modes
-map('n', 'J', 'i', { remap = false }) -- Insert Left
-map('n', 'L', 'a', { remap = false }) -- Insert Right
-map('n', 'I', 'O', { remap = false }) -- Insert Up (new line above)
-map('n', 'K', 'o', { remap = false }) -- Insert Down (new line below)
-map('n', '<S-m>', '^i', { remap = false, desc = "Insert at start of line" })
-map('n', '>', 'A', { remap = false, desc = "Insert at end of line" })
+-- ===================================================================
+-- INSERT MODES (shift+i, shift+j, shift+k, shift+l)
+-- ===================================================================
+map('n', 'J', 'i', { remap = false, desc = "Insert (left)" })
+map('n', 'L', 'a', { remap = false, desc = "Insert (right)" })
+map('n', 'I', 'O', { remap = false, desc = "Insert (new line above)" })
+map('n', 'K', 'o', { remap = false, desc = "Insert (new line below)" })
+map('n', '<S-m>', '^i', { remap = false, desc = "Insert (start of line)" })
+map('n', '>', 'A', { remap = false, desc = "Insert (end of line)" })
 
--- select (visual mode)
-map('n', 's', 'v', { remap = false, desc = "Visual Select (Character)" })
-map('n', 'S', 'V', { remap = false, desc = "Visual Select (Line)" })
-map('n', '<C-s>', '<C-v>', { remap = false, desc = "Visual Select (Block)" })
+-- ===================================================================
+-- SELECT OPERATOR (s)
+-- ===================================================================
+map('n', 's', 'v', { remap = false, desc = "Select (Character)" })
+map('n', 'S', 'V', { remap = false, desc = "Select (Line)" })
+map('n', '<C-s>', '<C-v>', { remap = false, desc = "Select (Block)" })
 
 -- ===================================================================
 -- CHANGE OPERATOR (r)
@@ -81,7 +90,7 @@ map("n", "<leader>cf", function()
 end, { desc = "Format current file" })
 
 -- ===================================================================
--- ERROR KEYMAPS
+-- ERROR NAVIGATION
 -- ===================================================================
 map("n", "]e", function()
   vim.diagnostic.jump({ count = 1, severity = vim.diagnostic.severity.ERROR, float = { focusable = true, autofocus = true } })
@@ -92,7 +101,7 @@ map("n", "[e", function()
 end, { desc = "Previous Error" })
 
 -- ===================================================================
--- NEOGIT KEYMAPS
+-- GIT (<leader>g)
 -- ===================================================================
 map("n", "<leader>gg", function()
   require("neogit").open()
@@ -107,7 +116,7 @@ map("n", "<leader>gb", "<cmd>Neotree float git_status git_base=main<CR>", {
 })
 
 -- ===================================================================
--- TELESCOPE KEYMAPS
+-- SEARCH (<leader>s)
 -- ===================================================================
 map("n", "<leader>sf", function()
   local builtin = require("telescope.builtin")
@@ -120,30 +129,23 @@ end, { desc = "Search files (current working dir)" })
 map('n', '<leader>st', require('telescope.builtin').live_grep, { desc = "Search text (current working dir)" })
 
 -- ===================================================================
--- SEARCH AND REPLACE
--- ===================================================================
-map('n', '<leader>rw', function()
-  local cword = vim.fn.expand('<cword>')
-  if cword == "" then return end
-  local cmd = ":%s/\\<" .. cword .. "\\>//gc"
-  local keys = vim.api.nvim_replace_termcodes(cmd .. "<Left><Left><Left>", true, false, true)
-  vim.api.nvim_feedkeys(keys, 'n', false)
-end, { remap = false, desc = "Replace word under cursor (current file)" })
-map('n', '<leader>r/', ':%s//gc<Left><Left><Left>', {
-  remap = false,
-  desc = "Search and replace prompt (current file)",
-})
-
-map('v', '<leader>r', '"hy:%s/<C-r>h//gc<Left><Left><Left>', {
-  remap = false,
-  desc = "Replace selection (current file)",
-})
-
--- ===================================================================
--- ctrl commands
+-- CTRL COMMANDS
 -- ===================================================================
 map('n', '<C-a>', 'ggVG', { desc = 'Select All' })
 map('n', '<C-q>', '<cmd>q<CR>', { remap = false, desc = "Quit Current Window" })
+map({ "n", "v" }, "<C-f>", "/", { noremap = true, desc = "Search forward in buffer" })
+map('n', '<C-r>', function()
+  local cword = vim.fn.expand('<cword>')
+  local cmd = ":%s/\\<" .. cword .. "\\>//gc"
+  local keys = vim.api.nvim_replace_termcodes(cmd .. "<Left><Left><Left>", true, false, true)
+  vim.api.nvim_feedkeys(keys, 'n', false)
+end, { remap = false, desc = "Replace" })
+
+map('v', '<C-r>', '"hy:%s/<C-r>h//gc<Left><Left><Left>', {
+  remap = false,
+  desc = "Replace selection",
+})
+
 
 -- ===================================================================
 -- WINDOW KEYMAPS
