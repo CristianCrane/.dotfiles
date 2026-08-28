@@ -9,10 +9,7 @@ config.font = wezterm.font_with_fallback({
   "Hack Nerd Font"
 })
 config.font_size = 11.0
--- config.line_height = 1.2
 
-config.window_background_opacity = 0.8
-config.win32_system_backdrop = 'Acrylic'
 config.hide_tab_bar_if_only_one_tab = true
 
 return config
