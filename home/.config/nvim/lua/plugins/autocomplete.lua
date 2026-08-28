@@ -17,7 +17,7 @@ return {
     completion = {
       -- Show completion documentation popup automatically when navigating items
       documentation = { auto_show = true, auto_show_delay_ms = 200 },
-      
+
       -- Render kind icons (Method, Variable, Interface, etc.) in popup
       menu = {
         draw = {
