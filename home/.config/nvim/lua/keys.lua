@@ -146,6 +146,13 @@ map('v', '<C-r>', '"hy:%s/<C-r>h//gc<Left><Left><Left>', {
   desc = "Replace selection",
 })
 
+-- ===================================================================
+-- TAB KEYMAPS
+-- ===================================================================
+map("n", "<C-t>", "<cmd>tabnew<CR>", { noremap = true, desc = "New tab" })
+map("n", "<C-Tab>", "<cmd>tabnext<CR>", { noremap = true, desc = "Next tab" })
+map("n", "<C-S-Tab>", "<cmd>tabprevious<CR>", { noremap = true, desc = "Previous tab" })
+-- something here
 
 -- ===================================================================
 -- WINDOW KEYMAPS
@@ -161,7 +168,7 @@ map("n", "<S-Tab>", "<C-w>W", { desc = "Focus previous window/UI" })
 -- ===================================================================
 -- TERMINAL KEYMAPS
 -- ===================================================================
-map("n", "<C-t>", function()
+map({ "n", "t" }, "<A-t>", function()
   local pane_id = os.getenv("WEZTERM_PANE")
 
   -- Get directory of the currently active buffer file
