@@ -8,6 +8,7 @@ return {
       current_tab = "TabLineSel", -- Selected active tab highlight
       tab = "TabLine",            -- Unselected tab highlight
     }
+
     require("tabby").setup({
       line = function(line)
         return {
@@ -16,18 +17,10 @@ return {
             local is_active = tab.is_current()
             local hl = is_active and theme.current_tab or theme.tab
 
-            -- Determine the folder name (:tcd) or custom :TabRename
-            local tab_id = tab.id
-            local name = vim.t[tab_id].tab_name
-            if not name or name == "" then
-              local winnr = vim.fn.tabpagewinnr(tab_id)
-              local cwd = vim.fn.getcwd(winnr, tab_id)
-              name = vim.fn.fnamemodify(cwd, ":t")
-            end
-
-            -- Return the individual tab element
+            -- tab.name() handles custom :TabRename automatically,
+            -- and falls back to option.tab_name.name_fallback if unset.
             return {
-              { " " .. name .. " ", hl = hl },
+              { " " .. tab.name() .. " ", hl = hl },
             }
           end),
 
@@ -38,6 +31,16 @@ return {
       option = {
         tab_name = {
           name_fallback = function(tabid)
+            -- Safely resolve cwd using valid API handles + pcall safeguard
+            local ok, cwd = pcall(function()
+              local win_id = vim.api.nvim_tabpage_get_win(tabid)
+              return vim.fn.getcwd(win_id, tabid)
+            end)
+
+            if ok and cwd and cwd ~= "" then
+              return vim.fn.fnamemodify(cwd, ":t")
+            end
+
             return "Tab"
           end,
         },
