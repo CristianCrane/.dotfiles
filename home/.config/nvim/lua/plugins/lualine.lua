@@ -4,10 +4,10 @@ return {
     dependencies = { "nvim-tree/nvim-web-devicons" },
     opts = {
       options = {
-        theme = "auto", -- Automatically matches your current Neovim colorscheme
+        theme = "tomorrow_night",
         component_separators = { left = "", right = "" },
         section_separators = { left = "", right = "" },
-        globalstatus = true, -- Keeps a single unified statusline at the bottom across all split windows
+        globalstatus = true,
       },
       sections = {
         lualine_a = { "mode" },

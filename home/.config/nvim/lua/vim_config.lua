@@ -10,3 +10,4 @@ o.clipboard = 'unnamedplus' -- share system clipboard
 o.scrolloff = 16            -- keep cursor away from screen edge
 o.undofile = true           -- persistent undo across sessions
 o.hlsearch = false          -- disable search highlighting
+o.showmode = false          -- disable status indicator in the cmd bar
