@@ -21,15 +21,16 @@ set(0, "PreProc", { fg = "#b3b428" })
 set(0, "Constant", { fg = "#4f8dba" })
 set(0, "@variable.member.typescript", { fg = "#8f75a9" })
 set(0, "@lsp.type.property", { link = "@variable.member.typescript" })
-
+set(0, "TabLine", { fg = "#7f849c", bg = "#181825" })
+set(0, "TabLineSel", { fg = "#cdd6f4", bg = "#313244", bold = true })
 -- neotree
 set(0, "NeoTreeDirectoryName", { fg = text })
 set(0, "NeoTreeDirectoryIcon", { fg = "#f8d775" })
-set(0, "NeoTreeGitAdded", { fg = "#98c379" })     -- Pale Green (Staged / Added)
-set(0, "NeoTreeGitUntracked", { fg = "#e06c75" }) -- Pale Red   (Untracked)
-set(0, "NeoTreeGitModified", { fg = "#82aaff" })  -- Pale Blue  (Modified)
-set(0, "NeoTreeGitDeleted", { fg = "#5c6370" })   -- Pale Grey  (Deleted)
-set(0, "NeoTreeGitIgnored", { fg = "#5c6370" })   -- Pale Grey  (Ignored)
+set(0, "NeoTreeGitAdded", { fg = "#98c379" })
+set(0, "NeoTreeGitUntracked", { fg = "#e06c75" })
+set(0, "NeoTreeGitModified", { fg = "#82aaff" })
+set(0, "NeoTreeGitDeleted", { fg = "#5c6370" })
+set(0, "NeoTreeGitIgnored", { fg = "#5c6370" })
 
 -- neogit
 set(0, "NeoGitDiffHighlight", { fg = "#ffffff" }) -- Slightly lighter green for more contrast
