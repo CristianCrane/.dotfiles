@@ -11,6 +11,7 @@ config.font = wezterm.font_with_fallback({
 config.font_size = 11.0
 
 config.hide_tab_bar_if_only_one_tab = true
+config.window_decorations = "RESIZE"
 
 config.keys = {
   -- Forward Ctrl+Tab and Ctrl+Shift+Tab to terminal applications
