@@ -23,6 +23,7 @@ set(0, "@variable.member.typescript", { fg = "#8f75a9" })
 set(0, "@lsp.type.property", { link = "@variable.member.typescript" })
 set(0, "TabLine", { fg = "#7f849c", bg = "#181825" })
 set(0, "TabLineSel", { fg = "#cdd6f4", bg = "#313244", bold = true })
+
 -- neotree
 set(0, "NeoTreeDirectoryName", { fg = text })
 set(0, "NeoTreeDirectoryIcon", { fg = "#f8d775" })
@@ -32,5 +33,8 @@ set(0, "NeoTreeGitModified", { fg = "#82aaff" })
 set(0, "NeoTreeGitDeleted", { fg = "#5c6370" })
 set(0, "NeoTreeGitIgnored", { fg = "#5c6370" })
 
--- neogit
-set(0, "NeoGitDiffHighlight", { fg = "#ffffff" }) -- Slightly lighter green for more contrast
+-- diagnostic floats
+vim.api.nvim_set_hl(0, "DiagnosticFloatingError", { fg = "#e06c75", bg = "#2c191e" })
+vim.api.nvim_set_hl(0, "DiagnosticFloatingWarn",  { fg = "#e5c07b", bg = "#2a241a" })
+vim.api.nvim_set_hl(0, "DiagnosticFloatingInfo",  { fg = "#61afef", bg = "#1b2738" })
+vim.api.nvim_set_hl(0, "DiagnosticFloatingHint",  { fg = "#5c6370", bg = "#1b1d23" })

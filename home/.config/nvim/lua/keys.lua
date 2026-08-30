@@ -152,17 +152,13 @@ map('v', '<C-r>', '"hy:%s/<C-r>h//gc<Left><Left><Left>', {
 map("n", "<C-t>", "<cmd>tabnew<CR>", { noremap = true, desc = "New tab" })
 map("n", "<C-Tab>", "<cmd>tabnext<CR>", { noremap = true, desc = "Next tab" })
 map("n", "<C-S-Tab>", "<cmd>tabprevious<CR>", { noremap = true, desc = "Previous tab" })
--- something here
 
 -- ===================================================================
 -- WINDOW KEYMAPS
 -- ===================================================================
--- Window Creation & Splits
 map('n', '<leader>wc', '<cmd>close<CR>', { remap = false, desc = "Close Current Window" })
 map('n', '<leader>wo', '<cmd>only<CR>', { remap = false, desc = "Close All Other Windows" })
--- Normal Mode: <Tab> cycles forward through open windows/UI splits
 map("n", "<Tab>", "<C-w>w", { desc = "Focus next window/UI" })
--- Normal Mode: <Shift-Tab> cycles backward through open windows/UI splits
 map("n", "<S-Tab>", "<C-w>W", { desc = "Focus previous window/UI" })
 
 -- ===================================================================

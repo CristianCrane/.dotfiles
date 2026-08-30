@@ -11,3 +11,23 @@ o.scrolloff = 16            -- keep cursor away from screen edge
 o.undofile = true           -- persistent undo across sessions
 o.hlsearch = false          -- disable search highlighting
 o.showmode = false          -- disable status indicator in the cmd bar
+
+vim.diagnostic.config({
+  float = {
+    border = "rounded",
+    source = true,
+    max_width = 100,
+    prefix = function(diagnostic, i)
+      return string.format("%d. ", i), "Comment"
+    end,
+    win_options = {
+      winblend = 0,
+      wrap = true,
+    },
+  },
+  virtual_text = false,
+  signs = true,
+  underline = true,
+  update_in_insert = false,
+  severity_sort = true,
+})
