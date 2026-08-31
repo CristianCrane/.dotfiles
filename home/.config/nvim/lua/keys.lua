@@ -38,14 +38,25 @@ map({ 'n', 'v' }, 'd', '"_d', { remap = false, desc = "Delete" })
 map('n', 'dd', '"_dd', { remap = false, desc = "Delete Current Line" })
 
 -- ===================================================================
--- INSERT MODES (shift+i, shift+j, shift+k, shift+l)
+-- INSERT MODE (enter, shift+enter)
 -- ===================================================================
-map('n', 'J', 'i', { remap = false, desc = "Insert (left)" })
-map('n', 'L', 'a', { remap = false, desc = "Insert (right)" })
-map('n', 'I', 'O', { remap = false, desc = "Insert (new line above)" })
-map('n', 'K', 'o', { remap = false, desc = "Insert (new line below)" })
-map('n', '<S-m>', '^i', { remap = false, desc = "Insert (start of line)" })
-map('n', '>', 'A', { remap = false, desc = "Insert (end of line)" })
+local function is_editable_buffer()
+  return vim.bo.buftype == "" and vim.bo.filetype ~= "qf"
+end
+
+map("n", "<CR>", function()
+  if is_editable_buffer() then
+    return "a"
+  end
+  return "<CR>"
+end, { expr = true, desc = "Enter Insert mode" })
+
+map("n", "<S-CR>", function()
+  if is_editable_buffer() then
+    return "o"
+  end
+  return "<S-CR>"
+end, { expr = true, desc = "Open line below and enter Insert mode" })
 
 -- ===================================================================
 -- SELECT OPERATOR (s)
@@ -68,37 +79,27 @@ map({ 'o', 'x' }, 'w', 'i', { remap = false, desc = "Within (Inside)" })
 map({ 'o', 'x' }, 'e', 'a', { remap = false, desc = "Entire (Around)" })
 
 -- ===================================================================
--- CODE ACTION KEYMAPS
+-- CODE ACTIONS
 -- ===================================================================
-map({ "n", "v" }, "<leader>ca", vim.lsp.buf.code_action, { desc = "Code Action" })
-
-map("n", "<leader>co", function()
-  vim.lsp.buf.code_action({
-    apply = true,
-    context = {
-      only = { "source.organizeImports" },
-      diagnostics = {},
-    },
-  })
-end, { desc = "Organize Imports" })
-
+map("n", "q", "<cmd>Lspsaga hover_doc<CR>", { desc = "Show LSP hover documentation" })
+map({ "n", "v" }, "<leader>ca", "<cmd>Lspsaga code_action<CR>", { desc = "Code Action" })
 map("n", "<leader>cf", function()
   require("conform").format({
     async = true,
     lsp_fallback = true,
   })
 end, { desc = "Format current file" })
-
--- ===================================================================
--- ERROR NAVIGATION
--- ===================================================================
 map("n", "]e", function()
-  vim.diagnostic.jump({ count = 1, severity = vim.diagnostic.severity.ERROR, float = { focusable = true, autofocus = true } })
+  require("lspsaga.diagnostic"):goto_next({
+    severity = vim.diagnostic.severity.ERROR,
+  })
 end, { desc = "Next Error" })
-
 map("n", "[e", function()
-  vim.diagnostic.jump({ count = -1, severity = vim.diagnostic.severity.ERROR, float = { focusable = true, autofocus = true } })
+  require("lspsaga.diagnostic"):goto_prev({
+    severity = vim.diagnostic.severity.ERROR,
+  })
 end, { desc = "Previous Error" })
+map("n", "<leader>cd", "<cmd>Lspsaga show_line_diagnostics<CR>", { desc = "Show Line Diagnostics" })
 
 -- ===================================================================
 -- GIT (<leader>g)
@@ -116,17 +117,26 @@ map("n", "<leader>gb", "<cmd>Neotree float git_status git_base=main<CR>", {
 })
 
 -- ===================================================================
--- SEARCH (<leader>s)
+-- FIND (<leader>f)
 -- ===================================================================
-map("n", "<leader>sf", function()
+map("n", "<leader>ff", function()
   local builtin = require("telescope.builtin")
   builtin.find_files({
     cwd = vim.fn.getcwd(),
     hidden = true,
   })
-end, { desc = "Search files (current working dir)" })
+end, { desc = "Find file (current working dir)" })
 
-map('n', '<leader>st', require('telescope.builtin').live_grep, { desc = "Search text (current working dir)" })
+map('n', '<leader>ft', require('telescope.builtin').live_grep, { desc = "Find text (current working dir)" })
+
+map('n', '<leader>fc', function()
+  local builtin = require("telescope.builtin")
+  builtin.find_files({
+    prompt_title = ".dotfiles",
+    hidden = true,
+    cwd = vim.fn.expand("~/.dotfiles"),
+  })
+end, { desc = "Find config (.dotfiles)" })
 
 -- ===================================================================
 -- CTRL COMMANDS
