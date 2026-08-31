@@ -4,8 +4,12 @@ local set = vim.api.nvim_set_hl
 local text = "#a7b6c5"
 local keyword = "#cb7731"
 
--- background / text color
-set(0, "Normal", { bg = "#090909", fg = text })
+-- backgrounds
+set(0, "Normal", { bg = "#0f0f0f", fg = text })
+set(0, "NormalNC", { bg = "#090909", fg = text })
+set(0, "WinSeparator", { bg = "bg", fg = "bg" })
+
+set(0, "EndOfBuffer", { fg = "bg" })
 set(0, "Keyword", { fg = keyword })
 set(0, "Identifier", { fg = text })
 set(0, "DiagnosticUnderlineError", { fg = "#b33e3b" })
@@ -34,7 +38,7 @@ set(0, "NeoTreeGitDeleted", { fg = "#5c6370" })
 set(0, "NeoTreeGitIgnored", { fg = "#5c6370" })
 
 -- diagnostic floats
-vim.api.nvim_set_hl(0, "DiagnosticFloatingError", { fg = "#e06c75", bg = "#2c191e" })
-vim.api.nvim_set_hl(0, "DiagnosticFloatingWarn",  { fg = "#e5c07b", bg = "#2a241a" })
-vim.api.nvim_set_hl(0, "DiagnosticFloatingInfo",  { fg = "#61afef", bg = "#1b2738" })
-vim.api.nvim_set_hl(0, "DiagnosticFloatingHint",  { fg = "#5c6370", bg = "#1b1d23" })
+set(0, "DiagnosticFloatingError", { fg = "#e06c75", bg = "#2c191e" })
+set(0, "DiagnosticFloatingWarn", { fg = "#e5c07b", bg = "#2a241a" })
+set(0, "DiagnosticFloatingInfo", { fg = "#61afef", bg = "#1b2738" })
+set(0, "DiagnosticFloatingHint", { fg = "#5c6370", bg = "#1b1d23" })
