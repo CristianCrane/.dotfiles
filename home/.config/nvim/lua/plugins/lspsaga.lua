@@ -11,9 +11,6 @@ return {
         max_width = 0.8,
         open_link = "gx",
       },
-      ui = {
-        border = "rounded",
-      },
       lightbulb = {
         enable = false,
       },
