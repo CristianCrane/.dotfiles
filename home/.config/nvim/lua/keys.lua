@@ -26,6 +26,7 @@ map({ 'n', 'v', 'o' }, 'O', 'W', { remap = false, desc = "WORD Forward" })
 -- ===================================================================
 -- UNDO (z), REDO (Z), COPY (c), PASTE (p), DELETE (d)
 -- ===================================================================
+map('n', 'a', 'ggVG', { desc = 'Select All' })
 map('n', 'z', 'u', { remap = false, desc = "Undo" })
 map('n', 'Z', '<C-r>', { remap = false, desc = "Redo" })
 map({ 'n', 'v' }, 'c', '"+y', { remap = false, desc = "Copy" })
