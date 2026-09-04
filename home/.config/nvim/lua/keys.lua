@@ -118,26 +118,29 @@ map("n", "<leader>gb", "<cmd>Neotree float git_status git_base=main<CR>", {
 })
 
 -- ===================================================================
--- FIND (<leader>f)
+-- OPEN (<leader>o)
 -- ===================================================================
-map("n", "<leader>ff", function()
+map("n", "<leader>o", function()
   local builtin = require("telescope.builtin")
   builtin.find_files({
     cwd = vim.fn.getcwd(),
     hidden = true,
   })
-end, { desc = "Find file (current working dir)" })
+end, { desc = "Open file (current working dir)" })
 
-map('n', '<leader>ft', require('telescope.builtin').live_grep, { desc = "Find text (current working dir)" })
-
-map('n', '<leader>fc', function()
+map('n', '<leader>O', function()
   local builtin = require("telescope.builtin")
   builtin.find_files({
     prompt_title = ".dotfiles",
     hidden = true,
     cwd = vim.fn.expand("~/.dotfiles"),
   })
-end, { desc = "Find config (.dotfiles)" })
+end, { desc = "Open config (.dotfiles)" })
+
+-- ===================================================================
+-- FILE TREE (<leader>f)
+-- ===================================================================
+map("n", "<leader>f", "<cmd>Neotree toggle<CR>", { desc = "Toggle file explorer" })
 
 -- ===================================================================
 -- QUICK FILE NAVIGATION (Harpoon)

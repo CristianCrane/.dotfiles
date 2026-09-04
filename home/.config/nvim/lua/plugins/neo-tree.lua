@@ -7,31 +7,6 @@ return {
     "nvim-tree/nvim-web-devicons",
   },
   lazy = false, -- neo-tree will lazily load itself
-  keys = {
-    {
-      "<leader>d",
-      function()
-        local neo_tree_win = nil
-        -- check if neotree is open already by finding its window
-        for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
-          local buf = vim.api.nvim_win_get_buf(win)
-          if vim.bo[buf].filetype == "neo-tree" then
-            neo_tree_win = win
-            break
-          end
-        end
-        local current_win = vim.api.nvim_get_current_win()
-        if neo_tree_win and current_win == neo_tree_win then
-          vim.cmd("Neotree close")
-        elseif neo_tree_win then
-          vim.api.nvim_set_current_win(neo_tree_win)
-        else
-          vim.cmd("Neotree show focus")
-        end
-      end,
-      desc = "File tree"
-    },
-  },
   opts = {
     close_if_last_window = true,
     popup_border_style = "rounded",
@@ -53,14 +28,35 @@ return {
     },
     window = {
       mappings = {
-        ["<space>"] = "none",
-        -- vertical cursor navigation
+        -- CWD Navigation
+        ["<Left>"] = "navigate_up",
+        ["<Right>"] = "set_root",
+
+        -- Navigation & Expansion
+        ["<CR>"] = "open",
+        -- Normal Mode Cursor Navigation
         ["i"] = function() vim.cmd("normal! k") end,
         ["k"] = function() vim.cmd("normal! j") end,
-        -- directory tree collapse / expand
-        ["j"] = "close_node",
         ["l"] = "open",
-        ["h"] = "none",
+        ["j"] = "close_node",
+        ["e"] = "expand_all_nodes",
+        ["E"] = "close_all_nodes",
+
+        -- File Operations
+        ["d"] = "delete",
+        ["r"] = "rename",
+        ["c"] = "copy_to_clipboard",
+        ["m"] = "move",
+        ["R"] = "refresh",
+        ["v"] = "paste_from_clipboard",
+        ["x"] = "cut_to_clipboard",
+        ["p"] = "toggle_preview",
+        ["<C-f>"] = "fuzzy_finder",
+
+        -- Explicit Unbinds
+        ["<BS>"] = false,
+        ["C"] = false,
+        ["h"] = false,
       },
     },
     default_component_configs = {
