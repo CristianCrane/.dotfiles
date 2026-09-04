@@ -17,6 +17,17 @@ return {
       capabilities = capabilities,
       settings = {
         typescript = {
+          suggest = {
+            completeFunctionCalls = true,
+            autoImports = true,
+          },
+          preferences = {
+            includePackageJsonAutoImports = "on",
+            includeCompletionsForModuleExports = true,
+            includeCompletionsForImportStatements = true,
+            allowSyntheticDefaultImports = true,
+            preferTypeOnlyAutoImports = true,
+          },
           inlayHints = {
             parameterNames = { enabled = 'all' },
             parameterTypes = { enabled = true },
