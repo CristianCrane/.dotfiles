@@ -140,22 +140,47 @@ map('n', '<leader>fc', function()
 end, { desc = "Find config (.dotfiles)" })
 
 -- ===================================================================
+-- QUICK FILE NAVIGATION (Harpoon)
+-- ===================================================================
+map("n", "<leader>a", function()
+  require("harpoon"):list():add()
+end, { desc = "Harpoon file" })
+
+map("n", "<leader>`", function()
+  local harpoon = require("harpoon")
+  harpoon.ui:toggle_quick_menu(harpoon:list())
+end, { desc = "Harpoon menu" })
+
+map("n", "<leader>1", function()
+  require("harpoon"):list():select(1)
+end, { desc = "Harpoon slot 1" })
+
+map("n", "<leader>2", function()
+  require("harpoon"):list():select(2)
+end, { desc = "Harpoon slot 2" })
+
+map("n", "<leader>3", function()
+  require("harpoon"):list():select(3)
+end, { desc = "Harpoon slot 3" })
+
+map("n", "<leader>4", function()
+  require("harpoon"):list():select(4)
+end, { desc = "Harpoon slot 4" })
+
+map("n", "[f", function()
+  require("harpoon"):list():prev({ ui_nav_wrap = true })
+end, { desc = "Harpoon prev" })
+
+map("n", "]f", function()
+  require("harpoon"):list():next({ ui_nav_wrap = true })
+end, { desc = "Harpoon next" })
+
+-- ===================================================================
 -- CTRL COMMANDS
 -- ===================================================================
-map('n', '<C-a>', 'ggVG', { desc = 'Select All' })
 map('n', '<C-q>', '<cmd>q<CR>', { remap = false, desc = "Quit Current Window" })
 map({ "n", "v" }, "<C-f>", "/", { noremap = true, desc = "Search forward in buffer" })
-map('n', '<C-r>', function()
-  local cword = vim.fn.expand('<cword>')
-  local cmd = ":%s/\\<" .. cword .. "\\>//gc"
-  local keys = vim.api.nvim_replace_termcodes(cmd .. "<Left><Left><Left>", true, false, true)
-  vim.api.nvim_feedkeys(keys, 'n', false)
-end, { remap = false, desc = "Replace" })
-
-map('v', '<C-r>', '"hy:%s/<C-r>h//gc<Left><Left><Left>', {
-  remap = false,
-  desc = "Replace selection",
-})
+map('n', '<C-r>', vim.lsp.buf.rename, { remap = false, desc = "Rename symbol" })
 
 -- ===================================================================
 -- TAB KEYMAPS
@@ -167,8 +192,6 @@ map("n", "<C-S-Tab>", "<cmd>tabprevious<CR>", { noremap = true, desc = "Previous
 -- ===================================================================
 -- WINDOW KEYMAPS
 -- ===================================================================
-map('n', '<leader>wc', '<cmd>close<CR>', { remap = false, desc = "Close Current Window" })
-map('n', '<leader>wo', '<cmd>only<CR>', { remap = false, desc = "Close All Other Windows" })
 map("n", "<Tab>", "<C-w>w", { desc = "Focus next window/UI" })
 map("n", "<S-Tab>", "<C-w>W", { desc = "Focus previous window/UI" })
 
