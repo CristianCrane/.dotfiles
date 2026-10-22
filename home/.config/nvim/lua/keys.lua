@@ -1,11 +1,6 @@
 local map = vim.keymap.set
 
 -- ===================================================================
--- COMMAND PROMPT (/)
--- ===================================================================
-map({ "n", "v" }, "/", ":", { noremap = true, desc = "Command prompt" })
-
--- ===================================================================
 -- BASE MOVEMENT (i, j, k, l)
 -- ===================================================================
 map({ 'n', 'v', 'o' }, 'j', 'h', { remap = false })
@@ -149,26 +144,10 @@ map("n", "<leader>a", function()
   require("harpoon"):list():add()
 end, { desc = "Harpoon file" })
 
-map("n", "<leader>`", function()
+map("n", "<leader>d", function()
   local harpoon = require("harpoon")
   harpoon.ui:toggle_quick_menu(harpoon:list())
 end, { desc = "Harpoon menu" })
-
-map("n", "<leader>1", function()
-  require("harpoon"):list():select(1)
-end, { desc = "Harpoon slot 1" })
-
-map("n", "<leader>2", function()
-  require("harpoon"):list():select(2)
-end, { desc = "Harpoon slot 2" })
-
-map("n", "<leader>3", function()
-  require("harpoon"):list():select(3)
-end, { desc = "Harpoon slot 3" })
-
-map("n", "<leader>4", function()
-  require("harpoon"):list():select(4)
-end, { desc = "Harpoon slot 4" })
 
 map("n", "[f", function()
   require("harpoon"):list():prev({ ui_nav_wrap = true })
