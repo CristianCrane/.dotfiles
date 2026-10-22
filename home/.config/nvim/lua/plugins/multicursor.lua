@@ -30,8 +30,8 @@ return {
     -- Mappings active only when multiple cursors exist
     mc.addKeymapLayer(function(layerSet)
       -- Select adjacent active cursor (custom layout: j = Left, l = Right)
-      layerSet({ "n", "x" }, "j", mc.prevCursor)
-      layerSet({ "n", "x" }, "l", mc.nextCursor)
+      -- layerSet({ "n", "x" }, "j", mc.prevCursor)
+      -- layerSet({ "n", "x" }, "l", mc.nextCursor)
 
       -- Delete main cursor
       layerSet({ "n", "x" }, "<leader>x", mc.deleteCursor)

@@ -27,6 +27,7 @@ in
     tree-sitter # cli parser generator required by nvim-treesitter
     gnumake
     cmake
+    inputs.nix-claude-code.packages.${pkgs.stdenv.hostPlatform.system}.default
   ];
 
   fonts.fontconfig.enable = true;

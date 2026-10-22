@@ -6,6 +6,7 @@
     nixos-wsl.url = "github:nix-community/NixOS-WSL/main";
     home-manager.url = "github:nix-community/home-manager/release-26.05";
     home-manager.inputs.nixpkgs.follows = "nixpkgs";
+    nix-claude-code.url = "github:ryoppippi/nix-claude-code";
 
     herdr = {
       url = "github:herdrdev/herdr/v0.8.0";
@@ -13,7 +14,7 @@
     };
   };
 
-  outputs = { self, nixpkgs, nixos-wsl, home-manager, herdr, ... }@inputs: {
+  outputs = { self, nixpkgs, nixos-wsl, home-manager, herdr, nix-claude-code, ... }@inputs: {
     nixosConfigurations."windows" = nixpkgs.lib.nixosSystem {
         system = "x86_64-linux";
 

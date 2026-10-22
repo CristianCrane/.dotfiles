@@ -28,6 +28,11 @@ set(0, "@lsp.type.property", { link = "@variable.member.typescript" })
 set(0, "TabLine", { fg = "#7f849c", bg = "#181825" })
 set(0, "TabLineSel", { fg = "#cdd6f4", bg = "#313244", bold = true })
 set(0, "@lsp.type.typeParameter.typescript", { fg = "#497072" })
+set(0, "@tag.builtin.tsx", { link = "Function" })
+set(0, "@tag.delimiter.tsx", { link = "Function" })
+set(0, "@tag.attribute.tsx", { fg = "#8f75a9" })
+set(0, "@tag.tsx", { fg = "#26bca3" })
+
 -- neotree
 set(0, "NeoTreeDirectoryName", { fg = text })
 set(0, "NeoTreeDirectoryIcon", { fg = "#f8d775" })
