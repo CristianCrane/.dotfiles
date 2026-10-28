@@ -5,6 +5,13 @@
 
         # enables automatic dynamic linking support for unpatched binaries in $PATH / node
         programs.nix-ld.enable = true;
+
+        programs.nix-ld.libraries = with pkgs; [
+          # headless Chromium for Playwright (browser tests)
+          alsa-lib at-spi2-atk at-spi2-core atk dbus expat glib libgbm
+            libxkbcommon nspr nss systemd
+            libx11 libxcb libxcomposite libxdamage libxext libxfixes libxrandr
+        ];
 	
 	# general system settings
 	system.stateVersion = "26.05";
