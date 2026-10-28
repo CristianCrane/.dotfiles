@@ -16,6 +16,7 @@ in
     wget 
     fzf         # fuzzy finder
     jq          # json on the command line
+    stripe-cli  # stripe listen/trigger for local webhooks
     lazygit
     inputs.herdr.packages.${pkgs.stdenv.hostPlatform.system}.default
     nodejs
