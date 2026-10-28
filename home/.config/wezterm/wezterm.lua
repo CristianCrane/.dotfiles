@@ -77,7 +77,7 @@ config.keys = {
       pane:split { direction = dims.pixel_width > dims.pixel_height and 'Right' or 'Bottom' }
     end),
   },
-  { key = 'q', mods = 'CTRL|SHIFT|ALT', action = act.CloseCurrentPane { confirm = true } },
+  { key = 'q', mods = 'CTRL|SHIFT|ALT', action = act.CloseCurrentPane { confirm = false } },
   { key = 'n', mods = 'CTRL|SHIFT|ALT', action = act.ActivatePaneDirection 'Next' },
   { key = 'p', mods = 'CTRL|SHIFT|ALT', action = act.ActivatePaneDirection 'Prev' },
   { key = 'f', mods = 'CTRL|SHIFT|ALT', action = act.PaneSelect },
