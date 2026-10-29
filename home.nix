@@ -83,4 +83,7 @@ in
 
   home.file.".config/starship.toml".source =
     config.lib.file.mkOutOfStoreSymlink "${dotfiles}/home/.config/starship/starship.toml";
+
+  home.file.".claude/settings.json".source =
+    config.lib.file.mkOutOfStoreSymlink "${dotfiles}/home/.claude/settings.json";
 }
