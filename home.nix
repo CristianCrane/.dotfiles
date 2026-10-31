@@ -16,6 +16,10 @@ in
     wget 
     fzf         # fuzzy finder
     jq          # json on the command line
+    zip
+    unzip
+    zstd        # .zst compression
+    _7zz        # 7-zip: .7z, .rar, and other formats
     stripe-cli  # stripe listen/trigger for local webhooks
     lazygit
     inputs.herdr.packages.${pkgs.stdenv.hostPlatform.system}.default
