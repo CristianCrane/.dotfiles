@@ -66,6 +66,12 @@ in
       l = ''eza --long -F -a --group-directories-first --no-permissions --no-user --no-time --no-filesize'';
       q = "exit";
     };
+    # hide the WSLg display so headless tools don't wake msrdc and steal windows focus.
+    # run gui apps / headed playwright with: gui <cmd>
+    initContent = ''
+      unset DISPLAY WAYLAND_DISPLAY
+      gui() { DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 "$@" }
+    '';
   };
 
   programs.starship = {
