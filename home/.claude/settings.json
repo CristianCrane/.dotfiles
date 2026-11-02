@@ -39,5 +39,10 @@
       "**Org-specific CLIs**: None configured",
       "routine under CristianCrane/.dotfiles prefix: shell/config/dotfiles management activity observed (nvim, pnpm, git, eza, docker, nix) consistent with a personal dotfiles repo"
     ]
+  },
+  "modelSettings": {
+    "claude-opus-5-5": {
+      "effortLevel": "high"
+    }
   }
 }

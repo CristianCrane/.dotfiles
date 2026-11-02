@@ -1,4 +1,4 @@
-{ config, pkgs, inputs, ... }: 
+{ config, pkgs, lib, inputs, ... }:
 
 let
   dotfiles = "${config.home.homeDirectory}/.dotfiles";
@@ -94,6 +94,11 @@ in
   home.file.".config/starship.toml".source =
     config.lib.file.mkOutOfStoreSymlink "${dotfiles}/home/.config/starship/starship.toml";
 
-  home.file.".claude/settings.json".source =
-    config.lib.file.mkOutOfStoreSymlink "${dotfiles}/home/.claude/settings.json";
+  # Linked directly, not through home.file: Claude Code follows only one
+  # symlink when it saves settings, so a hop through the read-only store
+  # breaks /effort, /config and friends.
+  home.activation.claudeSettings = lib.hm.dag.entryAfter [ "linkGeneration" ] ''
+    run mkdir -p "$HOME/.claude"
+    run ln -sfn "${dotfiles}/home/.claude/settings.json" "$HOME/.claude/settings.json"
+  '';
 }
