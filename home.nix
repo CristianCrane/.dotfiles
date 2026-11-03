@@ -20,7 +20,15 @@ in
     unzip
     zstd        # .zst compression
     _7zz        # 7-zip: .7z, .rar, and other formats
-    stripe-cli  # stripe listen/trigger for local webhooks
+    # stripe listen/trigger for local webhooks; nixpkgs lags upstream, so pin a newer release
+    (stripe-cli.overrideAttrs (finalAttrs: old: {
+      version = "1.55.6";
+      src = old.src.override {
+        tag = "v${finalAttrs.version}";
+        hash = "sha256-AyUCdvZPsS7cQsBGUjNhiiArA037Cyin+dcJ1Z61GV4=";
+      };
+      vendorHash = "sha256-pgL25vTwQcpwljwqEKdUar8sjJS8YYPWpBBCnGh08+o=";
+    }))
     lazygit
     inputs.herdr.packages.${pkgs.stdenv.hostPlatform.system}.default
     nodejs
