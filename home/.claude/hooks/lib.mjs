@@ -4,18 +4,18 @@
 // files the `shape` skill writes into the git dir (never committed, kept
 // per worktree).
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 // A repo's copy of these hooks (for cloud sessions, which have no
 // ~/.claude) stands aside wherever the user-level ones are installed, so
-// only the newest rules run, and only once.
-const user = join(homedir(), ".claude/hooks");
-export const standAside =
-  existsSync(join(user, "lib.mjs")) &&
-  realpathSync(user) !== dirname(fileURLToPath(import.meta.url));
+// only the newest rules run, and only once. A copy knows itself by where
+// sync puts it.
+const standAside =
+  dirname(fileURLToPath(import.meta.url)).endsWith("/.claude/hooks/shape") &&
+  existsSync(join(homedir(), ".claude/hooks/lib.mjs"));
 
 export const git = (cwd, ...args) =>
   execFileSync("git", args, {
@@ -24,7 +24,7 @@ export const git = (cwd, ...args) =>
     stdio: ["ignore", "pipe", "ignore"],
   }).trim();
 
-export const lines = (text) => text.split("\n").filter(Boolean);
+const lines = (text) => text.split("\n").filter(Boolean);
 
 // Runs a hook's body on its input and prints what the body returns. A
 // repo's copy stands aside here, and any failure (not a git checkout, bad
@@ -116,7 +116,7 @@ export const review = (cwd, branch) => {
 };
 
 // what the branch is measured against: where it left the default branch
-export const base = (cwd) => {
+const base = (cwd) => {
   for (const ref of ["origin/HEAD", "origin/main", "origin/master", "main", "master"]) {
     try {
       return git(cwd, "merge-base", "HEAD", ref);
