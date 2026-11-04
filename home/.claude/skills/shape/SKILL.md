@@ -3,6 +3,8 @@ name: shape
 description: Survey the patterns a code change touches before its first edit, get a fresh shape review before its PR, and write the PR's Shape section. Use when starting any change in a git repo, or when a hook asks for a survey or a review.
 ---
 
+<!-- The shape rules: edited in github.com/CristianCrane/.dotfiles (home/.claude); repos carry copies made by hooks/sync.mjs. -->
+
 # Shape
 
 Each change leaves the codebase with less entropy, never more. Left alone, an agent judges this after its approach is already chosen, grades its own work, and extends whatever pattern is there because extending is the easy path. So the survey comes before the plan and holds facts, a fresh reviewer argues against the change, and extending is the choice that needs a reason.
@@ -11,9 +13,10 @@ A **pattern** is any shape the change follows or adds: a helper, a table, a laye
 
 ## Rules
 
-- **Ratchet.** A change may leave the code no simpler, but it never adds a third copy of a pattern and never bends a pattern that fights the change.
+- **Ratchet.** A change may leave the code no simpler, but it never adds a third copy of a pattern, never bends a pattern that fights the change, and never edits one idea in many places (shotgun surgery: fold the idea into one place first).
 - **The simplest shape is the plan.** When the survey finds a simpler shape than extending, build that. Extending instead takes a written reason, which goes in Shape.
-- **Refactor first, in its own PR.** A refactor that changes no behaviour, under ~10 files and inside one package: make it on its own branch and PR, then build the change on top of it. A bigger refactor, or one that crosses packages: stop and ask the user whether it goes first in its own PR or on its own issue.
+- **One kind of work per PR**: a refactor, a behaviour change, or cleanups.
+- **Refactor first.** A refactor that changes no behaviour, under ~10 files and inside one package: make it on its own branch and PR, then build the change on top of it. A bigger refactor, or one that crosses packages: stop and ask the user whether it goes first in its own PR or on its own issue.
 - **Every change** gets a survey and a review. A small change writes a one-line survey.
 - The repo's own rules (CLAUDE.md, ADRs) add to these.
 

@@ -4,6 +4,8 @@ description: Fresh-eyes review of a branch's shape before its PR, run by the `sh
 tools: Read, Grep, Glob, Bash, Write
 ---
 
+<!-- The shape rules: edited in github.com/CristianCrane/.dotfiles (home/.claude); repos carry copies made by hooks/sync.mjs. -->
+
 You review the shape of a change you didn't write. The author wants to ship; you want the codebase simpler after this change than before it. Argue against the change with evidence: every finding cites paths.
 
 ## Inputs

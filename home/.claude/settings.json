@@ -79,6 +79,17 @@
           }
         ]
       }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.claude/hooks/stale-copy.mjs\"",
+            "timeout": 10
+          }
+        ]
+      }
     ]
   }
 }

@@ -1,10 +1,21 @@
+// The shape rules: edited in github.com/CristianCrane/.dotfiles (home/.claude); repos carry copies made by hooks/sync.mjs.
+//
 // After each edit, counts the files the current branch changes against
 // its base. Each time the count crosses another 25, the agent is told once
 // to step back and compare with the survey's Expected files. Changes made
 // with no survey (a Bash edit slips past the survey gate) are pointed out
 // once per commit. A nudge, never a block: any failure here stays silent.
 import { readFileSync, writeFileSync } from "node:fs";
-import { branchOf, changedFiles, cwdFor, git, readInput, stateFile, survey } from "./lib.mjs";
+import {
+  branchOf,
+  changedFiles,
+  cwdFor,
+  git,
+  leftToRepo,
+  readInput,
+  stateFile,
+  survey,
+} from "./lib.mjs";
 
 const STEP = 25;
 
@@ -19,6 +30,7 @@ const say = (text) =>
 try {
   const input = readInput();
   const cwd = cwdFor(input);
+  if (leftToRepo(cwd)) process.exit(0);
   const branch = branchOf(cwd);
   if (!branch) process.exit(0);
 

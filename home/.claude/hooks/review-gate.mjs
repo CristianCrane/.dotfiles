@@ -1,9 +1,11 @@
+// The shape rules: edited in github.com/CristianCrane/.dotfiles (home/.claude); repos carry copies made by hooks/sync.mjs.
+//
 // `gh pr create` waits for the branch's shape review (the `shape` skill):
 // it is turned down until the review exists and is newer than the last
 // commit. Any failure here lets the command through.
 import { homedir } from "node:os";
 import { resolve } from "node:path";
-import { branchOf, readInput, review } from "./lib.mjs";
+import { branchOf, leftToRepo, readInput, review } from "./lib.mjs";
 
 // where a command starts: not inside a message that mentions it
 const PR_CREATE = /(?:^|[;&|(\n])\s*gh\s+pr\s+create\b/;
@@ -22,6 +24,7 @@ try {
   const command = input.tool_input?.command ?? "";
   if (!PR_CREATE.test(command)) process.exit(0);
   const cwd = dirOf(command, input.cwd);
+  if (leftToRepo(cwd)) process.exit(0);
   const branch = branchOf(cwd);
   if (!branch) process.exit(0);
 
