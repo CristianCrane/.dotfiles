@@ -197,10 +197,14 @@ const commentOnly = (cwd, sha) => {
   }
 };
 
+// the round after which open shape findings go to the user (the `shape`
+// skill's "After round 5")
+const LAST_ROUND = 5;
+
 // the reviewer's read of the diff: it must be of the last commit (written
 // after it isn't enough: a round runs while fixes may land), or of one
-// before it with only comment lines changed since; and before round 3 it
-// must leave no shape finding open (after round 3 the user decides). The
+// before it with only comment lines changed since; and before the last
+// round it must leave no shape finding open (after it the user decides). The
 // reviewer's header line says all three: "… @ <sha>, round <n>, <k> open
 // shape findings", where a recheck says "recheck of round <n>", keeping
 // the number. "open blocks" is the count's old name, which copies of the
@@ -216,7 +220,7 @@ export const review = (cwd, key) => {
   if (!headSha(cwd).startsWith(sha) && !commentOnly(cwd, sha))
     return { path, ok: false, reason: `it reviewed ${sha}, and the commits since change more than comment lines` };
   const [round, open] = counts.map(Number);
-  if (open && round < 3)
+  if (open && round < LAST_ROUND)
     return {
       path,
       ok: false,

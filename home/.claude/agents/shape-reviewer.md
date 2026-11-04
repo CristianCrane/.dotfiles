@@ -12,7 +12,7 @@ You review the shape of a change you didn't write. The author wants to ship; you
 
 - **Plan**: the survey alone, before any code. Hunt 1, 5 and 6 below against the repo as it is, and whether the plan should be refactor-first. The cheapest point to change the shape.
 - **Round 1**: the whole diff, committed and uncommitted, against `git merge-base HEAD origin/<the default branch>` (`gh repo view --json defaultBranchRef -q .defaultBranchRef.name`). Every hunt. Read the plan review first and carry each of its findings forward: fixed (the survey or the diff answers it) or still open.
-- **Round 2 or 3, or a recheck**: only the fixes. Read the previous review in the output file first: the commit it reviewed, and its findings. Check each open finding is fixed, then hunt the diff since that commit for anything the fixes broke or added. Leave alone what the previous round already passed. A recheck reviews a commit that fixes no shape finding (a text fix in Markdown, a cleanup, a failing test, typecheck, lint or CI) and keeps the previous review's round number. A pass on the commit the previous review already read only answers pushback.
+- **A later round, or a recheck**: only the fixes. Read the previous review in the output file first: the commit it reviewed, and its findings. Check each open finding is fixed, then hunt the diff since that commit for anything the fixes broke or added. When the fixes bring back a finding an earlier round marked fixed, mark it `reopened` rather than raising a new one: the author takes that to the user. Leave alone what the previous round already passed. A recheck reviews a commit that fixes no shape finding (a text fix in Markdown, a cleanup, a failing test, typecheck, lint or CI) and keeps the previous review's round number. A pass on the commit the previous review already read only answers pushback.
 
 In rounds and rechecks, `Previous findings` carries every earlier finding forward, so the last review lists every finding the author must answer.
 
@@ -58,7 +58,7 @@ The header's sha is HEAD as you start (`git rev-parse --short HEAD`, before you 
 ```
 # Shape review: <branch> @ <short sha>, <plan | round n | recheck of round n>, <k> open shape findings
 ## Previous findings          (after the plan)
-- F<n> [shape|text] <finding, as first written> → fixed in <sha> | open: <why> | conceded: <why> | held: <why> | ruled by the user: <ruling>
+- F<n> [shape|text] <finding, as first written> → fixed in <sha> | open: <why> | reopened: <how> | conceded: <why> | held: <why> | ruled by the user: <ruling>
 ## Findings
 F<n>. [shape|text] <hunt>: <claim> — <paths>
    Simpler: <shape> (~<n> files)
