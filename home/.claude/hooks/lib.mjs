@@ -156,19 +156,20 @@ const commentReader = (file) => {
 
 // whether every line changed from `sha` to HEAD is blank or a comment
 // line, each in a file whose comments these know; a new, deleted or
-// renamed file, a mode change, or any other kind of file isn't. Both
-// diffs run from the top of the checkout over all of it, whatever
-// diff.relative says.
+// renamed file, a submodule, a mode change, or any other kind of file
+// isn't. Both diffs are plumbing (diff-tree, run from the top of the
+// checkout), which reads no diff config: relative paths, colour, external
+// drivers and textconv never apply.
 const commentOnly = (cwd, sha) => {
   try {
     const top = git(cwd, "rev-parse", "--show-toplevel");
-    const diffOf = (...args) => git(top, "diff", "--no-relative", ...args);
+    const diffOf = (...args) => git(top, "diff-tree", "-r", "--ignore-submodules=none", ...args);
     return lines(diffOf("--name-status", "--no-renames", sha, "HEAD")).every((entry) => {
       const [status, file] = entry.split("\t");
       if (status !== "M" || !(HASH.test(file) || C_STYLE.test(file))) return false;
       // the whole file as context, so each side's block comments are
-      // followed; plain text, whatever the git config or .gitattributes say
-      const diff = diffOf("--no-color", "--no-ext-diff", "--no-textconv", "--unified=100000000", sha, "HEAD", "--", file);
+      // followed; a file .gitattributes marks binary has no hunk
+      const diff = diffOf("-p", "--unified=100000000", sha, "HEAD", "--", file);
       const hunk = diff.search(/^@@/m);
       if (hunk < 0 || /^(?:old|new) mode /m.test(diff)) return false;
       const read = { "-": commentReader(file), "+": commentReader(file) };
