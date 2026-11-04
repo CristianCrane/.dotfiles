@@ -208,14 +208,12 @@ const LAST_ROUND = 5;
 // round it must leave no shape finding open (after it the user decides). The
 // reviewer's header line says all three: "… @ <sha>, round <n>, <k> open
 // shape findings", where a recheck says "recheck of round <n>", keeping
-// the number. "open blocks" is the count's old name, which copies of the
-// reviewer synced before the rename still write; it goes once every
-// repo's copy is synced.
+// the number.
 export const review = (cwd, key) => {
   const path = stateFile(cwd, "review", key);
   if (!existsSync(path)) return { path, ok: false, reason: "missing" };
   const text = readFileSync(path, "utf8");
-  const header = text.match(/^# Shape review:.* @ ([0-9a-f]{7,40}),.*round (\d+), (\d+) open (?:shape finding|block)/m);
+  const header = text.match(/^# Shape review:.* @ ([0-9a-f]{7,40}),.*round (\d+), (\d+) open shape finding/m);
   if (!header) return { path, ok: false, reason: "its header has no commit, round and open count" };
   const [sha, ...counts] = header.slice(1);
   if (!headSha(cwd).startsWith(sha) && !commentOnly(cwd, sha))
