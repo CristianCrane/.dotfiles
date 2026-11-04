@@ -11,8 +11,8 @@ import {
   changedFiles,
   cwdFor,
   git,
-  leftToRepo,
   readInput,
+  standAside,
   stateFile,
   survey,
 } from "./lib.mjs";
@@ -28,9 +28,9 @@ const say = (text) =>
   );
 
 try {
+  if (standAside) process.exit(0);
   const input = readInput();
   const cwd = cwdFor(input);
-  if (leftToRepo(cwd)) process.exit(0);
   const branch = branchOf(cwd);
   if (!branch) process.exit(0);
 

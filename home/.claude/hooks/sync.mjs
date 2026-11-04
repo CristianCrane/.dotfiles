@@ -7,15 +7,14 @@
 //   node ~/.claude/hooks/sync.mjs [repo]   (default: the current repo)
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { COPIED, REPO_HOOKS, git } from "./lib.mjs";
+import { CLAUDE, COPIED, REPO_HOOKS } from "./copy.mjs";
+import { git } from "./lib.mjs";
 
-const claude = join(dirname(fileURLToPath(import.meta.url)), "..");
 const top = git(process.argv[2] ?? process.cwd(), "rev-parse", "--show-toplevel");
 
 for (const [source, copy] of COPIED) {
   mkdirSync(dirname(join(top, copy)), { recursive: true });
-  copyFileSync(join(claude, source), join(top, copy));
+  copyFileSync(join(CLAUDE, source), join(top, copy));
   console.log(`copied ${copy}`);
 }
 

@@ -1,55 +1,21 @@
 // The shape rules: edited in github.com/CristianCrane/.dotfiles (home/.claude); repos carry copies made by hooks/sync.mjs.
 //
-// What the shape hooks share: git, the per-branch survey and review files
-// the `shape` skill writes into the git dir (never committed, kept per
-// worktree), and the copy of the rules a repo may carry for sessions that
-// have no ~/.claude (cloud sessions load only the repo's own .claude/).
+// What the shape hooks share: git, and the per-branch survey and review
+// files the `shape` skill writes into the git dir (never committed, kept
+// per worktree).
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { homedir } from "node:os";
 import { dirname, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const HOOKS = dirname(fileURLToPath(import.meta.url));
-
-// what a repo's copy holds: each file's place under ~/.claude, and in the repo
-export const COPIED = [
-  ["skills/shape/SKILL.md", ".claude/skills/shape/SKILL.md"],
-  ["agents/shape-reviewer.md", ".claude/agents/shape-reviewer.md"],
-  ...["lib", "survey-gate", "review-gate", "shape-check"].map((name) => [
-    `hooks/${name}.mjs`,
-    `.claude/hooks/shape/${name}.mjs`,
-  ]),
-];
-
-// the hooks a repo's copy registers in its .claude/settings.json
-export const REPO_HOOKS = {
-  PreToolUse: [
-    ["Edit|Write|MultiEdit|NotebookEdit", "survey-gate"],
-    ["Bash", "review-gate"],
-  ],
-  PostToolUse: [["Edit|Write|MultiEdit|NotebookEdit|Bash", "shape-check"]],
-};
-
-// "self" when this script is the repo's copy; otherwise whether the repo
-// carries a copy, and whether it matches this one byte for byte
-export const repoCopy = (cwd) => {
-  const top = git(cwd, "rev-parse", "--show-toplevel");
-  const dir = join(top, ".claude/hooks/shape");
-  if (!existsSync(dir)) return "none";
-  if (realpathSync(dir) === realpathSync(HOOKS)) return "self";
-  const same = ([source, copy]) => {
-    try {
-      return readFileSync(join(HOOKS, "..", source)).equals(readFileSync(join(top, copy)));
-    } catch {
-      return false;
-    }
-  };
-  return COPIED.every(same) ? "current" : "stale";
-};
-
-// a user-level hook leaves a repo with a current copy to that copy, so
-// nothing runs twice; a stale copy runs beside it, and the newest rules hold
-export const leftToRepo = (cwd) => repoCopy(cwd) === "current";
+// A repo's copy of these hooks (for cloud sessions, which have no
+// ~/.claude) stands aside wherever the user-level ones are installed, so
+// only the newest rules run, and only once.
+const user = join(homedir(), ".claude/hooks");
+export const standAside =
+  existsSync(join(user, "lib.mjs")) &&
+  realpathSync(user) !== dirname(fileURLToPath(import.meta.url));
 
 export const git = (cwd, ...args) =>
   execFileSync("git", args, {
