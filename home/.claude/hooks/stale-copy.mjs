@@ -13,7 +13,7 @@ hook((input) => {
     hookSpecificOutput: {
       hookEventName: "SessionStart",
       additionalContext:
-        "This repo's copy of the shape rules (.claude/skills/shape, .claude/agents/shape-reviewer.md, .claude/hooks/shape) differs from ~/.claude, their source. Cloud sessions on this repo get the older rules, and sessions here get the copy's older shape-reviewer (a repo's agent comes before a user's). Refreshing it is `node ~/.claude/hooks/sync.mjs`, as a cleanup commit of its own.",
+        "This repo's copy of the shape rules (.claude/skills/change, .claude/agents/shape-reviewer.md, .claude/hooks/shape) differs from ~/.claude, their source. Cloud sessions on this repo get the older rules, and sessions here get the copy's older shape-reviewer (a repo's agent comes before a user's). Refreshing it is `node ~/.claude/hooks/sync.mjs`, as a cleanup commit of its own.",
     },
   };
 });

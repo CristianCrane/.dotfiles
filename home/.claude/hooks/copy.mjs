@@ -13,7 +13,7 @@ export const CLAUDE = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 // each copied file's place under ~/.claude, and in the repo
 export const COPIED = [
-  ["skills/shape/SKILL.md", ".claude/skills/shape/SKILL.md"],
+  ["skills/change/SKILL.md", ".claude/skills/change/SKILL.md"],
   ["agents/shape-reviewer.md", ".claude/agents/shape-reviewer.md"],
   ...["lib", "survey-gate", "review-gate", "shape-check"].map((name) => [
     `hooks/${name}.mjs`,

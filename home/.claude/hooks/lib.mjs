@@ -1,7 +1,7 @@
 // The shape rules: edited in github.com/CristianCrane/.dotfiles (home/.claude); repos carry copies made by hooks/sync.mjs.
 //
 // What the shape hooks share: git, and the survey, plan review and review
-// files the `shape` skill writes into the git dir (never committed, kept
+// files the `change` skill writes into the git dir (never committed, kept
 // per worktree): one set per branch, and on main one per session.
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
@@ -119,13 +119,13 @@ export const beforeEdit = (cwd, work) => {
   if (!found.ok)
     return {
       survey: found,
-      missing: `there is no survey for ${work.branch} (${found.reason}): load the \`shape\` skill and write its survey to ${found.path}`,
+      missing: `there is no survey for ${work.branch} (${found.reason}): load the \`change\` skill and write its survey to ${found.path}`,
     };
   const plan = planReview(cwd, work.key);
   if (!plan.ok)
     return {
       survey: found,
-      missing: `the survey for ${work.branch} has no plan review: run the shape-reviewer agent on it in plan mode, as the \`shape\` skill's Plan review step says, with survey ${found.path} and output ${plan.path}`,
+      missing: `the survey for ${work.branch} has no plan review: run the shape-reviewer agent on it in plan mode, as the \`change\` skill's Plan review step says, with survey ${found.path} and output ${plan.path}`,
     };
   return { survey: found, missing: null };
 };

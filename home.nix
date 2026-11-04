@@ -112,6 +112,6 @@ in
     run ln -sfn "${dotfiles}/home/.claude/CLAUDE.md" "$HOME/.claude/CLAUDE.md"
     run ln -sfn "${dotfiles}/home/.claude/hooks" "$HOME/.claude/hooks"
     run ln -sfn "${dotfiles}/home/.claude/agents" "$HOME/.claude/agents"
-    run ln -sfn "${dotfiles}/home/.claude/skills/shape" "$HOME/.claude/skills/shape"
+    run ln -sfn "${dotfiles}/home/.claude/skills/change" "$HOME/.claude/skills/change"
   '';
 }
