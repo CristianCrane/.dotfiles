@@ -130,14 +130,15 @@ export const beforeEdit = (cwd, work) => {
 // how a comment line starts: `#` in HASH files, `//` in SLASHES files;
 // C_STYLE files also have block comments, from a line starting `/*` to
 // one ending in its first `*/`. A shebang, a `///` directive or a pragma
-// (it changes what a tool checks; any `@` tag counts as one) is never a
-// comment line here. The reader knows nothing of strings, so a comment-like
-// line inside a multi-line string counts as a comment.
+// on the PRAGMA list (it changes what a tool checks; any `@` tag counts as
+// one) is never a comment line here; a directive missing from the list
+// is. The reader knows nothing of strings, so a comment-like line inside a
+// multi-line string counts as a comment.
 const HASH = /\.(sh|bash|zsh|nix|py|ya?ml|toml)$/;
 const SLASHES = /\.(m?js|cjs|jsx|tsx?)$/;
 const C_STYLE = /\.(m?js|cjs|jsx|tsx?|css)$/;
 const PRAGMA =
-  /^#!|^\/\/\/\s*<|@|-\*-|^\/\*\s*(?:globals?|exported)\s|eslint-|prettier-ignore|biome-ignore|c8 ignore|istanbul ignore|noqa|type:\s*ignore|pylint:|shellcheck|fmt:/;
+  /^#!|^\/\/\/\s*<|@|-\*-|^\/\*\s*(?:globals?|exported)\s|eslint-|tslint:|prettier-ignore|biome-ignore|c8 ignore|v8 ignore|istanbul ignore|noqa|type:|mypy:|pyright:|pragma:|pylint:|shellcheck|fmt:/;
 
 // reads one side of a file line by line, following its block comments,
 // and says whether each line is a comment line
@@ -155,15 +156,19 @@ const commentReader = (file) => {
 
 // whether every line changed from `sha` to HEAD is blank or a comment
 // line, each in a file whose comments these know; a new, deleted or
-// renamed file, a mode change, or any other kind of file isn't
+// renamed file, a mode change, or any other kind of file isn't. Both
+// diffs run from the top of the checkout over all of it, whatever
+// diff.relative says.
 const commentOnly = (cwd, sha) => {
   try {
-    return lines(git(cwd, "diff", "--name-status", "--no-renames", sha, "HEAD")).every((entry) => {
+    const top = git(cwd, "rev-parse", "--show-toplevel");
+    const diffOf = (...args) => git(top, "diff", "--no-relative", ...args);
+    return lines(diffOf("--name-status", "--no-renames", sha, "HEAD")).every((entry) => {
       const [status, file] = entry.split("\t");
       if (status !== "M" || !(HASH.test(file) || C_STYLE.test(file))) return false;
       // the whole file as context, so each side's block comments are
       // followed; plain text, whatever the git config or .gitattributes say
-      const diff = git(cwd, "diff", "--no-color", "--no-ext-diff", "--no-textconv", "--unified=100000000", sha, "HEAD", "--", file);
+      const diff = diffOf("--no-color", "--no-ext-diff", "--no-textconv", "--unified=100000000", sha, "HEAD", "--", file);
       const hunk = diff.search(/^@@/m);
       if (hunk < 0 || /^(?:old|new) mode /m.test(diff)) return false;
       const read = { "-": commentReader(file), "+": commentReader(file) };
@@ -172,7 +177,7 @@ const commentOnly = (cwd, sha) => {
         .split("\n")
         .slice(1)
         .every((raw) => {
-          const mark = raw[0];
+          const mark = raw[0] ?? " "; // diff.suppressBlankEmpty drops a blank context line's space
           if (mark === "\\") return true; // "\ No newline at end of file"
           const line = raw.slice(1).trim();
           if (mark === " ") {
