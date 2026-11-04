@@ -26,6 +26,9 @@ export const git = (cwd, ...args) =>
 
 export const lines = (text) => text.split("\n").filter(Boolean);
 
+// the top folder of the checkout `cwd` is in
+export const topOf = (cwd) => git(cwd, "rev-parse", "--show-toplevel");
+
 // Runs a hook's body on its input and prints what the body returns. A
 // repo's copy stands aside here, and any failure (not a git checkout, bad
 // input) stays silent, so the tool call goes through.
@@ -92,7 +95,7 @@ const survey = (cwd, key) => {
   const path = stateFile(cwd, "survey", key);
   if (!existsSync(path)) return { path, ok: false, reason: "missing" };
   const text = readFileSync(path, "utf8");
-  const top = git(cwd, "rev-parse", "--show-toplevel");
+  const top = topOf(cwd);
   const named = text
     .split(/[\s,;()`'"<>]+/)
     .map((word) => word.replace(/[:.]+$/, "").replace(/:\d[\d-]*$/, ""))
@@ -162,7 +165,7 @@ const commentReader = (file) => {
 // drivers and textconv never apply.
 const commentOnly = (cwd, sha) => {
   try {
-    const top = git(cwd, "rev-parse", "--show-toplevel");
+    const top = topOf(cwd);
     const diffOf = (...args) => git(top, "diff-tree", "-r", "--ignore-submodules=none", ...args);
     return lines(diffOf("--name-status", "--no-renames", sha, "HEAD")).every((entry) => {
       const [status, file] = entry.split("\t");
@@ -245,12 +248,15 @@ const base = (cwd) => {
   return "HEAD";
 };
 
-// files the branch changes against its base, untracked ones included
-export const changedFiles = (cwd) =>
-  new Set([
-    ...lines(git(cwd, "diff", "--name-only", base(cwd))),
-    ...lines(git(cwd, "ls-files", "--others", "--exclude-standard")),
+// files the branch changes against its base, untracked ones included,
+// across the whole checkout wherever `cwd` sits in it
+export const changedFiles = (cwd) => {
+  const top = topOf(cwd);
+  return new Set([
+    ...lines(git(top, "diff", "--no-relative", "--name-only", base(top))),
+    ...lines(git(top, "ls-files", "--others", "--exclude-standard")),
   ]);
+};
 
 // whether `path` sits in the git dir (where the survey and review live)
 export const inGitDir = (cwd, path) =>

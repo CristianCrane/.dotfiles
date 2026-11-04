@@ -8,9 +8,9 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { CLAUDE, COPIED, REPO_HOOKS } from "./copy.mjs";
-import { git } from "./lib.mjs";
+import { topOf } from "./lib.mjs";
 
-const top = git(process.argv[2] ?? process.cwd(), "rev-parse", "--show-toplevel");
+const top = topOf(process.argv[2] ?? process.cwd());
 
 for (const [source, copy] of COPIED) {
   mkdirSync(dirname(join(top, copy)), { recursive: true });

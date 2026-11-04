@@ -6,7 +6,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { git } from "./lib.mjs";
+import { topOf } from "./lib.mjs";
 
 // ~/.claude, the source
 export const CLAUDE = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -33,7 +33,7 @@ export const REPO_HOOKS = {
 // whether the repo carries a copy, and whether it matches ~/.claude byte
 // for byte
 export const repoCopy = (cwd) => {
-  const top = git(cwd, "rev-parse", "--show-toplevel");
+  const top = topOf(cwd);
   if (!existsSync(join(top, ".claude/hooks/shape"))) return "none";
   const same = ([source, copy]) => {
     try {
