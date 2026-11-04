@@ -127,48 +127,57 @@ export const beforeEdit = (cwd, work) => {
   return { survey: found, missing: null };
 };
 
-// how a comment line starts: in `#` files, and in C-style files, whose
-// block comments run from a line starting `/*` to one ending `*/`
+// how a comment line starts: `#` in HASH files, `//` in SLASHES files;
+// C_STYLE files also have block comments, from a line starting `/*` to
+// one ending in its first `*/`. A shebang, a `///` directive or a pragma
+// (it changes what a tool checks) is never a comment line here.
 const HASH = /\.(sh|bash|zsh|nix|py|ya?ml|toml)$/;
+const SLASHES = /\.(m?js|cjs|jsx|tsx?)$/;
 const C_STYLE = /\.(m?js|cjs|jsx|tsx?|css)$/;
+const PRAGMA =
+  /^#!|^\/\/\/\s*<|@ts-|eslint-|prettier-ignore|biome-ignore|c8 ignore|istanbul ignore|noqa|type:\s*ignore|pylint:|shellcheck|fmt:/;
 
-// the numbers (from 1) of the comment lines in a file's text
-const commentLines = (file, text) => {
-  const found = new Set();
+// reads one side of a file line by line, following its block comments,
+// and says whether each line is a comment line
+const commentReader = (file) => {
   let inBlock = false;
-  text.split("\n").forEach((raw, i) => {
-    const line = raw.trim();
-    const closes = line.includes("*/");
-    if (HASH.test(file) ? line.startsWith("#") : line.startsWith("//")) found.add(i + 1);
-    else if (inBlock || line.startsWith("/*")) {
-      // a line that closes the block counts only when nothing follows `*/`
-      if (!closes || line.endsWith("*/")) found.add(i + 1);
-      inBlock = !closes;
+  return (line) => {
+    if (inBlock || (C_STYLE.test(file) && line.startsWith("/*"))) {
+      const close = line.indexOf("*/");
+      inBlock = close < 0;
+      return close < 0 || close === line.length - 2;
     }
-  });
-  return found;
+    return HASH.test(file) ? line.startsWith("#") : SLASHES.test(file) && line.startsWith("//");
+  };
 };
 
 // whether every line changed from `sha` to HEAD is blank or a comment
 // line, each in a file whose comments these know; a new, deleted or
-// renamed file, or any other kind, isn't
+// renamed file, a mode change, or any other kind of file isn't
 const commentOnly = (cwd, sha) => {
   try {
-    return lines(git(cwd, "diff", "--name-status", sha, "HEAD")).every((entry) => {
+    return lines(git(cwd, "diff", "--name-status", "--no-renames", sha, "HEAD")).every((entry) => {
       const [status, file] = entry.split("\t");
       if (status !== "M" || !(HASH.test(file) || C_STYLE.test(file))) return false;
-      const sides = [sha, "HEAD"].map((ref) => git(cwd, "show", `${ref}:${file}`).split("\n"));
-      const comments = sides.map((text) => commentLines(file, text.join("\n")));
-      const hunks = git(cwd, "diff", "-U0", sha, "HEAD", "--", file);
-      return [...hunks.matchAll(/^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/gm)].every((hunk) =>
-        [0, 1].every((side) => {
-          const start = Number(hunk[1 + 2 * side]);
-          const count = Number(hunk[2 + 2 * side] ?? 1);
-          for (let n = start; n < start + count; n++)
-            if (sides[side][n - 1].trim() && !comments[side].has(n)) return false;
-          return true;
-        }),
-      );
+      // the whole file as context, so each side's block comments are followed
+      const diff = git(cwd, "diff", "--unified=100000000", sha, "HEAD", "--", file);
+      if (/^(?:old|new) mode /m.test(diff)) return false;
+      const read = { "-": commentReader(file), "+": commentReader(file) };
+      return diff
+        .slice(diff.search(/^@@/m))
+        .split("\n")
+        .slice(1)
+        .every((raw) => {
+          const mark = raw[0];
+          if (mark === "\\") return true; // "\ No newline at end of file"
+          const line = raw.slice(1).trim();
+          if (mark === " ") {
+            read["-"](line);
+            read["+"](line);
+            return true;
+          }
+          return read[mark](line) ? !PRAGMA.test(line) : !line;
+        });
     });
   } catch {
     return false;
@@ -182,7 +191,8 @@ const commentOnly = (cwd, sha) => {
 // reviewer's header line says all three: "… @ <sha>, round <n>, <k> open
 // shape findings", where a recheck says "recheck of round <n>", keeping
 // the number. "open blocks" is the count's old name, which copies of the
-// reviewer synced before the rename still write.
+// reviewer synced before the rename still write; it goes once every
+// repo's copy is synced.
 export const review = (cwd, key) => {
   const path = stateFile(cwd, "review", key);
   if (!existsSync(path)) return { path, ok: false, reason: "missing" };
