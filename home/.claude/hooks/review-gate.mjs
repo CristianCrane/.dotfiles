@@ -2,10 +2,10 @@
 //
 // `gh pr create` waits for the branch's shape review (the `shape` skill):
 // it is turned down until the review exists and is newer than the last
-// commit. Any failure here lets the command through.
+// commit.
 import { homedir } from "node:os";
 import { resolve } from "node:path";
-import { branchOf, readInput, review, standAside } from "./lib.mjs";
+import { branchOf, deny, hook, review } from "./lib.mjs";
 
 // where a command starts: not inside a message that mentions it
 const PR_CREATE = /(?:^|[;&|(\n])\s*gh\s+pr\s+create\b/;
@@ -19,27 +19,16 @@ const dirOf = (command, cwd) => {
   return resolve(cwd, dir);
 };
 
-try {
-  if (standAside) process.exit(0);
-  const input = readInput();
+hook((input) => {
   const command = input.tool_input?.command ?? "";
-  if (!PR_CREATE.test(command)) process.exit(0);
+  if (!PR_CREATE.test(command)) return;
   const cwd = dirOf(command, input.cwd);
   const branch = branchOf(cwd);
-  if (!branch) process.exit(0);
+  if (!branch) return;
 
   const found = review(cwd, branch);
-  if (found.ok) process.exit(0);
-
-  console.log(
-    JSON.stringify({
-      hookSpecificOutput: {
-        hookEventName: "PreToolUse",
-        permissionDecision: "deny",
-        permissionDecisionReason: `No fresh shape review for branch ${branch} (${found.reason}). Run the shape-reviewer agent as the \`shape\` skill's Review step says; it writes ${found.path}. Answer each finding in the PR's Shape section, then open the PR.`,
-      },
-    }),
+  if (found.ok) return;
+  return deny(
+    `No fresh shape review for branch ${branch} (${found.reason}). Run the shape-reviewer agent as the \`shape\` skill's Review step says; it writes ${found.path}. Answer each finding in the PR's Shape section, then open the PR.`,
   );
-} catch {
-  // not a git checkout or bad input: let the command through
-}
+});

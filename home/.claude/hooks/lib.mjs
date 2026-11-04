@@ -26,7 +26,24 @@ export const git = (cwd, ...args) =>
 
 export const lines = (text) => text.split("\n").filter(Boolean);
 
-export const readInput = () => JSON.parse(readFileSync(0, "utf8"));
+// Runs a hook's body on its input and prints what the body returns. A
+// repo's copy stands aside here, and any failure (not a git checkout, bad
+// input) stays silent, so the tool call goes through.
+export const hook = (body) => {
+  if (standAside) return;
+  try {
+    const output = body(JSON.parse(readFileSync(0, "utf8")));
+    if (output) console.log(JSON.stringify(output));
+  } catch {}
+};
+
+export const deny = (reason) => ({
+  hookSpecificOutput: {
+    hookEventName: "PreToolUse",
+    permissionDecision: "deny",
+    permissionDecisionReason: reason,
+  },
+});
 
 // the edited file's own checkout (the nearest folder that exists: a new
 // file's own may not yet), so an edit in a worktree counts that worktree
