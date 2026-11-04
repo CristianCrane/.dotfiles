@@ -2,9 +2,10 @@
 //
 // `gh pr create` waits for the branch's shape review (the `shape` skill):
 // it is turned down until the review exists, is of the last commit (or
-// of one before it with only comment lines changed since) and leaves no
-// shape finding open, and until the PR body, read from its file, answers
-// every finding of that review in its Shape section.
+// of one before it with only comment lines changed since) and, before the
+// last round, leaves no shape finding open, and until the PR body, read
+// from its file, answers every finding of that review in its Shape
+// section.
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { resolve } from "node:path";

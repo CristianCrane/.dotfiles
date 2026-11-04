@@ -161,8 +161,9 @@ const commentReader = (file) => {
 // line, each in a file whose comments these know; a new, deleted or
 // renamed file, a submodule, a mode change, or any other kind of file
 // isn't. Both diffs are plumbing (diff-tree, run from the top of the
-// checkout), which reads no diff config: relative paths, colour, external
-// drivers and textconv never apply.
+// checkout), which skips most diff config: relative paths, colour,
+// external drivers and textconv never apply, though suppressBlankEmpty
+// still does (see below).
 const commentOnly = (cwd, sha) => {
   try {
     const top = topOf(cwd);
@@ -224,7 +225,7 @@ export const review = (cwd, key) => {
     return {
       path,
       ok: false,
-      reason: `round ${round} left ${open} shape finding(s) open: fix them and run round ${round + 1}`,
+      reason: `round ${round} left ${open} shape finding(s) open: fix them and run round ${round + 1}, but take a reopened finding, or one the reviewer holds against your pushback, to the user`,
     };
   // the last review (the file's first) lists every finding of the change
   const last = text.slice(header.index).split(/^(?=# Shape review:)/m)[0];
