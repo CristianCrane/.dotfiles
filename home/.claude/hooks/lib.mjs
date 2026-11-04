@@ -198,7 +198,7 @@ const commentOnly = (cwd, sha) => {
   }
 };
 
-// the round after which open shape findings go to the user (the `shape`
+// the round after which open shape findings go to the user (the `change`
 // skill's "After round 5")
 const LAST_ROUND = 5;
 
