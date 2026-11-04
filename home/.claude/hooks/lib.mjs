@@ -126,21 +126,79 @@ export const beforeEdit = (cwd, work) => {
   return { survey: found, missing: null };
 };
 
+// how a comment line starts: in `#` files, and in C-style files, whose
+// block comments run from a line starting `/*` to one ending `*/`
+const HASH = /\.(sh|bash|zsh|nix|py|ya?ml|toml)$/;
+const C_STYLE = /\.(m?js|cjs|jsx|tsx?|css)$/;
+
+// the numbers (from 1) of the comment lines in a file's text
+const commentLines = (file, text) => {
+  const found = new Set();
+  let inBlock = false;
+  text.split("\n").forEach((raw, i) => {
+    const line = raw.trim();
+    const closes = line.includes("*/");
+    if (HASH.test(file) ? line.startsWith("#") : line.startsWith("//")) found.add(i + 1);
+    else if (inBlock || line.startsWith("/*")) {
+      // a line that closes the block counts only when nothing follows `*/`
+      if (!closes || line.endsWith("*/")) found.add(i + 1);
+      inBlock = !closes;
+    }
+  });
+  return found;
+};
+
+// whether every line changed from `sha` to HEAD is blank or a comment
+// line, each in a file whose comments these know; a new, deleted or
+// renamed file, or any other kind, isn't
+const commentOnly = (cwd, sha) => {
+  try {
+    return lines(git(cwd, "diff", "--name-status", sha, "HEAD")).every((entry) => {
+      const [status, file] = entry.split("\t");
+      if (status !== "M" || !(HASH.test(file) || C_STYLE.test(file))) return false;
+      const sides = [sha, "HEAD"].map((ref) => git(cwd, "show", `${ref}:${file}`).split("\n"));
+      const comments = sides.map((text) => commentLines(file, text.join("\n")));
+      const hunks = git(cwd, "diff", "-U0", sha, "HEAD", "--", file);
+      return [...hunks.matchAll(/^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/gm)].every((hunk) =>
+        [0, 1].every((side) => {
+          const start = Number(hunk[1 + 2 * side]);
+          const count = Number(hunk[2 + 2 * side] ?? 1);
+          for (let n = start; n < start + count; n++)
+            if (sides[side][n - 1].trim() && !comments[side].has(n)) return false;
+          return true;
+        }),
+      );
+    });
+  } catch {
+    return false;
+  }
+};
+
 // the reviewer's read of the diff: it must be of the last commit (written
-// after it isn't enough: a round runs while fixes may land), and before
-// round 3 leave no block open (after round 3 the user decides). The
+// after it isn't enough: a round runs while fixes may land), or of one
+// before it with only comment lines changed since; and before round 3 it
+// must leave no shape finding open (after round 3 the user decides). The
 // reviewer's header line says all three: "… @ <sha>, round <n>, <k> open
-// blocks", where a recheck says "recheck of round <n>", keeping the number.
+// shape findings", where a recheck says "recheck of round <n>", keeping
+// the number. "open blocks" is the count's old name, which copies of the
+// reviewer synced before the rename still write.
 export const review = (cwd, key) => {
   const path = stateFile(cwd, "review", key);
   if (!existsSync(path)) return { path, ok: false, reason: "missing" };
-  const header = readFileSync(path, "utf8").match(/^# Shape review:.* @ ([0-9a-f]{7,40}),.*round (\d+), (\d+) open block/m);
-  if (!header) return { path, ok: false, reason: "its header has no commit, round and open-block count" };
+  const header = readFileSync(path, "utf8").match(
+    /^# Shape review:.* @ ([0-9a-f]{7,40}),.*round (\d+), (\d+) open (?:shape finding|block)/m,
+  );
+  if (!header) return { path, ok: false, reason: "its header has no commit, round and open count" };
   const [sha, ...counts] = header.slice(1);
-  if (!headSha(cwd).startsWith(sha)) return { path, ok: false, reason: `it reviewed ${sha}, not the last commit` };
+  if (!headSha(cwd).startsWith(sha) && !commentOnly(cwd, sha))
+    return { path, ok: false, reason: `it reviewed ${sha}, and the commits since change more than comment lines` };
   const [round, open] = counts.map(Number);
   if (open && round < 3)
-    return { path, ok: false, reason: `round ${round} left ${open} block(s) open: fix them and run round ${round + 1}` };
+    return {
+      path,
+      ok: false,
+      reason: `round ${round} left ${open} shape finding(s) open: fix them and run round ${round + 1}`,
+    };
   return { path, ok: true };
 };
 

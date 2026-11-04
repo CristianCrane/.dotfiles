@@ -43,7 +43,7 @@ Count copies by searching the repo for each pattern, not from memory. Done when 
 
 ## 2. Plan review
 
-Run the `shape-reviewer` agent in **plan** mode, with the survey's path and the plan review's path (`plan-review-…` beside the survey; the gate names it). It reads the survey before any code exists, when a wrong shape costs a paragraph rather than rework. Revise the survey for each block; answer each note in Shape. One plan review per change; edits go through once it's written.
+Run the `shape-reviewer` agent in **plan** mode, with the survey's path and the plan review's path (`plan-review-…` beside the survey; the gate names it). It reads the survey before any code exists, when a wrong shape costs a paragraph rather than rework. Revise the survey for each finding, or give round 1 your reason against it (round 1 carries the plan review's findings forward). One plan review per change; edits go through once it's written.
 
 Post the survey in chat, then go on, unless it has Big work to ask about.
 
@@ -53,16 +53,18 @@ Keep the survey true: when the plan or the file count changes, update it. A hook
 
 ## 4. Review
 
-Once the change is committed, before opening the PR (`gh pr create` is turned down until the review is of the last commit and, before round 3, has no open blocks), run the `shape-reviewer` agent: **round 1**, with the branch, the repo root, which commits are refactors (the survey's `Commits:`), the survey's path and the review's path (`review-…` beside the survey).
+Once the change is committed, before opening the PR (`gh pr create` is turned down until the review is of the last commit, or of one before it with only comment lines changed since, and, before round 3, has no open shape findings), run the `shape-reviewer` agent: **round 1**, with the branch, the repo root, which commits are refactors (the survey's `Commits:`), the survey's and plan review's paths, and the review's path (`review-…` beside the survey).
 
 A round is the reviewer and you arguing about shape. The reviewer reads shape, not behaviour, so tests never hold it up: start each round as its commit lands, and run the repo's quick tests beside it (its CLAUDE.md or AGENTS.md names them, and its full suite).
 
-- **Blocks** start the next round: fix them, with any failure the round's quick tests found, commit, and run the reviewer again, **round 2** then **round 3**. A follow-up round checks only the fixes, against the previous review in the same file.
-- **A recheck** reviews a commit that answers no block: a fix to a failing test, typecheck, lint or CI. It checks only that commit, keeps the round's number and costs no round; a block it finds starts the next round. Rechecks have no cap.
-- **Notes** never start a round. Answer each in Shape, from every round (later rounds carry them forward): rebutted, or filed as a follow-up issue. Fixing one here costs another round.
-- **The full suite** runs once, after a round or recheck finds no blocks, before the PR. A fix it needs gets a recheck, and only what failed runs again, with the quick tests.
-- **Done** when a round or recheck of the last commit finds no blocks, and the full suite has passed.
-- **After round 3**, any block still open goes to the user: stop and put each one to them with its paths. A round 4 runs only when they say so.
+- **Every finding is a fix**, made now and never filed for later. Each has an id (`F<n>`) and a severity:
+  - **`[shape]`**: a shape decision (the reviewer's impact list). Fix it, with any failure the round's quick tests found, commit, and run the reviewer again: **round 2**, then **round 3**. A follow-up round checks only the fixes, against the previous review in the same file. Only these fixes count rounds.
+  - **`[text]`**: a comment or doc that's false, stale or missing. A fix that changes only comment lines in code needs no review: the PR gate lets it through. A fix to Markdown gets a recheck.
+- **A recheck** reviews a commit that fixes no shape finding: a text fix in Markdown, a cleanup from `Seen nearby:`, a fix to a failing test, typecheck, lint or CI. It checks only that commit, keeps the round's number and costs no round; a shape finding it raises starts the next round. Rechecks have no cap.
+- **Push back** when a finding is wrong: give your reason in the prompt of the reviewer's next pass (a recheck of the same commit, when nothing else changed). It concedes or holds, with evidence. A shape finding it still holds goes to the user with both sides; their ruling goes in the next pass's prompt, and closes the finding.
+- **The full suite** runs once, after a round or recheck leaves no shape finding open, before the PR. A fix it needs gets a recheck, and only what failed runs again, with the quick tests.
+- **Done** when the last review leaves no shape finding open, every text finding is fixed, and the full suite has passed.
+- **After round 3**, any shape finding still open goes to the user: stop and put each one to them with its paths. A round 4 runs only when they say so.
 
 ## 5. Shape section
 
@@ -72,7 +74,7 @@ Every PR body ends with:
 ## Shape
 - Extended | Retired | New: <pattern> — <paths>
 - Simpler shape considered: <a real shape>; <why not, or "done in <sha>">
-- Review: <finding> → fixed | rebutted: <why>
+- Review: F<n> <finding> → fixed in <sha> | answered: <why, and the reviewer's or user's word on it>
 - Seen nearby: <problem> → fixed in <sha>
 - Harder to change: <what, or nothing>
 ```
