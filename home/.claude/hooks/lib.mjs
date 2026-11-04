@@ -130,12 +130,14 @@ export const beforeEdit = (cwd, work) => {
 // how a comment line starts: `#` in HASH files, `//` in SLASHES files;
 // C_STYLE files also have block comments, from a line starting `/*` to
 // one ending in its first `*/`. A shebang, a `///` directive or a pragma
-// (it changes what a tool checks) is never a comment line here.
+// (it changes what a tool checks; any `@` tag counts as one) is never a
+// comment line here. The reader knows nothing of strings, so a comment-like
+// line inside a multi-line string counts as a comment.
 const HASH = /\.(sh|bash|zsh|nix|py|ya?ml|toml)$/;
 const SLASHES = /\.(m?js|cjs|jsx|tsx?)$/;
 const C_STYLE = /\.(m?js|cjs|jsx|tsx?|css)$/;
 const PRAGMA =
-  /^#!|^\/\/\/\s*<|@ts-|eslint-|prettier-ignore|biome-ignore|c8 ignore|istanbul ignore|noqa|type:\s*ignore|pylint:|shellcheck|fmt:/;
+  /^#!|^\/\/\/\s*<|@|-\*-|^\/\*\s*(?:globals?|exported)\s|eslint-|prettier-ignore|biome-ignore|c8 ignore|istanbul ignore|noqa|type:\s*ignore|pylint:|shellcheck|fmt:/;
 
 // reads one side of a file line by line, following its block comments,
 // and says whether each line is a comment line
@@ -159,12 +161,14 @@ const commentOnly = (cwd, sha) => {
     return lines(git(cwd, "diff", "--name-status", "--no-renames", sha, "HEAD")).every((entry) => {
       const [status, file] = entry.split("\t");
       if (status !== "M" || !(HASH.test(file) || C_STYLE.test(file))) return false;
-      // the whole file as context, so each side's block comments are followed
-      const diff = git(cwd, "diff", "--unified=100000000", sha, "HEAD", "--", file);
-      if (/^(?:old|new) mode /m.test(diff)) return false;
+      // the whole file as context, so each side's block comments are
+      // followed; plain text, whatever the git config or .gitattributes say
+      const diff = git(cwd, "diff", "--no-color", "--no-ext-diff", "--no-textconv", "--unified=100000000", sha, "HEAD", "--", file);
+      const hunk = diff.search(/^@@/m);
+      if (hunk < 0 || /^(?:old|new) mode /m.test(diff)) return false;
       const read = { "-": commentReader(file), "+": commentReader(file) };
       return diff
-        .slice(diff.search(/^@@/m))
+        .slice(hunk)
         .split("\n")
         .slice(1)
         .every((raw) => {
