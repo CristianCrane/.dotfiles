@@ -24,7 +24,7 @@ export const git = (cwd, ...args) =>
     stdio: ["ignore", "pipe", "ignore"],
   }).trim();
 
-const lines = (text) => text.split("\n").filter(Boolean);
+export const lines = (text) => text.split("\n").filter(Boolean);
 
 // Runs a hook's body on its input and prints what the body returns. A
 // repo's copy stands aside here, and any failure (not a git checkout, bad
@@ -185,9 +185,8 @@ const commentOnly = (cwd, sha) => {
 export const review = (cwd, key) => {
   const path = stateFile(cwd, "review", key);
   if (!existsSync(path)) return { path, ok: false, reason: "missing" };
-  const header = readFileSync(path, "utf8").match(
-    /^# Shape review:.* @ ([0-9a-f]{7,40}),.*round (\d+), (\d+) open (?:shape finding|block)/m,
-  );
+  const text = readFileSync(path, "utf8");
+  const header = text.match(/^# Shape review:.* @ ([0-9a-f]{7,40}),.*round (\d+), (\d+) open (?:shape finding|block)/m);
   if (!header) return { path, ok: false, reason: "its header has no commit, round and open count" };
   const [sha, ...counts] = header.slice(1);
   if (!headSha(cwd).startsWith(sha) && !commentOnly(cwd, sha))
@@ -199,7 +198,20 @@ export const review = (cwd, key) => {
       ok: false,
       reason: `round ${round} left ${open} shape finding(s) open: fix them and run round ${round + 1}`,
     };
-  return { path, ok: true };
+  // the last review (the file's first) lists every finding of the change
+  const last = text.slice(header.index).split(/^(?=# Shape review:)/m)[0];
+  const ids = [...new Set([...last.matchAll(/^(?:- )?(F\d+)\b/gm)].map((id) => id[1]))];
+  return { path, ok: true, ids };
+};
+
+// whether `sha` names a commit the branch adds to its base
+export const onBranch = (cwd, sha) => {
+  try {
+    const full = git(cwd, "rev-parse", "--verify", "--quiet", `${sha}^{commit}`);
+    return lines(git(cwd, "rev-list", `${base(cwd)}..HEAD`)).includes(full);
+  } catch {
+    return false;
+  }
 };
 
 // what the branch is measured against: where it left the default branch

@@ -68,7 +68,7 @@ A round is the reviewer and you arguing about shape. The reviewer reads shape, n
 
 ## 5. Shape section
 
-Every PR body ends with:
+Write the PR body to `pr-body-…` beside the review (the gate names it) and open the PR with `gh pr create --body-file <that path>`: the gate reads the body there and turns the PR down until its Shape section answers every finding of the last review, by id. Every PR body ends with:
 
 ```
 ## Shape
