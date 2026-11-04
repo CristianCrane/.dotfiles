@@ -104,9 +104,14 @@ in
 
   # Linked directly, not through home.file: Claude Code follows only one
   # symlink when it saves settings, so a hop through the read-only store
-  # breaks /effort, /config and friends.
+  # breaks /effort, /config and friends. The rest of ~/.claude is linked
+  # the same way.
   home.activation.claudeSettings = lib.hm.dag.entryAfter [ "linkGeneration" ] ''
-    run mkdir -p "$HOME/.claude"
+    run mkdir -p "$HOME/.claude/skills"
     run ln -sfn "${dotfiles}/home/.claude/settings.json" "$HOME/.claude/settings.json"
+    run ln -sfn "${dotfiles}/home/.claude/CLAUDE.md" "$HOME/.claude/CLAUDE.md"
+    run ln -sfn "${dotfiles}/home/.claude/hooks" "$HOME/.claude/hooks"
+    run ln -sfn "${dotfiles}/home/.claude/agents" "$HOME/.claude/agents"
+    run ln -sfn "${dotfiles}/home/.claude/skills/shape" "$HOME/.claude/skills/shape"
   '';
 }
