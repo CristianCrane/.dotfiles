@@ -86,7 +86,8 @@ const headSha = (cwd) => {
   }
 };
 
-// the survey and whether it counts: it must name a path that exists
+// the survey and whether it counts: it must name a path that exists,
+// with or without its lines (`path:12`, `path:3-5`)
 const survey = (cwd, key) => {
   const path = stateFile(cwd, "survey", key);
   if (!existsSync(path)) return { path, ok: false, reason: "missing" };
@@ -94,7 +95,7 @@ const survey = (cwd, key) => {
   const top = git(cwd, "rev-parse", "--show-toplevel");
   const named = text
     .split(/[\s,;()`'"<>]+/)
-    .map((word) => word.replace(/[:.]+$/, ""))
+    .map((word) => word.replace(/[:.]+$/, "").replace(/:\d[\d-]*$/, ""))
     .filter((word) => /\w/.test(word) && /[/.]/.test(word))
     .some((word) => existsSync(isAbsolute(word) ? word : join(top, word)));
   if (!named) return { path, ok: false, reason: "names no path that exists" };
