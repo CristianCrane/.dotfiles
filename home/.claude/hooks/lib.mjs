@@ -225,9 +225,8 @@ export const review = (cwd, key) => {
       ok: false,
       reason: `round ${round} left ${open} change finding(s) open: fix them and run round ${round + 1}, but take a reopened finding, or one the reviewer holds against your pushback, to the user`,
     };
-  // the last review (the file's first) lists every finding of the change
-  const last = text.slice(header.index).split(/^(?=# Change review:)/m)[0];
-  const ids = [...new Set([...last.matchAll(/^(?:- )?(F\d+)\b/gm)].map((id) => id[1]))];
+  // the review (each replaces the last) lists every finding of the change
+  const ids = [...new Set([...text.matchAll(/^(?:- )?(F\d+)\b/gm)].map((id) => id[1]))];
   return { path, ok: true, ids };
 };
 
