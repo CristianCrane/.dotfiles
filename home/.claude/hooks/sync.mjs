@@ -1,6 +1,6 @@
-// The shape rules: edited in github.com/CristianCrane/.dotfiles (home/.claude); repos carry copies made by hooks/sync.mjs.
+// The change rules: edited in github.com/CristianCrane/.dotfiles (home/.claude); repos carry copies made by hooks/sync.mjs.
 //
-// Copies the shape rules into a repo, byte for byte, and registers the
+// Copies the change rules into a repo, byte for byte, and registers the
 // copy's hooks in the repo's .claude/settings.json, so sessions without
 // ~/.claude (cloud sessions) hold to them too. Run from ~/.claude:
 //
@@ -18,10 +18,10 @@ for (const [source, copy] of COPIED) {
   console.log(`copied ${copy}`);
 }
 
-// the repo's other settings and hooks stay; earlier shape entries are replaced
+// the repo's other settings and hooks stay; earlier change entries are replaced
 const file = join(top, ".claude/settings.json");
 const settings = existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : {};
-const ours = (group) => group.hooks?.some((hook) => hook.command?.includes(".claude/hooks/shape/"));
+const ours = (group) => group.hooks?.some((hook) => hook.command?.includes(".claude/hooks/change/"));
 settings.hooks ??= {};
 for (const [event, entries] of Object.entries(REPO_HOOKS)) {
   settings.hooks[event] = [
@@ -31,7 +31,7 @@ for (const [event, entries] of Object.entries(REPO_HOOKS)) {
       hooks: [
         {
           type: "command",
-          command: `node "$CLAUDE_PROJECT_DIR/.claude/hooks/shape/${name}.mjs"`,
+          command: `node "$CLAUDE_PROJECT_DIR/.claude/hooks/change/${name}.mjs"`,
           timeout: 10,
         },
       ],
