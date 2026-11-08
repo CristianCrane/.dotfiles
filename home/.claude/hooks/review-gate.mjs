@@ -15,7 +15,9 @@ import { deny, hook, lines, onBranch, review, stateFile, workOf } from "./lib.mj
 
 // where a command starts (not inside a message that mentions it), after
 // any VAR=value prefixes, with any gh flags before `pr`
-const PR_STEP = /(?:^|[;&|(\n])\s*(?:\w+=\S*\s+)*gh\s+(?:-\S+(?:\s+[^-\s]\S*)?\s+)*pr\s+(create|ready)\b/g;
+// (a VAR=value prefix's value may be quoted: in the masked text its quotes
+// hold blanks)
+const PR_STEP = /(?:^|[;&|(\n])\s*(?:\w+=(?:"[^"]*"|'[^']*'|[^\s"'])*\s+)*gh\s+(?:-\S+(?:\s+[^-\s]\S*)?\s+)*pr\s+(create|ready)\b/g;
 
 // the command with heredoc bodies and quoted text blanked out, keeping
 // every other character where it was
