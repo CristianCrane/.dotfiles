@@ -7,7 +7,7 @@
 // from its file, answers every finding of that review in its Change
 // section. A PR leaves draft (`gh pr ready`, or `gh pr create` without
 // `--draft`) once the branch's lessons file (the `lessons` skill) says
-// where every lesson went.
+// where every lesson went, and the review is still of the last commit.
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -130,7 +130,8 @@ const createGate = (command, hidden, match, input) => {
   if (missing) return turnDownCreate(`${missing} Or open it as a draft (\`--draft\`) and mark it ready once they're written.`);
 };
 
-// gh pr ready: the PR's own branch, checked out here, and its lessons;
+// gh pr ready: the PR's own branch, checked out here, its review still of
+// the last commit, and its lessons;
 // --undo puts a PR back in draft, which waits for nothing
 const readyGate = (command, hidden, match, input) => {
   const end = match.index + match[0].length;
@@ -141,22 +142,23 @@ const readyGate = (command, hidden, match, input) => {
   if (!work) return;
 
   // a PR named by number, URL or branch, anywhere among the arguments
-  // (past flags, and the value of -R/--repo): its head branch must be the
-  // one checked out here, where its lessons live
+  // (past flags, and the value of -R/--repo, which the lookup keeps): its
+  // head branch must be the one checked out here, where its lessons live
+  const text = (token) => command.slice(end + token.index, end + token.index + token[0].length);
   let named;
+  let repo = [];
+  let repoNext = false;
   for (const token of args.matchAll(/\S+/g)) {
-    if (named === null) named = undefined;
-    else if (/^(?:-R|--repo)$/.test(token[0])) named = null;
-    else if (!token[0].startsWith("-")) {
-      named = token;
-      break;
-    }
+    if (repoNext) [repo, repoNext] = [["--repo", text(token)], false];
+    else if (/^(?:-R|--repo)$/.test(token[0])) repoNext = true;
+    else if (/^--repo=/.test(token[0])) repo = ["--repo", text(token).slice("--repo=".length)];
+    else if (!named && !token[0].startsWith("-")) named = token;
   }
   if (named) {
-    const pr = command.slice(end + named.index, end + named.index + named[0].length);
+    const pr = text(named);
     let branch;
     try {
-      branch = execFileSync("gh", ["pr", "view", pr, "--json", "headRefName", "-q", ".headRefName"], {
+      branch = execFileSync("gh", ["pr", "view", pr, ...repo, "--json", "headRefName", "-q", ".headRefName"], {
         cwd,
         encoding: "utf8",
         stdio: ["ignore", "pipe", "ignore"],
@@ -177,7 +179,7 @@ const readyGate = (command, hidden, match, input) => {
   const found = review(cwd, work.key);
   if (!found.ok)
     return turnDown(
-      `The change review for ${work.branch} isn't of where the branch is (${found.reason}). A lessons commit is a cleanup: run the change-reviewer's recheck of it, with output ${found.path}, then mark the PR ready.`,
+      `The change review for ${work.branch} isn't ready (${found.reason}), with output ${found.path}: finish it as the \`change\` skill's Review step says (after a lessons commit, that's the recheck of it), then mark the PR ready.`,
       "ready",
     );
 
