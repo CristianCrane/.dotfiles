@@ -16,8 +16,7 @@ import { deny, hook, lines, onBranch, review, stateFile, workOf } from "./lib.mj
 
 // where a command starts (not inside a message that mentions it), after
 // any VAR=value prefixes, with any gh flags before `pr`
-const PR_CREATE = /(?:^|[;&|(\n])\s*(?:\w+=\S*\s+)*gh\s+(?:-\S+(?:\s+[^-\s]\S*)?\s+)*pr\s+create\b/;
-const PR_READY = /(?:^|[;&|(\n])\s*(?:\w+=\S*\s+)*gh\s+(?:-\S+(?:\s+[^-\s]\S*)?\s+)*pr\s+ready\b/;
+const PR_STEP = /(?:^|[;&|(\n])\s*(?:\w+=\S*\s+)*gh\s+(?:-\S+(?:\s+[^-\s]\S*)?\s+)*pr\s+(create|ready)\b/g;
 
 // the command with heredoc bodies and quoted text blanked out, keeping
 // every other character where it was
@@ -141,12 +140,20 @@ const readyGate = (command, hidden, match, input) => {
   const work = workOf(cwd, input);
   if (!work) return;
 
-  // a PR named by number, URL or branch: its head branch must be the one
-  // checked out here, where its lessons live
-  const named = /^\s*([^-\s]\S*)/.exec(args);
+  // a PR named by number, URL or branch, anywhere among the arguments
+  // (past flags, and the value of -R/--repo): its head branch must be the
+  // one checked out here, where its lessons live
+  let named;
+  for (const token of args.matchAll(/\S+/g)) {
+    if (named === null) named = undefined;
+    else if (/^(?:-R|--repo)$/.test(token[0])) named = null;
+    else if (!token[0].startsWith("-")) {
+      named = token;
+      break;
+    }
+  }
   if (named) {
-    const [from, to] = [end + named.index + named[0].length - named[1].length, end + named.index + named[0].length];
-    const pr = command.slice(from, to);
+    const pr = command.slice(end + named.index, end + named.index + named[0].length);
     let branch;
     try {
       branch = execFileSync("gh", ["pr", "view", pr, "--json", "headRefName", "-q", ".headRefName"], {
@@ -165,6 +172,15 @@ const readyGate = (command, hidden, match, input) => {
       );
   }
 
+  // the review still holds: of the last commit, so the lessons commit got
+  // its recheck
+  const found = review(cwd, work.key);
+  if (!found.ok)
+    return turnDown(
+      `The change review for ${work.branch} isn't of where the branch is (${found.reason}). A lessons commit is a cleanup: run the change-reviewer's recheck of it, with output ${found.path}, then mark the PR ready.`,
+      "ready",
+    );
+
   const missing = lessonsMissing(cwd, work);
   if (missing) return turnDown(missing, "ready");
 };
@@ -172,8 +188,9 @@ const readyGate = (command, hidden, match, input) => {
 hook((input) => {
   const command = input.tool_input?.command ?? "";
   const hidden = masked(command);
-  const ready = PR_READY.exec(hidden);
-  if (ready) return readyGate(command, hidden, ready, input);
-  const create = PR_CREATE.exec(hidden);
-  if (create) return createGate(command, hidden, create, input);
+  for (const step of hidden.matchAll(PR_STEP)) {
+    const gate = step[1] === "create" ? createGate : readyGate;
+    const turned = gate(command, hidden, step, input);
+    if (turned) return turned;
+  }
 });

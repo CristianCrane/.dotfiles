@@ -29,7 +29,7 @@ Done when each cost is a lesson in that form or ruled out with its reason.
 
 Sort it first:
 
-- **Mechanical** (a fixed pattern, a banned call, a file-location rule): a deterministic check, such as a lint rule, a hook, a test or a CI job. It's a change of its own: propose it to the user.
+- **Mechanical** (a fixed pattern, a banned call, a file-location rule): a deterministic check, such as a lint rule, a hook, a test or a CI job. It's a change of its own: propose it to the user, and it went to their answer (the change that built it, or the issue that holds it).
 - **A miss the review should have caught:** a rule for the reviewer agent.
 - **A judgement call:** prose, in the narrowest place every agent that needs it loads:
 
@@ -41,7 +41,9 @@ Sort it first:
 
 **Global lessons** (the global CLAUDE.md, the change rules, the reviewer) load in every session, so the user approves them first. Then make them all as one change in `~/.dotfiles` (the change skill, straight to main), when that checkout is on a clean main. Otherwise (another branch there, uncommitted changes, or no `~/.dotfiles`, as in a cloud session) open one issue on CristianCrane/.dotfiles, "Lessons from <repo>: <branch>", holding them: that issue is where they went.
 
-**Repo lessons** on a PR's branch go in one commit on it, "Lessons: …".
+**Repo lessons** on a PR's branch go in one cleanup commit on it, "Lessons: …", which gets the change skill's recheck like any cleanup.
+
+Done when every lesson has a place it went.
 
 ## 4. Prune
 
@@ -51,7 +53,7 @@ Done when no two places hold one lesson.
 
 ## 5. Write the lessons file
 
-Write `$(git rev-parse --path-format=absolute --git-path claude/lessons-<branch>.md)`, beside the review:
+Write it beside the review, as `lessons-<branch>.md` with each `/` in the branch's name as `-` (`git rev-parse --path-format=absolute --git-path claude/lessons-fix-x.md` for `fix/x`); a turned-down `gh pr ready` names it too:
 
 ```
 Lessons for <branch>:

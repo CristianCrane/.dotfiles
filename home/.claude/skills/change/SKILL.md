@@ -85,4 +85,4 @@ One line per pattern, per review finding and per `Seen nearby:` item. When the P
 
 ## 6. Lessons
 
-Once the full suite has passed, run the `lessons` skill: before the PR leaves draft (`gh pr ready`, or `gh pr create` without `--draft`), or before the push to main where there's no PR. The gate holds a PR in draft until its lessons file says where every lesson went.
+Once the full suite has passed, run the `lessons` skill: before the PR leaves draft (`gh pr ready`, or `gh pr create` without `--draft`), or before the push to main where there's no PR. Its lessons for the repo land as one cleanup commit, which gets its recheck. The gate holds a PR in draft until its lessons file says where every lesson went and the review is of the last commit.
