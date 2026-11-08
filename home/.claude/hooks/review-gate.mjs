@@ -5,7 +5,10 @@
 // of one before it with only comment lines changed since) and, before the
 // last round, leaves no change finding open, and until the PR body, read
 // from its file, answers every finding of that review in its Change
-// section.
+// section. A PR leaves draft (`gh pr ready`, or `gh pr create` without
+// `--draft`) once the branch's lessons file (the `lessons` skill) says
+// where every lesson went.
+import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
@@ -14,6 +17,7 @@ import { deny, hook, lines, onBranch, review, stateFile, workOf } from "./lib.mj
 // where a command starts (not inside a message that mentions it), after
 // any VAR=value prefixes, with any gh flags before `pr`
 const PR_CREATE = /(?:^|[;&|(\n])\s*(?:\w+=\S*\s+)*gh\s+(?:-\S+(?:\s+[^-\s]\S*)?\s+)*pr\s+create\b/;
+const PR_READY = /(?:^|[;&|(\n])\s*(?:\w+=\S*\s+)*gh\s+(?:-\S+(?:\s+[^-\s]\S*)?\s+)*pr\s+ready\b/;
 
 // the command with heredoc bodies and quoted text blanked out, keeping
 // every other character where it was
@@ -40,12 +44,18 @@ const dirOf = (command, hidden, at, cwd) => {
   return resolve(cwd, dir);
 };
 
+// this gh command's own arguments, up to the next command: in the masked
+// text (`masked`), so a quoted title or body is blanks
+const argsOf = (hidden, end) => {
+  const stop = hidden.slice(end).search(/[;&|\n]/);
+  return hidden.slice(end, stop < 0 ? undefined : end + stop);
+};
+
 // the branch `--head` names, if any, in this gh command's own arguments:
 // found in the masked text (so a title or body that mentions --head doesn't
 // count) and read from the original
 const headOf = (command, hidden, end) => {
-  const stop = hidden.slice(end).search(/[;&|\n]/);
-  const args = hidden.slice(end, stop < 0 ? undefined : end + stop);
+  const args = argsOf(hidden, end);
   const flag = /(?:^|\s)(?:--head|-H)(?:=|\s+)("[^"]+"|'[^']+'|\S+)/d.exec(args);
   if (!flag) return undefined;
   const [start, finish] = flag.indices[1];
@@ -53,29 +63,43 @@ const headOf = (command, hidden, end) => {
 };
 
 // a turn-down stops the whole command, so it says so: a push or an edit of
-// the body chained before `gh pr create` didn't run either
-const turnDown = (reason) =>
-  deny(`${reason} Nothing in this command ran, steps before gh pr create included: run each one as its own command.`);
+// the body chained before the gh command didn't run either
+const turnDown = (reason, verb) =>
+  deny(`${reason} Nothing in this command ran, steps before gh pr ${verb} included: run each one as its own command.`);
 
-hook((input) => {
-  const command = input.tool_input?.command ?? "";
-  const hidden = masked(command);
-  const match = PR_CREATE.exec(hidden);
-  if (!match) return;
+// why the branch's PR can't leave draft yet, if it can't: its lessons file
+// is missing, lists nothing, or has a lesson that doesn't say where it went
+const lessonsMissing = (cwd, work) => {
+  const file = stateFile(cwd, "lessons", work.key);
+  const how = `run the \`lessons\` skill (the \`change\` skill's step 6) and write them to ${file}, each lesson saying where it went (\`→ <where>\`), or \`None: <why>\``;
+  if (!existsSync(file)) return `${work.branch}'s PR can't leave draft before its lessons: ${how}.`;
+  const text = readFileSync(file, "utf8");
+  if (/^None:\s*\S/m.test(text)) return;
+  const items = lines(text).filter((line) => /^\s*-\s/.test(line));
+  const unsaid = items.filter((line) => !/→\s*\S/.test(line));
+  if (items.length === 0 || unsaid.length)
+    return `The lessons file for ${work.branch} (${file}) ${items.length ? `has ${unsaid.length} lesson(s) that don't say where they went` : "lists none"}: ${how}.`;
+};
+
+// gh pr create: the review, the body's Change section, and its lessons
+// unless it opens as a draft
+const createGate = (command, hidden, match, input) => {
   const cwd = dirOf(command, hidden, match.index, input.cwd);
   const work = workOf(cwd, input);
   if (!work) return;
+  const end = match.index + match[0].length;
+  const turnDownCreate = (reason) => turnDown(reason, "create");
 
   // a branch's review lives with its own checkout
-  const head = headOf(command, hidden, match.index + match[0].length);
+  const head = headOf(command, hidden, end);
   if (head && head !== work.branch)
-    return turnDown(
+    return turnDownCreate(
       `gh pr create --head ${head} runs from ${work.branch}'s checkout (${cwd}), but a branch's change review lives with its own checkout. Run it from ${head}'s checkout: git switch ${head} first, as its own command, or in its worktree.`,
     );
 
   const found = review(cwd, work.key);
   if (!found.ok)
-    return turnDown(
+    return turnDownCreate(
       `The change review for ${work.branch} isn't ready (${found.reason}). Run the change-reviewer agent as the \`change\` skill's Review step says, with output ${found.path}. Answer each finding in the PR's Change section, then open the PR. (This checked ${work.branch}, checked out in ${cwd} when the command started.)`,
     );
 
@@ -83,12 +107,12 @@ hook((input) => {
   // answers every finding: fixed in a commit on the branch, or answered
   const body = stateFile(cwd, "pr-body", work.key);
   if (!command.includes(body) || !existsSync(body))
-    return turnDown(
+    return turnDownCreate(
       `Write the PR body for ${work.branch} to ${body} and open the PR with \`--body-file ${body}\`, as the \`change\` skill's Change section step says.`,
     );
   const text = readFileSync(body, "utf8");
   const at = text.search(/^## Change\b/m);
-  if (at < 0) return turnDown(`The PR body (${body}) has no \`## Change\` section: end it with one, as the \`change\` skill says.`);
+  if (at < 0) return turnDownCreate(`The PR body (${body}) has no \`## Change\` section: end it with one, as the \`change\` skill says.`);
   const section = lines(text.slice(at));
   const answers = (id) =>
     section.some((line) => {
@@ -98,7 +122,58 @@ hook((input) => {
     });
   const open = found.ids.filter((id) => !answers(id));
   if (open.length)
-    return turnDown(
+    return turnDownCreate(
       `The PR body's Change section (${body}) doesn't answer ${open.join(", ")} from the last change review (${found.path}). Give each its own Review line: \`fixed in <sha>\`, a commit on this branch, or \`answered: <why>\`.`,
     );
+
+  if (/(?:^|\s)(?:--draft|-d)(?=\s|=|$)/.test(argsOf(hidden, end))) return;
+  const missing = lessonsMissing(cwd, work);
+  if (missing) return turnDownCreate(`${missing} Or open it as a draft (\`--draft\`) and mark it ready once they're written.`);
+};
+
+// gh pr ready: the PR's own branch, checked out here, and its lessons;
+// --undo puts a PR back in draft, which waits for nothing
+const readyGate = (command, hidden, match, input) => {
+  const end = match.index + match[0].length;
+  const args = argsOf(hidden, end);
+  if (/(?:^|\s)--undo(?=\s|$)/.test(args)) return;
+  const cwd = dirOf(command, hidden, match.index, input.cwd);
+  const work = workOf(cwd, input);
+  if (!work) return;
+
+  // a PR named by number, URL or branch: its head branch must be the one
+  // checked out here, where its lessons live
+  const named = /^\s*([^-\s]\S*)/.exec(args);
+  if (named) {
+    const [from, to] = [end + named.index + named[0].length - named[1].length, end + named.index + named[0].length];
+    const pr = command.slice(from, to);
+    let branch;
+    try {
+      branch = execFileSync("gh", ["pr", "view", pr, "--json", "headRefName", "-q", ".headRefName"], {
+        cwd,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+        timeout: 8000,
+      }).trim();
+    } catch {
+      return turnDown(`Couldn't tell which branch PR ${pr} is (gh pr view failed). Run \`gh pr ready\` with no argument from that PR's checkout.`, "ready");
+    }
+    if (branch !== work.branch)
+      return turnDown(
+        `PR ${pr} is ${branch}'s, but this runs from ${work.branch}'s checkout (${cwd}), and a branch's lessons live with its own checkout. Run it from ${branch}'s checkout: git switch ${branch} first, as its own command, or in its worktree.`,
+        "ready",
+      );
+  }
+
+  const missing = lessonsMissing(cwd, work);
+  if (missing) return turnDown(missing, "ready");
+};
+
+hook((input) => {
+  const command = input.tool_input?.command ?? "";
+  const hidden = masked(command);
+  const ready = PR_READY.exec(hidden);
+  if (ready) return readyGate(command, hidden, ready, input);
+  const create = PR_CREATE.exec(hidden);
+  if (create) return createGate(command, hidden, create, input);
 });

@@ -14,6 +14,7 @@ export const CLAUDE = join(dirname(fileURLToPath(import.meta.url)), "..");
 // each copied file's place under ~/.claude, and in the repo
 export const COPIED = [
   ["skills/change/SKILL.md", ".claude/skills/change/SKILL.md"],
+  ["skills/lessons/SKILL.md", ".claude/skills/lessons/SKILL.md"],
   ["agents/change-reviewer.md", ".claude/agents/change-reviewer.md"],
   ...["lib", "survey-gate", "review-gate", "change-check"].map((name) => [
     `hooks/${name}.mjs`,
