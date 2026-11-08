@@ -112,6 +112,9 @@ in
     run ln -sfn "${dotfiles}/home/.claude/CLAUDE.md" "$HOME/.claude/CLAUDE.md"
     run ln -sfn "${dotfiles}/home/.claude/hooks" "$HOME/.claude/hooks"
     run ln -sfn "${dotfiles}/home/.claude/agents" "$HOME/.claude/agents"
-    run ln -sfn "${dotfiles}/home/.claude/skills/change" "$HOME/.claude/skills/change"
+    # each skill on its own, so ~/.claude/skills keeps Claude Code's own
+    for skill in "${dotfiles}"/home/.claude/skills/*; do
+      run ln -sfn "$skill" "$HOME/.claude/skills/$(basename "$skill")"
+    done
   '';
 }
