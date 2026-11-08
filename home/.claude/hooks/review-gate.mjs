@@ -8,7 +8,6 @@
 // section. A PR leaves draft (`gh pr ready`, or `gh pr create` without
 // `--draft`) once the branch's lessons file (the `lessons` skill) says
 // where every lesson went, and the review is still of the last commit.
-import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
@@ -130,9 +129,9 @@ const createGate = (command, hidden, match, input) => {
   if (missing) return turnDownCreate(`${missing} Or open it as a draft (\`--draft\`) and mark it ready once they're written.`);
 };
 
-// gh pr ready: the PR's own branch, checked out here, its review still of
-// the last commit, and its lessons;
-// --undo puts a PR back in draft, which waits for nothing
+// gh pr ready, run bare from the PR's own checkout: its review still of the
+// last commit, and its lessons. --undo puts a PR back in draft, which waits
+// for nothing
 const readyGate = (command, hidden, match, input) => {
   const end = match.index + match[0].length;
   const args = argsOf(hidden, end);
@@ -141,30 +140,18 @@ const readyGate = (command, hidden, match, input) => {
   const work = workOf(cwd, input);
   if (!work) return;
 
-  // the PR gh will ready: asked of gh with the ready command's own
-  // arguments and the environment of its prefix (GH_REPO=…), so a PR named
-  // by number, URL or branch, in this repo or another (-R…, --repo…), is
-  // the one it will ready. Its head branch must be the one checked out
-  // here, where its lessons live
-  const own = command.slice(end, end + args.length).trim();
-  const env = Object.fromEntries(
-    [...command.slice(match.index, end).matchAll(/(?:^|\s)(\w+)=(\S*)/g)].map(([, name, value]) => [name, value]),
-  );
-  let branch;
-  try {
-    branch = execFileSync("gh", ["pr", "view", ...(own ? own.split(/\s+/) : []), "--json", "headRefName", "-q", ".headRefName"], {
-      cwd,
-      env: { ...process.env, ...env },
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-      timeout: 8000,
-    }).trim();
-  } catch {
-    return turnDown(`Couldn't tell which PR \`gh pr ready\` would ready here (gh pr view failed). Run it from that PR's own checkout, with no argument.`, "ready");
-  }
-  if (branch !== work.branch)
+  // The gate reads the lessons and review of the branch checked out where
+  // it runs, which is the PR a bare `gh pr ready` readies. A PR named any
+  // other way (a number, URL or branch; -R or --repo, before `pr` or after
+  // `ready`; GH_REPO or GH_HOST anywhere in the command) could be another
+  // branch's, so it's turned down. Redirects are no argument
+  const named = args
+    .replace(/\d*[<>]+&?\s*\S*/g, " ")
+    .trim();
+  const ghFlags = /gh\s+-/.test(hidden.slice(match.index, end));
+  if (named || ghFlags || /\bGH_(?:REPO|HOST)\b/.test(command))
     return turnDown(
-      `That PR is ${branch}'s, but this runs from ${work.branch}'s checkout (${cwd}), and a branch's lessons live with its own checkout. Run it from ${branch}'s checkout: git switch ${branch} first, as its own command, or in its worktree.`,
+      `Run \`gh pr ready\` bare, as its own command, from the PR's own checkout (for ${work.branch}'s, in ${cwd}): the gate checks the lessons and review of the branch checked out where it runs, so it can't vouch for a PR named another way (a number, -R, --repo, GH_REPO).`,
       "ready",
     );
 
