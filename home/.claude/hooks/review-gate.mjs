@@ -141,38 +141,32 @@ const readyGate = (command, hidden, match, input) => {
   const work = workOf(cwd, input);
   if (!work) return;
 
-  // a PR named by number, URL or branch, anywhere among the arguments
-  // (past flags, and the value of -R/--repo, which the lookup keeps): its
-  // head branch must be the one checked out here, where its lessons live
-  const text = (token) => command.slice(end + token.index, end + token.index + token[0].length);
-  let named;
-  let repo = [];
-  let repoNext = false;
-  for (const token of args.matchAll(/\S+/g)) {
-    if (repoNext) [repo, repoNext] = [["--repo", text(token)], false];
-    else if (/^(?:-R|--repo)$/.test(token[0])) repoNext = true;
-    else if (/^--repo=/.test(token[0])) repo = ["--repo", text(token).slice("--repo=".length)];
-    else if (!named && !token[0].startsWith("-")) named = token;
+  // the PR gh will ready: asked of gh with the ready command's own
+  // arguments and the environment of its prefix (GH_REPO=…), so a PR named
+  // by number, URL or branch, in this repo or another (-R…, --repo…), is
+  // the one it will ready. Its head branch must be the one checked out
+  // here, where its lessons live
+  const own = command.slice(end, end + args.length).trim();
+  const env = Object.fromEntries(
+    [...command.slice(match.index, end).matchAll(/(?:^|\s)(\w+)=(\S*)/g)].map(([, name, value]) => [name, value]),
+  );
+  let branch;
+  try {
+    branch = execFileSync("gh", ["pr", "view", ...(own ? own.split(/\s+/) : []), "--json", "headRefName", "-q", ".headRefName"], {
+      cwd,
+      env: { ...process.env, ...env },
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+      timeout: 8000,
+    }).trim();
+  } catch {
+    return turnDown(`Couldn't tell which PR \`gh pr ready\` would ready here (gh pr view failed). Run it from that PR's own checkout, with no argument.`, "ready");
   }
-  if (named) {
-    const pr = text(named);
-    let branch;
-    try {
-      branch = execFileSync("gh", ["pr", "view", pr, ...repo, "--json", "headRefName", "-q", ".headRefName"], {
-        cwd,
-        encoding: "utf8",
-        stdio: ["ignore", "pipe", "ignore"],
-        timeout: 8000,
-      }).trim();
-    } catch {
-      return turnDown(`Couldn't tell which branch PR ${pr} is (gh pr view failed). Run \`gh pr ready\` with no argument from that PR's checkout.`, "ready");
-    }
-    if (branch !== work.branch)
-      return turnDown(
-        `PR ${pr} is ${branch}'s, but this runs from ${work.branch}'s checkout (${cwd}), and a branch's lessons live with its own checkout. Run it from ${branch}'s checkout: git switch ${branch} first, as its own command, or in its worktree.`,
-        "ready",
-      );
-  }
+  if (branch !== work.branch)
+    return turnDown(
+      `That PR is ${branch}'s, but this runs from ${work.branch}'s checkout (${cwd}), and a branch's lessons live with its own checkout. Run it from ${branch}'s checkout: git switch ${branch} first, as its own command, or in its worktree.`,
+      "ready",
+    );
 
   // the review still holds: of the last commit, so the lessons commit got
   // its recheck
