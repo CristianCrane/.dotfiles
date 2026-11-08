@@ -8,7 +8,8 @@
     "mattpocock-skills@claude-plugins-official": true,
     "stripe@claude-plugins-official": true,
     "frontend-design@claude-plugins-official": true,
-    "lua-lsp@claude-plugins-official": true
+    "lua-lsp@claude-plugins-official": true,
+    "sentry@claude-plugins-official": true
   },
   "theme": "dark",
   "autoMode": {
