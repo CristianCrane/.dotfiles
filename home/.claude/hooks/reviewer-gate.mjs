@@ -15,21 +15,9 @@
 // goes only to a plan-review or review file beside a survey in a git dir.
 import { existsSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
-import { BOUNDARY, deny, HEREDOC, hook, inGitDir, masked, REDIRECT, substitutions } from "./lib.mjs";
+import { BOUNDARY, deny, has, HEREDOC, hook, inGitDir, masked, REDIRECT, substitutions, unquote, WORD } from "./lib.mjs";
 
 const REVIEWER = "change-reviewer";
-
-// whether any word is one of `flags`: a long one alone or, ending in `=`,
-// with its value; a one-letter one alone, among a cluster's letters
-// (`-nri`), or with its value attached (`-o/tmp/x`)
-const has = (words, ...flags) =>
-  words.some((word) =>
-    flags.some((flag) =>
-      flag.endsWith("=")
-        ? word === flag.slice(0, -1) || word.startsWith(flag)
-        : word === flag || (/^-\w$/.test(flag) && (word.startsWith(flag) || (/^-[a-zA-Z]+$/.test(word) && word.includes(flag[1])))),
-    ),
-  );
 
 const positional = (words) => words.filter((word) => !word.startsWith("-"));
 
@@ -103,9 +91,10 @@ const git = (words) => {
 
 // gh: views and lists, and api calls that only GET
 const gh = (words) => {
-  const at = words.findIndex((word) => /^(?:repo|pr|issue|run|release|workflow|label|search|api)$/.test(word));
-  if (at < 0) return has(words, "--version") || words[0] === "help" ? null : "this gh command isn't a view or list";
-  const [group, ...rest] = words.slice(at);
+  // its group is its first word after gh's own options
+  const [group, ...rest] = after(words, ["-R", "--repo"]);
+  if (group === undefined || group === "help") return null; // --version, help
+  if (!/^(?:repo|pr|issue|run|release|workflow|label|search|api)$/.test(group)) return `\`gh ${group}\` isn't a view or list`;
   if (group === "search") return null;
   if (group === "api") {
     const method = rest.findIndex((word) => word === "-X" || word === "--method");
@@ -121,12 +110,15 @@ const gh = (words) => {
 const plain = () => null;
 const READERS = {
   ...Object.fromEntries(
-    "cd ls pwd cat head tail wc cut tr paste column diff cmp comm stat file du realpath readlink dirname basename nl tac od xxd hexdump strings md5sum sha256sum base64 seq jq journalctl echo printf read test continue break [ [[ true false type which uptime date nproc free ps pgrep ss findmnt sleep set unset export"
+    "cd ls pwd cat head tail wc cut tr paste column diff cmp comm stat file du realpath readlink dirname basename nl tac od hexdump strings md5sum sha256sum base64 seq jq journalctl echo printf read test continue break [ [[ true false type which uptime date nproc free ps pgrep ss findmnt sleep unset"
       .split(" ")
       .map((name) => [name, plain]),
   ),
   git,
   gh,
+  // these change what later commands run, as a VAR= prefix does
+  set: (words) => (has(words, "-a") || words.includes("allexport") ? "`set -a` exports what's assigned after it" : null),
+  xxd: (words) => positional(words).length > 1 && "xxd's second file is its output",
   systemctl: (words) =>
     ["show", "status", "cat", "list-units", "list-unit-files", "is-active", "is-enabled"].includes(positional(words)[0]) ? null : "systemctl changes a unit",
   rg: (words) => has(words, "--pre=") && "rg's --pre runs a command on each file",
@@ -140,25 +132,43 @@ const READERS = {
     const bad = scripts.find((script) => !printOnly(script));
     return bad !== undefined && `sed's script \`${bad}\` isn't only addresses with p, d, q, = or s/// (no w or e)`;
   },
-  // gawk's --sandbox turns down system(), redirects and piped getline
+  // gawk: options that edit in place, load code or write a dump, sandbox or
+  // not; then each program (-e's, or the first word) has no AWK_WRITES,
+  // or --sandbox turns those down
   awk: (words) => {
-    if (has(words, "--sandbox")) return null;
     const own = words.filter((word) => !/^-[Fv]./.test(word)); // -F, -v with their values attached
-    if (has(own, "-f", "--file=")) return "awk runs a program file: add --sandbox";
-    const program = after(words, ["-F", "-v"])[0] ?? "";
-    return AWK_WRITES.test(program) && "awk's program writes or runs a command: add --sandbox";
+    if (has(own, "-f", "-i", "-l", "-E", "-d", "-D", "-o", "-p", "--file=", "--include=", "--load=", "--exec=", "--dump-variables=", "--debug=", "--pretty-print=", "--profile="))
+      return "this awk option edits in place, loads code or writes a file";
+    if (has(words, "--sandbox")) return null;
+    const sources = words.flatMap((word, at) => (["-e", "--source"].includes(words[at - 1]) ? [word] : []));
+    const programs = sources.length ? sources : [after(words, ["-F", "-v"])[0] ?? ""];
+    return programs.some((program) => AWK_WRITES.test(program)) && "awk's program writes or runs a command: add --sandbox";
   },
   find: (words) =>
     has(words, "-exec", "-execdir", "-ok", "-okdir", "-delete", "-fprint", "-fprint0", "-fprintf", "-fls") && "find's action runs a command or writes",
   fd: (words) => has(words, "-x", "-X", "--exec=", "--exec-batch=") && "fd's --exec runs a command",
   sort: (words) => has(words, "-o", "--output=", "--compress-program=") && "sort writes a file or runs a program",
   uniq: (words) => positional(words).length > 1 && "uniq's second file is its output",
-  // Node's permission model: no writes, child processes, workers or addons
-  node: (words) =>
-    has(words, "--permission") && !has(words, "--allow-fs-write=", "--allow-child-process", "--allow-worker", "--allow-addons", "--allow-wasi")
-      ? null
-      : "node runs only as `node --permission` (reads allowed with `--allow-fs-read='*'`), which turns down its writes and child processes",
+  // Node's permission model, in node's own options (those before its
+  // script, `-` or `--`; a script's own --permission is no option): no
+  // writes, child processes, workers, addons or inspector, and no --run
+  // (a package.json script, through the shell) or --test. It has no
+  // network limit: such a script can still reach a database or a server
+  node: (words) => {
+    const own = [];
+    for (let at = 0; at < words.length && words[at].startsWith("-") && !["-", "--"].includes(words[at]); at++) {
+      own.push(words[at]);
+      if (NODE_VALUED.includes(words[at])) own.push(words[++at]);
+    }
+    if (!own.includes("--permission"))
+      return "node runs only as `node --permission` (reads allowed with `--allow-fs-read='*'`), which turns down its writes and child processes";
+    const loose = own.find((word) => /^--(?:run|test|watch)\b/.test(word) || (/^--allow-/.test(word) && !/^--allow-fs-read\b/.test(word)));
+    return loose && `node's \`${loose}\` runs more than a script that reads`;
+  },
 };
+
+// node's options that take the next word as their value
+const NODE_VALUED = ["-e", "--eval", "-p", "--print", "-r", "--require", "--import", "--input-type", "--env-file", "-C", "--conditions", "--allow-fs-read", "--run"];
 
 // commands that run the command in their words: each runs a reader or not
 const WRAPPERS = {
@@ -173,24 +183,29 @@ const WRAPPERS = {
 const KEYWORD = /^(?:do|then|else|elif|if|while|until|!|\{)$/;
 const CLOSER = /^(?:done|fi|\}|esac)$/;
 
+// a variable no command reads from its environment: a name with a
+// lowercase letter, or of two letters at most (S, B, wt, mb)
+const LOCAL = /^(?:\w*[a-z]\w*|[A-Z_]{1,2}\d*)=/;
+
 // why one simple command isn't a reader, or null when it is
 const notReader = (words) => {
   while (KEYWORD.test(words[0])) words = words.slice(1);
   if (!words.length || (words.length === 1 && CLOSER.test(words[0]))) return null;
-  if (words[0] === "for") return null; // `for x in …`: its words are a list
+  if (words[0] === "for" || words[0] === "case") return null; // `for x in …`, `case x in`: no command
   // IFS= only says how `read` splits
   while (/^IFS=/.test(words[0]) && words.length > 1) words = words.slice(1);
-  if (/^\w+=/.test(words[0]))
-    return words.every((word) => /^\w+=/.test(word)) ? null : `\`${words[0]}\` before a command changes what it runs`;
+  if (/^\w+=/.test(words[0])) {
+    if (!words.every((word) => /^\w+=/.test(word))) return `\`${words[0]}\` before a command changes what it runs`;
+    // an exported name (PATH, GIT_*, NODE_OPTIONS …) changes what later commands run
+    const exported = words.find((word) => !LOCAL.test(word));
+    return exported ? `\`${exported}\` may change what later commands run: name a variable in lowercase, or two letters at most` : null;
+  }
   const [name, ...args] = words;
   if (WRAPPERS[name]) return args.length ? notReader(WRAPPERS[name](args)) : null;
   const check = READERS[name];
   if (!check) return `\`${name}\` isn't a reading command`;
   return check(args) || null;
 };
-
-// a word's text, its quotes taken off
-const unquote = (word) => word.replace(/'([^']*)'|"((?:\\.|[^"\\])*)"/g, (_, single, double) => single ?? double.replace(/\\(.)/g, "$1"));
 
 // why the command isn't only readers, or null when it is
 const notReading = (command) => {
@@ -217,27 +232,19 @@ const notReading = (command) => {
     blank.fill(" ", found.index, found.index + found[0].length);
   }
   for (const found of bare.matchAll(HEREDOC)) blank.fill(" ", found.index + found[1].length, found.index + found[0].length);
-  const words = blank.join("");
+  // a case's patterns (`case x in a|b)`, and each after `;;`) are no commands
+  const words = blank
+    .join("")
+    .replace(/(\bcase\s+(?:"[^"]*"|'[^']*'|\S)+\s+in\b|;;)(\s*\(?[^;()\n]*\))/g, (_, lead, pattern) => lead + " ".repeat(pattern.length));
 
   // each simple command (a subshell's too), split at lib's boundaries, its
   // words found in the blanked text and read from the original
-  // A case's patterns (`case x in a|b)`, and each one after `;;`) are no
-  // commands: they're skipped up to the ) that ends them
   let start = 0;
-  let pattern = false;
-  let inCase = false;
   for (const end of [...words.matchAll(new RegExp(BOUNDARY, "g"))].map((found) => found.index).concat(words.length)) {
-    const own = [...words.slice(start, end).matchAll(/(?:[^\s'"]+|'[^']*'|"[^"]*")+/g)].map((word) =>
-      unquote(bare.slice(start + word.index, start + word.index + word[0].length)),
+    const why = notReader(
+      [...words.slice(start, end).matchAll(WORD)].map((word) => unquote(bare.slice(start + word.index, start + word.index + word[0].length))),
     );
-    if (own.find((word) => !KEYWORD.test(word)) === "case") inCase = pattern = true;
-    else if (inCase && !own.length && words[start - 1] === ";" && words[end] === ";") pattern = true;
-    else if (own.length === 1 && own[0] === "esac") inCase = false;
-    if (pattern) pattern = words[end] !== ")";
-    else {
-      const why = notReader(own);
-      if (why) return why;
-    }
+    if (why) return why;
     start = end + 1;
   }
   return null;

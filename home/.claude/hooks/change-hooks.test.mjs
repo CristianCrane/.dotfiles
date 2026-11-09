@@ -300,7 +300,7 @@ const CASES = [
   ["ready", "GH_HOST=x gh pr ready", NAMED],
 
   // bare, with redirects or chains: through
-  ...["2>&1", "&>/dev/null", ">/dev/null 2>&1", "| tail -1", "&& echo done", "& wait"].map((rest) => [
+  ...["2>&1", "&>/dev/null", ">&/dev/null", ">/dev/null 2>&1", "| tail -1", "&& echo done", "& wait"].map((rest) => [
     "ready",
     `gh pr ready ${rest}`,
     THROUGH,
@@ -411,7 +411,7 @@ const CASES = [
     ["pnpm test:change", "`pnpm` isn't a reading command"],
     ["cd <repo> && npx vitest run a.test.ts", "`npx` isn't a reading command"],
     ["node -e 'console.log(1)'", "node runs only as `node --permission`"],
-    ["node --permission --allow-fs-write='*' -e 1", "node runs only as"],
+    ["node --permission --allow-fs-write='*' -e 1", "node's `--allow-fs-write=*` runs more"],
     ["git diff > <repo>/d.patch", "`> <repo>/d.patch` writes a file"],
     ['git log >> "<repo>/x"', "`>> \"<repo>/x\"` writes a file"],
     ["cat > <own>/review-feature.md <<'EOF'\nx\nEOF", "`> <own>/review-feature.md` writes a file"],
@@ -447,6 +447,25 @@ const CASES = [
     ["diff <(rm x) b.txt", "`rm` isn't a reading command"],
     ["$(echo rm) cat", "`__________` isn't a reading command"], // a substitution never names a reader
     ["(cd <repo> && make)", "`make` isn't a reading command"],
+    // round 1: F8 node's own options only, F9 every command after a case,
+    // F10 readers that write, F11 >&file
+    ["node --permission --allow-fs-read='*' --run test:change", "node's `--run` runs more"],
+    ["node - --permission", "node runs only as"],
+    ["node x.mjs --permission", "node runs only as"],
+    ["node --permission --test", "node's `--test` runs more"],
+    ["node --permission --allow-inspector -e 1", "node's `--allow-inspector` runs more"],
+    ["case $x in a) echo x;; esac; pnpm test", "`pnpm` isn't a reading command"],
+    ["case \"$x\" in a|b) echo x;; *) echo y;; esac && pnpm build", "`pnpm` isn't a reading command"],
+    ["awk -i inplace '{sub(/a/,\"b\")}1' b.txt", "this awk option edits in place"],
+    ["awk --sandbox -d x '{print}' b.txt", "this awk option edits in place"],
+    ["awk -e 'BEGIN{}' -e 'BEGIN{system(\"x\")}'", "awk's program writes or runs a command"],
+    ["export GIT_EXTERNAL_DIFF=true; git diff", "`export` isn't a reading command"],
+    ["GIT_EXTERNAL_DIFF=true; git diff", "`GIT_EXTERNAL_DIFF=true` may change what later commands run"],
+    ["PATH=/tmp:$PATH; git diff", "`PATH=/tmp:$PATH` may change"],
+    ["set -a; x=1", "`set -a` exports"],
+    ["xxd b.txt out.hex", "xxd's second file is its output"],
+    ["gh secret set pr --body list", "`gh secret` isn't a view or list"],
+    ["git diff >&<repo>/x", "`>&<repo>/x` writes a file"],
   ].map(([call, why]) => ["reviewer", call, reads(why)]),
   ...[
     "git diff $(git merge-base HEAD origin/main)..HEAD",
@@ -474,6 +493,10 @@ const CASES = [
     "timeout 20 git log -1 | xargs -n1 echo",
     "node --permission --allow-fs-read='*' - <<'EOF'\nconsole.log(`${1}`)\nEOF",
     "uptime; ps -eo pid,args | grep '[n]ode'",
+    "git diff >&/dev/null; git diff >& /dev/null",
+    "node -e 1 --permission --allow-fs-read='*'",
+    "gh -R o/r pr view 12; gh --version",
+    "S=x; mb=$(git merge-base HEAD main); wt=y; set -e; set -o pipefail",
     "<own>/review-feature.md",
     "<own>/plan-review-feature.md",
   ].map((call) => ["reviewer", call, THROUGH]),
@@ -627,6 +650,7 @@ test("cwdFor: a command's last cd, an edit's file", () => {
   assert.equal(bash(`cd /tmp 2>&1; cd ${repo} 2>/dev/null && git status`), repo);
   assert.equal(bash(`cd ${repo}; echo "$(cd /tmp)" && git status`), repo);
   assert.equal(bash(`cd ${repo}; diff <(cd /tmp && ls) b`), repo);
+  assert.equal(bash(`cd '${repo}' && git status`), repo);
   assert.equal(cwdFor({ tool_input: { file_path: join(repo, "b.txt") }, cwd: outside }), repo);
 });
 

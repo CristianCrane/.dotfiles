@@ -10,7 +10,7 @@
 // `--draft`) once the branch's lessons file (the `lessons` skill) says
 // where every lesson went, and the review is still of the last commit.
 import { existsSync, readFileSync } from "node:fs";
-import { argsOf, BOUNDARY, deny, dirOf, hook, lines, masked, onBranch, REDIRECT, review, stateFile, workOf } from "./lib.mjs";
+import { argsOf, BOUNDARY, deny, dirOf, hook, lines, masked, onBranch, REDIRECT, review, stateFile, unquote, workOf } from "./lib.mjs";
 
 // where a command starts (not inside a message that mentions it), after
 // any VAR=value prefixes, with any gh flags before `pr`
@@ -29,7 +29,7 @@ const headOf = (command, hidden, end) => {
   const flag = /(?:^|\s)(?:--head|-H)(?:=|\s+)("[^"]+"|'[^']+'|\S+)/d.exec(args);
   if (!flag) return undefined;
   const [start, finish] = flag.indices[1];
-  return command.slice(end + start, end + finish).replace(/^["']|["']$/g, "").replace(/^[^:]*:/, "");
+  return unquote(command.slice(end + start, end + finish)).replace(/^[^:]*:/, "");
 };
 
 // a turn-down stops the whole command, so it says so: a push or an edit of

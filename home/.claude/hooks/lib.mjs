@@ -78,8 +78,28 @@ export const masked = (command) =>
 export const BOUNDARY = String.raw`(?<!\\)(?:[;|\n()]|(?<![<>])&(?!>))`;
 
 // a redirect, in the masked text: its fd, its operator, and its target
-// (group 1: a word, quoted or not), or an fd it copies or closes (>&2, <&-)
-export const REDIRECT = String.raw`(?:\d*|&)(?:>\||>>?|<>|<<<|<<-?|<)(?:&[\d-]|\s*((?:"[^"]*"|'[^']*'|[^\s;&|<>()'"])*))`;
+// (group 1: a word, quoted or not; `>&file` is `&>file`), or an fd it
+// copies or closes (>&2, <&-)
+export const REDIRECT = String.raw`(?:\d*|&)(?:>\||>>?|<>|<<<|<<-?|<)(?:&[\d-](?=[\s;&|<>()]|$)|&?\s*((?:"[^"]*"|'[^']*'|[^\s;&|<>()'"])*))`;
+
+// a shell word: unquoted runs and quoted strings, with nothing between
+export const WORD = /(?:[^\s'"]+|'[^']*'|"(?:\\.|[^"\\])*")+/g;
+
+// a word's text, its quotes taken off
+export const unquote = (word) =>
+  word.replace(/'([^']*)'|"((?:\\.|[^"\\])*)"/g, (_, single, double) => single ?? double.replace(/\\(.)/g, "$1"));
+
+// whether any word is one of `flags`: a long one alone or, ending in `=`,
+// with its value; a one-letter one alone, among a cluster's letters
+// (`-nri`), or with its value attached (`-o/tmp/x`)
+export const has = (words, ...flags) =>
+  words.some((word) =>
+    flags.some((flag) =>
+      flag.endsWith("=")
+        ? word === flag.slice(0, -1) || word.startsWith(flag)
+        : word === flag || (/^-\w$/.test(flag) && (word.startsWith(flag) || (/^-[a-zA-Z]+$/.test(word) && word.includes(flag[1])))),
+    ),
+  );
 
 // the command substitutions the shell runs in `command`: $( ), backticks,
 // <( ) and >( ) (not in double quotes), outermost ones only, each as { start, end, inner } (its
@@ -143,7 +163,7 @@ export const dirOf = (command, hidden, at, cwd) => {
   const cds = [...outside.join("").matchAll(new RegExp(String.raw`(?:^|${BOUNDARY})\s*cd\s+("[^"]+"|'[^']+'|[^\s;&|)]+)`, "dg"))];
   if (cds.length === 0) return cwd;
   const [start, end] = cds.at(-1).indices[1];
-  const dir = command.slice(start, end).replace(/^["']|["']$/g, "").replace(/^~(?=\/|$)/, homedir());
+  const dir = unquote(command.slice(start, end)).replace(/^~(?=\/|$)/, homedir());
   return resolve(cwd, dir);
 };
 
