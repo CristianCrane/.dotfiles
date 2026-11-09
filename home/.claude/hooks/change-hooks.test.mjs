@@ -733,9 +733,11 @@ test("survey-gate on main: one survey per change, until it's pushed", () => {
 
 // a dictated settings change (the change skill's rule): its one-line
 // survey skips the plan review and the review only while the user typed
-// its quote and the change is the one settings file it names, changing
-// only permission rules, plugins, the model or the theme, five entries at
-// most (the old gate asked for a plan review: red on it)
+// its quote and the change is the one settings file it names, and only
+// makes Claude ask or refuse more (an allow rule removed, a deny or ask
+// rule added) or sets the model or theme, each entry named whole in the
+// quote, five at most; plugins and widenings take the full flow (the old
+// gate asked for a plan review: red on it)
 test("dictated: a settings change the user typed out skips the reviews, and nothing wider does", () => {
   const SAID = "add a deny rule for Skill(x:pr) please, and ask for Skill(y:z), not Bash(rm *)";
   const settings = { permissions: { deny: ["Bash(rm *)"] }, hooks: { PreToolUse: [{ matcher: "Edit|Write", hooks: [] }] } };
@@ -784,6 +786,11 @@ test("dictated: a settings change the user typed out skips the reviews, and noth
   assert.match(editTo(plain, allow), /it changes `permissions\.allow\["Skill\(x:pr\)"\]`: only an allow rule removed/);
   assert.match(editTo(plain, { ...settings, permissions: { deny: [] } }), /it changes `permissions\.deny\["Bash\(rm \*\)"\]`: only/);
   assert.match(editTo(plain, { ...settings, enabledPlugins: { "Skill(x:pr)": true } }), /it changes `enabledPlugins\.Skill\(x:pr\)`: only/);
+  // F12: a model is set only to a value the quote names whole
+  const model = setUp({ survey: `dictated: "set the model to sonnet[1m] please" .claude/settings.json\n` });
+  writeFileSync(model.transcript, `${JSON.stringify({ type: "user", origin: { kind: "human" }, message: { content: "set the model to sonnet[1m] please" } })}\n`);
+  assert.match(editTo(model, { ...settings, model: "sonnet" }), /the user's quote doesn't name `model`'s entry/);
+  assert.equal(editTo(model, { ...settings, model: "sonnet[1m]" }), null, "the model the user named");
   assert.match(editTo(setUp({ survey: `dictated: "${SAID}" a.txt\n` }), deny("Skill(x:pr)")), /is dictated, but a\.txt isn't a Claude settings file/);
   assert.match(editTo(setUp({ survey: `dictated: "${SAID}" a.txt .claude/settings.json\n` }), deny("Skill(x:pr)")), /is dictated, but it doesn't name exactly one file/);
   assert.match(editTo(plain, { a: 1 }, ".claude/other.json"), /is dictated, but the change goes past \.claude\/settings\.json/);

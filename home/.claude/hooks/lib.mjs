@@ -270,10 +270,12 @@ const planReview = (cwd, key) => {
 // Both sides parse as JSON, and every key path that differs (an array's
 // entries by value) only makes Claude ask or refuse more: an allow rule
 // removed, a deny or ask rule added, or the model or theme set (NARROWS);
-// five at most, each named in the quote as a whole token (the rule itself,
-// the value), so a bare `Bash` inside `Bash(rm *)` names nothing. Anything
-// that widens what runs, and a plugin either way, takes the full flow:
-// whatever an agent misreads in a quote, the result can only ask more.
+// five at most, each named in the quote as a whole word (between spaces
+// or quote marks, trailing punctuation aside: the rule itself, the
+// value), so a bare `Bash` inside `Bash(rm *)`, or `sonnet` inside
+// `sonnet[1m]`, names nothing. Anything that widens what runs, and a
+// plugin either way, takes the full flow: a rule change can only ask
+// more, and a model or theme is set only to a value the quote names whole.
 //
 // What it can't hold: a quote cut from a sentence that negates it ("don't
 // add …"), and the transcript itself, which sits outside any checkout, so
@@ -351,7 +353,7 @@ export const dictatedHolds = (cwd, work, input, pending) => {
     const unnamed = differ.find((key) => {
       const entry = key.match(/\[(.*)\]$/)?.[1];
       const text = flat(String(entry ? JSON.parse(entry) : JSON.parse(now[key])));
-      return !new RegExp(`(?<!\\w)${text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\w(:_])`).test(spoken);
+      return !new RegExp(String.raw`(?<=^|[\s"'\x60])` + text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + String.raw`(?=[,;.!?)]*(?:$|[\s"'\x60]))`).test(spoken);
     });
     if (unnamed) return { why: `the user's quote doesn't name \`${unnamed}\`'s entry` };
     return { holds: true };
