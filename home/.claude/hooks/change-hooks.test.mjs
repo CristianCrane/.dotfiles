@@ -64,7 +64,8 @@ const write = (repo, kind, text) => {
 };
 
 // a repo on BRANCH, one commit past main, with the change skill's files
-// given: `review` writes one of HEAD, `lessons` and `body` their text
+// given: `review` writes one of HEAD (a string: its findings, after the
+// header), `lessons` and `body` their text (`body` may take HEAD's sha)
 const scratchRepo = ({ review = false, lessons, body } = {}) => {
   const repo = scratchDir();
   git(repo, "init", "-qb", "main");
@@ -72,8 +73,10 @@ const scratchRepo = ({ review = false, lessons, body } = {}) => {
   git(repo, "switch", "-qc", BRANCH);
   commit(repo, "b.txt", "b\n");
   const head = git(repo, "rev-parse", "--short", "HEAD");
-  if (review) write(repo, "review", `# Change review: ${BRANCH} @ ${head}, round 1, 0 open change findings\n`);
+  if (review)
+    write(repo, "review", `# Change review: ${BRANCH} @ ${head}, round 1, 0 open change findings\n${review === true ? "" : review}`);
   if (lessons !== undefined) write(repo, "lessons", lessons);
+  if (typeof body === "function") body = body(head);
   return { repo, body: body === undefined ? undefined : write(repo, "pr-body", body) };
 };
 
@@ -99,6 +102,26 @@ const STATES = {
   // ready to open as a draft: a review and a PR body, no lessons
   createDraft: ["review-gate", () => scratchRepo({ review: true, body: BODY })],
   noReview: ["review-gate", () => scratchRepo({ lessons: ROUTED, body: BODY })],
+  // a review with findings, and a PR body answering them in each form the
+  // reviewer's template has
+  answered: [
+    "review-gate",
+    () =>
+      scratchRepo({
+        review: "## Findings\nF1. [change] a\nF2. [text] b\nF3. [change] c\n",
+        body: (head) =>
+          `## Change\n- Review: F1 a → fixed in ${head}\n- Review: F2 b → fixed in the survey\n- Review: F3 c → answered: the user ruled\n`,
+      }),
+  ],
+  // each kind of line that doesn't answer its finding, F1 to F4
+  unanswered: [
+    "review-gate",
+    () =>
+      scratchRepo({
+        review: "## Findings\nF1. [change] a\nF2. [text] b\nF3. [change] c\nF4. [change] d\n",
+        body: "## Change\n- Review: F1 a → fixed in deadbee0\n- Review: F2 b → fixed: #313's body revised\n- Review: F3 c → answered on #266\n",
+      }),
+  ],
   // agent-gate reads only the tool call
   agent: ["agent-gate", () => ({ repo: scratchDir() })],
   // a checkout with no survey, and a folder outside any checkout
@@ -153,6 +176,13 @@ const CASES = [
   ["createDraft", "gh pr create --draft --body-file <body> 2>&1 --head other", /--head other runs from feature's checkout/],
   // F9: the gate checked gh pr ready and returned, skipping create's checks (red at d582e4f)
   ["noReview", "gh pr create --draft --body-file <body> && gh pr ready", /change review for feature isn't ready \(missing\)/],
+  ["answered", "gh pr create --draft --body-file <body>", THROUGH],
+  ["answered", "gh pr create --body-file <body>", NO_LESSONS],
+  // dotfiles#9: each says what's wrong with its line
+  ["unanswered", "gh pr create --draft --body-file <body>", /F1: `fixed in deadbee0` is no commit on this branch/],
+  ["unanswered", "gh pr create --draft --body-file <body>", /F2: it says fixed, but in no commit on this branch: a fix to the survey's text is `fixed in the survey`/],
+  ["unanswered", "gh pr create --draft --body-file <body>", /F3: `answered` takes a colon/],
+  ["unanswered", "gh pr create --draft --body-file <body>", /F4: no line names it/],
 
   // what runs before gh: a prefix or wrapper is gated, a mention isn't
   ...[`FOO="a b"`, `FOO='a b'`, "env", "command", "time", "nohup", "exec"].map((prefix) => [
@@ -199,7 +229,7 @@ const answer = (hookName, state, command) => {
 for (const [name, [hookName, build]] of Object.entries(STATES))
   describe(`${hookName}, ${name}`, () => {
     for (const [, command, expected] of CASES.filter(([state]) => state === name))
-      test(`${command}: ${expected ? "held" : "through"}`, () => {
+      test(`${command}: ${expected ? `held, ${expected.source}` : "through"}`, () => {
         const reason = answer(hookName, build(), command);
         if (expected === THROUGH) assert.equal(reason, null);
         else {

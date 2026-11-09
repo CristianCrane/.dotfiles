@@ -60,13 +60,15 @@ The header's sha is HEAD as you start (`git rev-parse --short HEAD`, before you 
 ```
 # Change review: <branch> @ <short sha>, <plan | round n | recheck of round n>, <k> open change findings
 ## Previous findings          (after the plan)
-- F<n> [change|text] <finding, as first written> → fixed in <sha> | open: <why> | reopened: <how> | conceded: <why> | held: <why> | ruled by the user: <ruling>
+- F<n> [change|text] <finding, as first written> → fixed in <sha> | fixed in the survey | answered: <where> | open: <why> | reopened: <how> | conceded: <why> | held: <why> | ruled by the user: <ruling>
 ## Findings
 F<n>. [change|text] <hunt>: <claim> — <paths>
    Simpler: <shape> (~<n> files)
 ## Searched
 - <each search you ran> → <what it found>
 ```
+
+A fix is `fixed in <sha>` only for a commit on the branch; a fix to the survey's text is `fixed in the survey`, and one anywhere else (an issue's body, a comment) is `answered: <where>`. The author copies these words into the PR's Review lines, and the PR gate accepts no others.
 
 Done when everything your mode covers has been searched, and `Searched` lists each search. "No findings" stands only with that list.
 

@@ -76,7 +76,7 @@ Write the PR body to `pr-body-…` beside the review (the gate names it) and ope
 ## Change
 - Extended | Retired | New: <pattern> — <paths>
 - Simpler shape considered: <a real shape>; <why not, or "done in <sha>">
-- Review: F<n> <finding> → fixed in <sha> | answered: <why, and the reviewer's or user's word on it>
+- Review: F<n> <finding> → fixed in <sha> | fixed in the survey | answered: <why, and the reviewer's or user's word on it>
 - Seen nearby: <problem> → fixed in <sha>
 - Harder to change: <what, or nothing>
 ```
