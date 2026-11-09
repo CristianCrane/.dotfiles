@@ -10,13 +10,16 @@
 // `--draft`) once the branch's lessons file (the `lessons` skill) says
 // where every lesson went, and the review is still of the last commit.
 import { existsSync, readFileSync } from "node:fs";
-import { argsOf, deny, dirOf, hook, lines, masked, onBranch, review, stateFile, workOf } from "./lib.mjs";
+import { argsOf, BOUNDARY, deny, dirOf, hook, lines, masked, onBranch, REDIRECT, review, stateFile, workOf } from "./lib.mjs";
 
 // where a command starts (not inside a message that mentions it), after
 // any VAR=value prefixes, with any gh flags before `pr`
 // (a VAR=value prefix's value may be quoted: in the masked text its quotes
 // hold blanks; a wrapper such as env, command or time runs gh all the same)
-const PR_STEP = /(?:^|[;&|(\n])\s*(?:(?:\w+=(?:"[^"]*"|'[^']*'|[^\s"'])*|env|command|time|nohup|exec)\s+)*gh\s+(?:-\S+(?:\s+[^-\s]\S*)?\s+)*pr\s+(create|ready)\b/g;
+const PR_STEP = new RegExp(
+  String.raw`(?:^|${BOUNDARY})\s*(?:(?:\w+=(?:"[^"]*"|'[^']*'|[^\s"'])*|env|command|time|nohup|exec)\s+)*gh\s+(?:-\S+(?:\s+[^-\s]\S*)?\s+)*pr\s+(create|ready)\b`,
+  "g",
+);
 
 // the branch `--head` names, if any, in this gh command's own arguments:
 // found in the masked text (so a title or body that mentions --head doesn't
@@ -195,7 +198,7 @@ const readyGate = (command, hidden, match, input) => {
   // `ready`; GH_REPO or GH_HOST anywhere in the command) could be another
   // branch's, so it's turned down. Redirects are no argument
   const named = args
-    .replace(/(?:\d*|&)[<>]+&?\s*\S*/g, " ")
+    .replace(new RegExp(REDIRECT, "g"), " ")
     .trim();
   const ghFlags = /gh\s+-/.test(hidden.slice(match.index, end));
   if (named || ghFlags || /\bGH_(?:REPO|HOST)\b/.test(command))

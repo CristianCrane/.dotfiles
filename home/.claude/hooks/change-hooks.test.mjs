@@ -42,7 +42,7 @@ import { dirname, join } from "node:path";
 import { after, describe, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { repoCopy, repoHooks } from "./copy.mjs";
-import { cwdFor, lines, stateFile } from "./lib.mjs";
+import { cwdFor, lines, stateFile, substitutions } from "./lib.mjs";
 
 const HOOKS = dirname(fileURLToPath(import.meta.url));
 const BRANCH = "feature";
@@ -308,6 +308,9 @@ const CASES = [
   ]),
   ["noLessons", "echo env gh pr ready", THROUGH],
   ["noLessons", `git commit -m "then gh pr ready"`, THROUGH],
+  // lib's one command boundary: a redirect's & starts no command, a paren does
+  ["noLessons", "git push 2>&1 && gh pr ready", NO_LESSONS],
+  ["noLessons", "(gh pr ready)", NO_LESSONS],
 
   // the body's shape (the change skill's PR body step)
   ["bodyMore", "gh pr create --draft --body-file <body>", THROUGH],
@@ -344,6 +347,9 @@ const CASES = [
     "sleep 1 && pkill -fa x",
     "/usr/bin/pgrep -f x",
     'pgrep "x" -f',
+    // lib's argsOf: a redirect's & doesn't end pgrep's arguments (went through before)
+    "pgrep x 2>&1 -f",
+    "(pgrep -f x)",
   ].map((command) => ["process", command, SELF_MATCH]),
   ...[
     "pgrep -x node",
@@ -505,7 +511,29 @@ test("cwdFor: a command's last cd, an edit's file", () => {
   assert.equal(bash(`cd /tmp; cd ${repo}`), repo);
   assert.equal(bash(`echo "cd ${repo}"`), outside);
   assert.equal(bash("git status"), outside);
+  assert.equal(bash(`cd /tmp 2>&1; cd ${repo} 2>/dev/null && git status`), repo);
+  assert.equal(bash(`cd ${repo}; echo "$(cd /tmp)" && git status`), repo);
+  assert.equal(bash(`cd ${repo}; diff <(cd /tmp && ls) b`), repo);
   assert.equal(cwdFor({ tool_input: { file_path: join(repo, "b.txt") }, cwd: outside }), repo);
+});
+
+// the substitutions the shell runs, wherever it runs them: in double
+// quotes and unquoted heredocs too (masked() blanks those), never in
+// single quotes or a quoted-tag heredoc
+test("substitutions: each the shell runs, outermost first", () => {
+  const inner = (command) => substitutions(command).map((found) => found.inner);
+  assert.deepEqual(inner('echo "$(pnpm test)"'), ["pnpm test"]);
+  assert.deepEqual(inner("cat <<EOF\n$(pnpm test)\nEOF"), ["pnpm test"]);
+  assert.deepEqual(inner("cat <<'EOF'\n$(pnpm test) `x`\nEOF"), []);
+  assert.deepEqual(inner("rg -n '$(x)|`y`' ."), []);
+  assert.deepEqual(inner('rg x "`node -e 1`"'), ["node -e 1"]);
+  assert.deepEqual(inner("diff <(git show a) >(tee out)"), ["git show a", "tee out"]);
+  assert.deepEqual(inner('rg "Promise<(A|B)>"'), []); // plain text in double quotes
+  assert.deepEqual(inner("git diff $(git merge-base HEAD $(git rev-parse x))..HEAD"), ["git merge-base HEAD $(git rev-parse x)"]);
+  assert.deepEqual(inner(`echo "it's $(a ")")"`), ['a ")"']);
+  assert.deepEqual(inner("echo $(a"), ["a"]);
+  const [found] = substitutions("x $(a) y");
+  assert.deepEqual([found.start, found.end], [2, 6]);
 });
 
 // prune-merged.mjs, run by hand and as the SessionStart hook, on a scratch

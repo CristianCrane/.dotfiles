@@ -72,8 +72,60 @@ export const masked = (command) =>
     .replace(/'[^']*'|"(?:\\.|[^"\\])*"/g, (quoted) => quoted[0] + " ".repeat(quoted.length - 2) + quoted[0]);
 
 // where one command ends and the next starts, in the masked text: an &
-// in a redirect (2>&1, >&2, &>f, <&0) is no command boundary
-export const BOUNDARY = String.raw`[;|\n]|(?<![<>])&(?!>)`;
+// in a redirect (2>&1, >&2, &>f, <&0) is no command boundary, nor is an
+// escaped character (find's `\(`), and a paren (a subshell, a
+// substitution) is one
+export const BOUNDARY = String.raw`(?<!\\)(?:[;|\n()]|(?<![<>])&(?!>))`;
+
+// a redirect, in the masked text: its fd, its operator, and its target
+// (group 1: a word, quoted or not), or an fd it copies or closes (>&2, <&-)
+export const REDIRECT = String.raw`(?:\d*|&)(?:>\||>>?|<>|<<<|<<-?|<)(?:&[\d-]|\s*((?:"[^"]*"|'[^']*'|[^\s;&|<>()'"])*))`;
+
+// the command substitutions the shell runs in `command`: $( ), backticks,
+// <( ) and >( ) (not in double quotes), outermost ones only, each as { start, end, inner } (its
+// command). None in single quotes or a quoted-tag heredoc's body, which are
+// literal; one left open runs to the end of the command
+export const substitutions = (command) => {
+  const bodies = [...command.matchAll(HEREDOC)].map((found) => {
+    const start = found.index + found[1].length;
+    return { start, end: start + found[4].length, quoted: Boolean(found[2]) };
+  });
+  const found = [];
+  // reads from `from` to the `close` that ends the substitution it's in
+  // (none at the top), and gives that close's index
+  const walk = (from, close, depth) => {
+    let double = false;
+    let parens = 0;
+    for (let at = from; at < command.length; at++) {
+      const body = bodies.find((one) => at >= one.start && at < one.end);
+      if (body?.quoted) {
+        at = body.end - 1;
+        continue;
+      }
+      // quotes are plain characters in an unquoted-tag heredoc's body, though
+      // not in a substitution there
+      const plain = body && depth === 0;
+      const char = command[at];
+      if (char === "\\") at++;
+      else if (close === "`" && char === "`") return at;
+      else if (!plain && char === '"') double = !double;
+      else if (!plain && !double && char === "'") {
+        const shut = command.indexOf("'", at + 1);
+        at = shut < 0 ? command.length : shut;
+      }
+      // <( ) and >( ) are plain text in double quotes; $( ) and backticks aren't
+      else if (char === "`" || (char === "(" && (command[at - 1] === "$" || (!double && /[<>]/.test(command[at - 1] ?? ""))))) {
+        const end = walk(at + 1, char === "`" ? "`" : ")", depth + 1);
+        if (depth === 0) found.push({ start: char === "`" ? at : at - 1, end: Math.min(end + 1, command.length), inner: command.slice(at + 1, end) });
+        at = end;
+      } else if (close === ")" && !double && char === "(") parens++;
+      else if (close === ")" && !double && char === ")" && parens-- === 0) return at;
+    }
+    return command.length;
+  };
+  walk(0, null, 0);
+  return found;
+};
 
 // a command's own arguments, from `end` up to the next command, in the
 // masked text (so a quoted title or body is blanks)
@@ -83,15 +135,12 @@ export const argsOf = (hidden, end) => {
 };
 
 // the folder a command runs in at `at`: the last `cd` before it, if any, found in the
-// masked command with `$( … )` blanked too (so a `cd` in a heredoc, a
-// quote or a command substitution doesn't count) and read from the original
+// masked command with its substitutions blanked too (so a `cd` in a
+// heredoc, a quote or a substitution doesn't count) and read from the original
 export const dirOf = (command, hidden, at, cwd) => {
-  let outside = hidden.slice(0, at);
-  for (let inner = ""; inner !== outside; ) {
-    inner = outside;
-    outside = outside.replace(/\$\([^()]*\)/g, (sub) => " ".repeat(sub.length));
-  }
-  const cds = [...outside.matchAll(/(?:^|[;&|(\n])\s*cd\s+("[^"]+"|'[^']+'|[^\s;&|)]+)/dg)];
+  const outside = hidden.slice(0, at).split("");
+  for (const { start, end } of substitutions(command)) outside.fill(" ", start, end);
+  const cds = [...outside.join("").matchAll(new RegExp(String.raw`(?:^|${BOUNDARY})\s*cd\s+("[^"]+"|'[^']+'|[^\s;&|)]+)`, "dg"))];
   if (cds.length === 0) return cwd;
   const [start, end] = cds.at(-1).indices[1];
   const dir = command.slice(start, end).replace(/^["']|["']$/g, "").replace(/^~(?=\/|$)/, homedir());
