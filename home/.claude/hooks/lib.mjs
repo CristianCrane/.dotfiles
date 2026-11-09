@@ -259,9 +259,86 @@ const planReview = (cwd, key) => {
   return existsSync(path) ? { path, ok: true } : { path, ok: false, reason: "missing" };
 };
 
-// what an edit waits for: the survey, then the plan review; `missing`
-// says the first one not done yet
-export const beforeEdit = (cwd, work) => {
+// A dictated change (the change skill's rule): a config change the user
+// dictated exactly skips the plan review and the review, held as tight as
+// a gate can hold it. Its survey is one line, `dictated:` and the user's
+// words in double quotes, found (whitespace aside) in a message the user
+// typed: the transcript's `origin.kind: "human"` entries, never an
+// agent's relay, a tool result or a task notification (a subagent's hook
+// input carries the main session's transcript_path, seen live). It names
+// one file, a Claude settings file, and that file is the whole change.
+// Both sides parse as JSON, and the key paths that differ (an array's
+// entries by value) all fall under DICTATED, five at most.
+const DICTATED = /^(?:permissions\.(?:allow|deny|ask)\[|enabledPlugins\.|model$|theme$)/;
+const DICTATED_MOST = 5;
+
+// a JSON value's leaves as { path: value }, an array's entries by value
+const leaves = (value, path = "", into = {}) => {
+  if (Array.isArray(value)) for (const entry of value) into[`${path}[${JSON.stringify(entry)}]`] = true;
+  else if (value && typeof value === "object")
+    for (const [key, inner] of Object.entries(value)) leaves(inner, path ? `${path}.${key}` : key, into);
+  else into[path] = JSON.stringify(value);
+  return into;
+};
+
+// whether the user typed `quote` in this session
+const userTyped = (transcript, quote) => {
+  const flat = (text) => text.replace(/\s+/g, " ").trim();
+  const wanted = flat(quote);
+  return lines(readFileSync(transcript, "utf8")).some((line) => {
+    try {
+      const entry = JSON.parse(line);
+      if (entry.type !== "user" || entry.isMeta || entry.origin?.kind !== "human") return false;
+      const content = entry.message?.content;
+      const text = typeof content === "string" ? content : (content ?? []).map((part) => (part.type === "text" ? part.text : "")).join(" ");
+      return flat(text).includes(wanted);
+    } catch {
+      return false;
+    }
+  });
+};
+
+// null when the survey isn't dictated; else { holds: true }, or { why }:
+// the first limit the change is past. `pending` is the edit about to be
+// made, { path, content }, if any
+export const dictatedHolds = (cwd, work, input, pending) => {
+  const path = stateFile(cwd, "survey", work.key);
+  if (!existsSync(path)) return null;
+  const said = lines(readFileSync(path, "utf8")).filter((line) => line.trim());
+  const quote = said.length === 1 && said[0].match(/\bdictated:.*?"([^"]{8,})"/)?.[1];
+  if (!quote) return null;
+  try {
+    if (!input.transcript_path || !userTyped(input.transcript_path, quote))
+      return { why: "its quote isn't in a message the user typed in this session (a relay or your own words don't count)" };
+    const top = topOf(cwd);
+    const named = [...new Set(said[0].split(/[\s,;()`'"<>]+/).filter((word) => /[/.]/.test(word) && existsSync(isAbsolute(word) ? word : join(top, word))))];
+    if (named.length !== 1) return { why: "it doesn't name exactly one file" };
+    const file = isAbsolute(named[0]) ? named[0].slice(top.length + 1) : named[0];
+    if (!/(?:^|\/)\.claude\/settings(?:\.local)?\.json$/.test(file)) return { why: `${file} isn't a Claude settings file` };
+    const changed = changedFiles(cwd);
+    if (pending) changed.add((existsSync(pending.path) ? realpathSync(pending.path) : resolve(pending.path)).slice(top.length + 1));
+    if ([...changed].some((one) => one !== file)) return { why: `the change goes past ${file}` };
+    let before = {};
+    try {
+      before = JSON.parse(git(top, "show", `${base(top)}:${file}`));
+    } catch (error) {
+      if (lines(git(top, "ls-tree", "--name-only", base(top), "--", file)).length) throw error;
+    }
+    const after = JSON.parse(pending ? pending.content : readFileSync(join(top, file), "utf8"));
+    const [old, now] = [leaves(before), leaves(after)];
+    const differ = [...new Set([...Object.keys(old), ...Object.keys(now)])].filter((key) => old[key] !== now[key]);
+    const outside = differ.find((key) => !DICTATED.test(key));
+    if (outside) return { why: `it changes \`${outside}\`, where only permission rules, plugins, the model or the theme may change` };
+    if (differ.length > DICTATED_MOST) return { why: `it changes ${differ.length} entries, more than ${DICTATED_MOST}` };
+    return { holds: true };
+  } catch {
+    return { why: "its file or its base doesn't read as JSON" };
+  }
+};
+
+// what an edit waits for: the survey, then the plan review (unless the
+// change is dictated and holds); `missing` says the first one not done yet
+export const beforeEdit = (cwd, work, input = {}, pending = null) => {
   const found = survey(cwd, work.key);
   if (!found.ok)
     return {
@@ -271,11 +348,16 @@ export const beforeEdit = (cwd, work) => {
         : `there is no survey for ${work.branch}: load the \`change\` skill and write its survey to ${found.path}`,
     };
   const plan = planReview(cwd, work.key);
-  if (!plan.ok)
+  if (!plan.ok) {
+    const dictated = dictatedHolds(cwd, work, input, pending);
+    if (dictated?.holds) return { survey: found, missing: null };
     return {
       survey: found,
-      missing: `the survey for ${work.branch} has no plan review: run the change-reviewer agent on it in plan mode, as the \`change\` skill's Plan review step says, with survey ${found.path} and output ${plan.path}`,
+      missing: dictated
+        ? `the survey for ${work.branch} is dictated, but ${dictated.why}. A dictated change is one Claude settings file the user named, changing only permission rules, plugins, the model or the theme; anything wider gets the full flow: a full survey (${found.path}) and its plan review (the change-reviewer agent in plan mode, output ${plan.path})`
+        : `the survey for ${work.branch} has no plan review: run the change-reviewer agent on it in plan mode, as the \`change\` skill's Plan review step says, with survey ${found.path} and output ${plan.path}`,
     };
+  }
   return { survey: found, missing: null };
 };
 
@@ -357,10 +439,15 @@ const LAST_ROUND = 5;
 // round it must leave no change finding open (after it the user decides). The
 // reviewer's header line says all three: "… @ <sha>, round <n>, <k> open
 // change findings", where a recheck says "recheck of round <n>", keeping
-// the number.
-export const review = (cwd, key) => {
-  const path = stateFile(cwd, "review", key);
-  if (!existsSync(path)) return { path, ok: false, reason: "missing" };
+// the number. A dictated change that holds (dictatedHolds) has no review,
+// and passes with no findings.
+export const review = (cwd, work, input = {}) => {
+  const path = stateFile(cwd, "review", work.key);
+  if (!existsSync(path)) {
+    const dictated = dictatedHolds(cwd, work, input, null);
+    if (dictated?.holds) return { path, ok: true, ids: [] };
+    return { path, ok: false, reason: dictated ? `missing: its survey is dictated, but ${dictated.why}, so it takes the full flow` : "missing" };
+  }
   const text = readFileSync(path, "utf8");
   // the first `round <n>` after the sha, and the first open count after
   // that, whatever words come between (a "(with a recheck of …)")

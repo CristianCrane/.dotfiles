@@ -135,7 +135,7 @@ const createGate = (command, hidden, match, input) => {
       `gh pr create --head ${head} runs from ${work.branch}'s checkout (${cwd}), but a branch's change review lives with its own checkout. Run it from ${head}'s checkout: git switch ${head} first, as its own command, or in its worktree.`,
     );
 
-  const found = review(cwd, work.key);
+  const found = review(cwd, work, input);
   if (!found.ok)
     return turnDownCreate(
       `The change review for ${work.branch} isn't ready (${found.reason}). Run the change-reviewer agent as the \`change\` skill's Review step says, with output ${found.path}. Answer each finding in the PR's Change section, then open the PR. (This checked ${work.branch}, checked out in ${cwd} when the command started.)`,
@@ -212,7 +212,7 @@ const readyGate = (command, hidden, match, input) => {
 
   // the review still holds: of the last commit, so the lessons commit got
   // its recheck
-  const found = review(cwd, work.key);
+  const found = review(cwd, work, input);
   if (!found.ok)
     return turnDown(
       `The change review for ${work.branch} isn't ready (${found.reason}), with output ${found.path}: finish it as the \`change\` skill's Review step says (after a lessons commit, that's the recheck of it), then mark the PR ready.`,

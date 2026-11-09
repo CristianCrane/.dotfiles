@@ -730,6 +730,62 @@ test("survey-gate on main: one survey per change, until it's pushed", () => {
   assert.equal(edit(local), null, "no origin: the session's survey, as before");
 });
 
+// a dictated settings change (the change skill's rule): its one-line
+// survey skips the plan review and the review only while the user typed
+// its quote and the change is the one settings file it names, changing
+// only permission rules, plugins, the model or the theme, five entries at
+// most (the old gate asked for a plan review: red on it)
+test("dictated: a settings change the user typed out skips the reviews, and nothing wider does", () => {
+  const SAID = "add a deny rule for Skill(x:pr) please";
+  const settings = { permissions: { deny: ["Bash(rm *)"] }, hooks: { PreToolUse: [{ matcher: "Edit|Write", hooks: [] }] } };
+  const json = (value) => `${JSON.stringify(value, null, 2)}\n`;
+  // a branch at main, whose settings file is in it; the survey and a transcript
+  // where `said` came as `origin`
+  const setUp = ({ survey = `dictated: "${SAID}" .claude/settings.json\n`, origin = { kind: "human" }, isMeta = false } = {}) => {
+    const { repo } = scratchRepo();
+    git(repo, "switch", "-q", "main");
+    mkdirSync(join(repo, ".claude"));
+    commit(repo, ".claude/settings.json", json(settings));
+    git(repo, "switch", "-q", BRANCH);
+    git(repo, "reset", "-q", "--hard", "main"); // nothing else on the branch
+    write(repo, "survey", survey);
+    const transcript = join(scratchDir(), "t.jsonl");
+    const entries = [
+      { type: "user", origin: { kind: "human" }, message: { role: "user", content: "hi" } },
+      { type: "user", origin, isMeta, message: { role: "user", content: `well: ${SAID.replace(/ /g, "\n ")}` } },
+    ];
+    writeFileSync(transcript, entries.map((entry) => JSON.stringify(entry)).join("\n") + "\n");
+    return { repo, transcript };
+  };
+  const run = (hook, { repo, transcript }, tool_input) => {
+    const ran = spawnSync(process.execPath, [join(HOOKS, `${hook}.mjs`)], {
+      input: JSON.stringify({ tool_input, cwd: repo, session_id: "s", transcript_path: transcript }),
+      encoding: "utf8",
+    });
+    return ran.stdout.trim() ? JSON.parse(ran.stdout).hookSpecificOutput.permissionDecisionReason : null;
+  };
+  const editTo = (state, value, file = ".claude/settings.json") =>
+    run("survey-gate", state, { file_path: join(state.repo, file), content: json(value) });
+  const deny = (...rules) => ({ ...settings, permissions: { deny: [...settings.permissions.deny, ...rules] } });
+
+  const plain = setUp();
+  assert.equal(editTo(plain, deny("Skill(x:pr)")), null, "a dictated deny rule waits for no plan review");
+  assert.match(editTo(plain, { ...settings, hooks: { PreToolUse: [{ matcher: "Write", hooks: [] }] } }), /is dictated, but it changes `hooks\.PreToolUse\[/);
+  assert.match(editTo(plain, deny("a", "b", "c", "d", "e", "f")), /is dictated, but it changes 6 entries, more than 5/);
+  assert.match(editTo(plain, { a: 1 }, ".claude/other.json"), /is dictated, but the change goes past \.claude\/settings\.json/);
+  assert.match(editTo(setUp({ origin: { kind: "peer", from: "a1" }, isMeta: true }), deny("Skill(x:pr)")), /isn't in a message the user typed/);
+  assert.match(editTo(setUp({ survey: `dictated: "${SAID}" .claude/settings.json\nPlan: none\n` }), deny("Skill(x:pr)")), /has no plan review/);
+
+  // committed, it needs no review to leave draft, only its lessons
+  writeFileSync(join(plain.repo, ".claude/settings.json"), json(deny("Skill(x:pr)")));
+  git(plain.repo, "commit", "-qam", "deny");
+  write(plain.repo, "lessons", "Ruled out:\n- none: dictated\n");
+  assert.equal(run("review-gate", plain, { command: "gh pr ready" }), null, "a dictated change has no review to wait for");
+  writeFileSync(join(plain.repo, ".claude/settings.json"), json({ ...deny("Skill(x:pr)"), env: { A: "1" } }));
+  git(plain.repo, "commit", "-qam", "env");
+  assert.match(run("review-gate", plain, { command: "gh pr ready" }), /its survey is dictated, but it changes `env\.A`/);
+});
+
 // a shell command's checkout is where its last cd leaves it, a cd in quoted
 // text not counting; an edit's, its file's
 test("cwdFor: a command's last cd, an edit's file", () => {
