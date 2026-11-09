@@ -78,7 +78,7 @@ const write = (repo, kind, text) => {
 // a repo on BRANCH, one commit past main, with the change skill's files
 // given: `review` writes one of HEAD (a string: its findings, after the
 // header; `header` replaces the header's words after the sha), `lessons`
-// and `body` their text (`body` may take HEAD's sha)
+// and `body` their text (`body` may take HEAD's full sha)
 const scratchRepo = ({ review = false, header = "round 1, 0 open change findings", lessons, body } = {}) => {
   const repo = scratchDir();
   git(repo, "init", "-qb", "main");
@@ -89,12 +89,26 @@ const scratchRepo = ({ review = false, header = "round 1, 0 open change findings
   if (review)
     write(repo, "review", `# Change review: ${BRANCH} @ ${head}, ${header}\n${review === true ? "" : review}`);
   if (lessons !== undefined) write(repo, "lessons", lessons);
-  if (typeof body === "function") body = body(head);
+  if (typeof body === "function") body = body(git(repo, "rev-parse", "HEAD"));
   return { repo, body: body === undefined ? undefined : write(repo, "pr-body", body) };
 };
 
 const ROUTED = "- A lesson → home/.claude/CLAUDE.md\n";
-const BODY = "## Change\n- New: nothing\n";
+// a PR body in the change skill's shape, its permalinks at `head`, with
+// `change` as its Change section's lines; `parts` replaces a part's text,
+// or leaves it out (null)
+const prBody = (head, change = "- New: nothing\n", parts = {}) =>
+  Object.values({
+    problem: "**Problem:** a thing is wrong.\n",
+    fix: "**Fix:** it's right now.\n",
+    check: `**Check these:**\n${[1, 2, 3].map((n) => `- [b.txt](https://github.com/o/r/blob/${head}/b.txt#L${n}): why\n`).join("")}`,
+    change: `<details><summary>Change</summary>\n\n## Change\n${change}\n</details>\n`,
+    footer: "Generated with Claude Code\n",
+    ...parts,
+  })
+    .filter((part) => part !== null)
+    .join("\n");
+const BODY = (head) => prBody(head);
 
 // each state: the hook it feeds, and how its scratch repo is built
 const STATES = {
@@ -123,7 +137,7 @@ const STATES = {
       scratchRepo({
         review: "## Findings\nF1. [change] a\nF2. [text] b\nF3. [change] c\n",
         body: (head) =>
-          `## Change\n- Review: F1 a → fixed in ${head}\n- Review: F2 b → fixed in the survey\n- Review: F3 c → answered: the user ruled\n`,
+          prBody(head, `- Review: F1 a → fixed in ${head.slice(0, 7)}\n- Review: F2 b → fixed in the survey\n- Review: F3 c → answered: the user ruled\n`),
       }),
   ],
   // each kind of line that doesn't answer its finding, F1 to F4
@@ -132,7 +146,8 @@ const STATES = {
     () =>
       scratchRepo({
         review: "## Findings\nF1. [change] a\nF2. [text] b\nF3. [change] c\nF4. [change] d\n",
-        body: "## Change\n- Review: F1 a → fixed in deadbee0\n- Review: F2 b → fixed: #313's body revised\n- Review: F3 c → answered on #266\n",
+        body: (head) =>
+          prBody(head, "- Review: F1 a → fixed in deadbee0\n- Review: F2 b → fixed: #313's body revised\n- Review: F3 c → answered on #266\n"),
       }),
   ],
   // a survey that names its file by a short name only, and one that
@@ -178,6 +193,27 @@ const STATES = {
       headerRecheck: "recheck of round 2, 0 open change findings",
       headerNoRound: "plan, 0 open change findings",
     }).map(([name, header]) => [name, ["review-gate", () => scratchRepo({ review: true, header, body: BODY })]]),
+  ),
+  // PR bodies out of the change skill's shape, each a part replaced (bodyMore
+  // has every part, and headings in fenced code)
+  ...Object.fromEntries(
+    Object.entries({
+      bodyMore: (head) => ({
+        before: "**Before / after:**\n| Before | After |\n| --- | --- |\n| a | b |\n",
+        tests: "**Tests:**\n- [a test](x): red on the old code\n\n```\n## Summary\n**Evidence:** in code\n```\n",
+        check: `**Check these:**\n${[1, 2, 3, 4, 5].map((n) => `- https://github.com/o/r/blob/${head}/b.txt#L${n}\n`).join("")}`,
+      }),
+      bodyBare: () => ({ problem: null, fix: "**Fix:**\n" }),
+      bodyExtra: () => ({ problem: "## Summary\n\n**Problem:** a thing.\n\n**Evidence:** it ran\n\n### Merge Danger\n" }),
+      bodyFewLinks: (head) => ({ check: `**Check these:**\n- https://github.com/o/r/blob/${head}/b.txt#L1\n- https://github.com/o/r/blob/main/b.txt\n` }),
+      bodyLinksElsewhere: (head) => ({
+        check: `**Check these:**\n${[head, head, "0".repeat(40)].map((sha) => `- https://github.com/o/r/blob/${sha}/b.txt\n`).join("")}`,
+      }),
+      bodyOpen: () => ({ change: "## Change\n- New: nothing\n" }),
+      bodyNoBlank: () => ({ change: "<details><summary>Change</summary>\n## Change\n- New: nothing\n</details>\n" }),
+      bodyUnclosed: () => ({ change: "<details><summary>Change</summary>\n\n## Change\n- New: nothing\n" }),
+      bodyShown: () => ({ change: "<details open><summary>Change</summary>\n\n## Change\n- New: nothing\n</details>\n" }),
+    }).map(([name, parts]) => [name, ["review-gate", () => scratchRepo({ review: true, body: (head) => prBody(head, undefined, parts(head)) })]]),
   ),
   // agent-gate reads only the tool call
   agent: ["agent-gate", () => ({ repo: scratchDir() })],
@@ -252,6 +288,19 @@ const CASES = [
   ]),
   ["noLessons", "echo env gh pr ready", THROUGH],
   ["noLessons", `git commit -m "then gh pr ready"`, THROUGH],
+
+  // the body's shape (the change skill's PR body step)
+  ["bodyMore", "gh pr create --draft --body-file <body>", THROUGH],
+  ["bodyMore", "gh pr create --body-file <body>", NO_LESSONS],
+  ["bodyBare", "gh pr create --draft --body-file <body>", /no `\*\*Problem:\*\*` line with its sentence; no `\*\*Fix:\*\*` line/],
+  ["bodyExtra", "gh pr create --draft --body-file <body>", /parts it doesn't have: `\*\*Evidence:\*\*`, `## Summary`, `### Merge Danger`/],
+  ["bodyFewLinks", "gh pr create --draft --body-file <body>", /has 1 permalink\(s\) .*, not 3 to 5/],
+  ["bodyLinksElsewhere", "gh pr create --draft --body-file <body>", /links at 0000000, no commit on this branch/],
+  ...["bodyOpen", "bodyNoBlank", "bodyUnclosed", "bodyShown"].map((state) => [
+    state,
+    "gh pr create --draft --body-file <body>",
+    /no `## Change` collapsed as/,
+  ]),
 
   ["headerAside", "gh pr create --draft --body-file <body>", THROUGH],
   ["headerAside", "gh pr create --body-file <body>", NO_LESSONS],
