@@ -26,6 +26,7 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
+  renameSync,
   rmSync,
   symlinkSync,
   utimesSync,
@@ -463,14 +464,20 @@ describe("prune-merged", () => {
       git(main, "worktree", "add", "-q", "--detach", join(dir, "off-main"), "main");
       commit(join(dir, "off-main"), "off.txt", "off\n");
     }
-    // every worktree so far last used 7 hours ago; then one used just now
-    const then = new Date(Date.now() - 7 * 60 * 60 * 1000);
-    for (const path of lines(git(main, "worktree", "list", "--porcelain")).filter((line) => line.startsWith("worktree "))) {
-      const gitDir = git(path.slice("worktree ".length), "rev-parse", "--absolute-git-dir");
-      for (const file of ["HEAD", "logs/HEAD"]) utimesSync(join(gitDir, file), then, then);
-    }
+    age(main);
     branch("fresh", "MERGED");
     return { dir, main, bin: fakeGh(prs) };
+  };
+
+  // every worktree there is last used 7 hours ago
+  const age = (main) => {
+    const then = new Date(Date.now() - 7 * 60 * 60 * 1000);
+    for (const line of lines(git(main, "worktree", "list", "--porcelain"))) {
+      const path = line.slice("worktree ".length);
+      if (!line.startsWith("worktree ") || !existsSync(path)) continue;
+      const gitDir = git(path, "rev-parse", "--absolute-git-dir");
+      for (const file of ["HEAD", "logs/HEAD"]) utimesSync(join(gitDir, file), then, then);
+    }
   };
 
   const prune = (bin, cwd, ...args) =>
@@ -546,5 +553,61 @@ describe("prune-merged", () => {
     const byHand = prune(offline, main);
     assert.equal(byHand.status, 1);
     assert.match(byHand.stderr, /^prune-merged: error connecting to api\.github\.com$/m);
+  });
+  // a branch brought into main with no PR (the dotfiles' own way, round 1
+  // F8) goes like a merged one; an unmerged worktree moved by `mv` keeps
+  // its entry, so `git worktree repair` can still find it (round 1 F7)
+  test("a branch in main with no PR goes; another worktree's entry stays", () => {
+    const { dir, main, bin } = scratch(["live"]);
+    const ff = join(dir, "ff");
+    git(main, "worktree", "add", "-q", "-b", "ff", ff, "main");
+    commit(ff, "ff.txt", "ff\n");
+    git(main, "merge", "-q", "--ff-only", "ff");
+    git(main, "push", "-q", "origin", "main");
+    const wip = join(dir, "wip");
+    git(main, "worktree", "add", "-q", "-b", "wip", wip, "main");
+    commit(wip, "wip.txt", "wip\n");
+    renameSync(wip, join(dir, "wip-moved"));
+    age(main);
+    const ran = prune(bin, main);
+    assert.equal(ran.status, 0, ran.stderr);
+    assert.match(ran.stdout, /^Removed 1 worktree:\n {2}\.\.\/ff \(ff, in origin\/main\)$/m);
+    assert.match(ran.stdout, /^Deleted 1 local branch: ff$/m);
+    assert.ok(existsSync(join(main, ".git/worktrees/wip")));
+    git(main, "worktree", "repair", join(dir, "wip-moved"));
+    assert.equal(git(join(dir, "wip-moved"), "branch", "--show-current"), "wip");
+  });
+
+  // round 1 F6: a run never sweeps a tree another live run moved aside
+  test("one run at a time: a live run's lock holds, a dead run's is taken over", () => {
+    const { dir, main, bin } = scratch(["done"]);
+    age(main);
+    const held = join(main, ".git/claude/prune-merged.lock");
+    mkdirSync(held, { recursive: true });
+    writeFileSync(join(held, "pid"), String(process.pid));
+    assert.match(prune(bin, main).stdout, /^Another prune-merged run has this repo/);
+    assert.equal(prune(bin, main, "--hook").stdout, "");
+    assert.ok(existsSync(join(dir, "done")));
+    writeFileSync(join(held, "pid"), String(spawnSync("true").pid));
+    assert.match(prune(bin, main).stdout, /^Removed 1 worktree:/);
+    assert.ok(!existsSync(held));
+  });
+
+  // what a killed run left: a folder whose entry went was checked, and is
+  // deleted; one whose entry stands is checked now, and with changes kept
+  test("a killed run's leftovers: a checked one goes, one with changes is kept", () => {
+    const { dir, main, bin } = scratch(["done"]);
+    age(main);
+    const trash = join(main, ".git/claude/pruned");
+    mkdirSync(join(trash, "old-1"), { recursive: true });
+    writeFileSync(join(trash, "old-1/x.txt"), "x\n");
+    renameSync(join(dir, "done"), join(trash, "done-2"));
+    writeFileSync(join(trash, "done-2/notes.txt"), "not yet\n");
+    const ran = prune(bin, main);
+    assert.equal(ran.status, 0, ran.stderr);
+    assert.match(ran.stdout, /^ {2}\.git\/claude\/pruned-kept\/done-2: changes turned up as it was removed$/m);
+    assert.deepEqual(readdirSync(trash), []);
+    assert.ok(existsSync(join(main, ".git/claude/pruned-kept/done-2/notes.txt")));
+    assert.ok(existsSync(join(main, ".git/worktrees/done")));
   });
 });

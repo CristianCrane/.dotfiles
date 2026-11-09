@@ -13,21 +13,33 @@
 // can't run (no network, no gh, not on GitHub).
 //
 // What goes:
-// - a worktree other than the main checkout, whose branch's merged PR holds
-//   its HEAD (or whose detached HEAD is in origin's default branch), when it
-//   has no uncommitted or untracked changes, isn't locked, no process works
-//   in it, and it wasn't used for RECENT. Agents work in a worktree by
-//   `cd <it> && …` on each call (agent-gate.mjs), so between calls no
-//   process is there: only its last use shows it's live.
-// - a branch, local or on origin, whose merged PR holds its tip, when no
-//   open PR has its name; never the default branch, nor one checked out.
-//   On origin only your own PR's branch, and only if it is still where it
-//   was fetched (a lease).
+// - a worktree other than the main checkout whose branch's merged PR holds
+//   its HEAD, or whose HEAD (detached, or on a branch with no PR) is in
+//   origin's default branch: a base made to compare with, or a branch
+//   brought into main with no PR. Only when it has no uncommitted or
+//   untracked changes, isn't locked, no process works in it, and it wasn't
+//   used for RECENT. Agents work in a worktree by `cd <it> && …` on each
+//   call (agent-gate.mjs), so between calls no process is there: only its
+//   last use shows it's live.
+// - a branch whose merged PR holds its tip, when no open PR has its name,
+//   and a local branch in origin's default branch; never the default branch
+//   nor one checked out. On origin only your own PR's branch, and only if
+//   it is still where it was fetched (a lease).
 // A branch with no PR, a PR closed unmerged, commits its merged PR lacks,
 // or (on origin) another author's PR is listed and kept: the user decides.
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, readlinkSync, renameSync, rmSync, statSync } from "node:fs";
-import { basename, join, relative } from "node:path";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  readlinkSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { basename, dirname, join, relative } from "node:path";
 import { git, hook, lines, topOf } from "./lib.mjs";
 
 // how long a worktree stays after its last use: empire-cleaning's live ones
@@ -133,11 +145,57 @@ const erase = (dir) => {
   if (ran.status !== 0 && existsSync(dir)) rmSync(dir, { recursive: true, force: true });
 };
 
-// removes a worktree in one step a kill can't leave half done: its folder
-// moves into `trash` (a rename), is checked for changes once more there
-// (and moved back if it has any), its entry is pruned, and only then is it
-// deleted. Across disks, `git worktree remove` does it instead.
-const remove = (main, trash, wt) => {
+// the entry in the repo's git dir that a worktree's `.git` file names, or
+// null
+const entryOf = (tree) => {
+  try {
+    return readFileSync(join(tree, ".git"), "utf8").match(/^gitdir: (.+)$/m)?.[1].trim() ?? null;
+  } catch {
+    return null;
+  }
+};
+
+// One run per repo at a time, so none deletes a tree another has just moved
+// aside and not yet checked: a lock folder (made atomically) holding its
+// pid. A dead run's lock is taken over; one with no pid yet counts as live
+// for a minute.
+const lock = (dir) => {
+  mkdirSync(dirname(dir), { recursive: true });
+  for (let tries = 0; tries < 2; tries++) {
+    try {
+      mkdirSync(dir);
+      writeFileSync(join(dir, "pid"), String(process.pid));
+      return true;
+    } catch (error) {
+      if (error.code !== "EEXIST") throw error;
+    }
+    let pid;
+    try {
+      pid = Number(readFileSync(join(dir, "pid"), "utf8"));
+    } catch {
+      if (Date.now() - statSync(dir).mtimeMs < 60_000) return false;
+    }
+    if (pid) {
+      try {
+        process.kill(pid, 0);
+        return false;
+      } catch (error) {
+        if (error.code === "EPERM") return false;
+      }
+    }
+    rmSync(dir, { recursive: true, force: true });
+  }
+  return false;
+};
+
+// Removes a worktree in steps a kill can't leave half done: its folder
+// moves into `trash` (a rename) and is checked for changes once more there
+// (moved back if it has any, or into `held` if it can't go back), then its
+// own entry in the git dir goes (never another's, as `git worktree prune`
+// would take), and only then is the folder deleted. Across disks, `git
+// worktree remove` does it instead.
+const remove = (main, trash, held, wt) => {
+  const entry = entryOf(wt.path);
   mkdirSync(trash, { recursive: true });
   const aside = join(trash, `${basename(wt.path)}-${Date.now()}`);
   try {
@@ -148,14 +206,44 @@ const remove = (main, trash, wt) => {
     return;
   }
   if (git(aside, "status", "--porcelain")) {
-    renameSync(aside, wt.path);
+    try {
+      renameSync(aside, wt.path);
+    } catch {
+      mkdirSync(held, { recursive: true });
+      renameSync(aside, join(held, basename(aside)));
+      throw new Error(`changes turned up as it was removed, and it couldn't go back: it is in ${held}`);
+    }
     throw new Error("changes turned up as it was removed");
   }
-  git(main, "worktree", "prune");
+  if (entry) rmSync(entry, { recursive: true, force: true });
   erase(aside);
 };
 
-// what goes and what stays, and with `dry` false, removes it
+// finishes what a killed run left in `trash`: a folder whose entry is gone
+// was checked, and is deleted; one whose entry is still there wasn't, so
+// it's checked now, and goes, or moves into `held` (returned) to be kept
+const sweep = (trash, held) => {
+  if (!existsSync(trash)) return [];
+  const kept = [];
+  for (const name of readdirSync(trash)) {
+    const left = join(trash, name);
+    const entry = entryOf(left);
+    if (entry && existsSync(entry)) {
+      if (git(left, "status", "--porcelain")) {
+        mkdirSync(held, { recursive: true });
+        renameSync(left, join(held, name));
+        kept.push(join(held, name));
+        continue;
+      }
+      rmSync(entry, { recursive: true, force: true });
+    }
+    erase(left);
+  }
+  return kept;
+};
+
+// what goes and what stays, and with `dry` false, removes it; null when
+// another run has the repo
 const prune = (cwd, dry) => {
   const all = worktrees(cwd);
   const main = all[0].path;
@@ -190,27 +278,49 @@ const prune = (cwd, dry) => {
     ).filter((pr) => !pr.isCrossRepository),
     (pr) => pr.headRefName,
   );
-  run(main, "git", "fetch", "--prune", "--quiet", "origin");
-  const trash = join(git(main, "rev-parse", "--path-format=absolute", "--git-common-dir"), "claude/pruned");
-  if (!dry) {
-    // what a run cut short left
-    if (existsSync(trash)) readdirSync(trash).forEach((left) => erase(join(trash, left)));
-    git(main, "worktree", "prune");
+  const claude = join(git(main, "rev-parse", "--path-format=absolute", "--git-common-dir"), "claude");
+  const [trash, held, locked] = ["pruned", "pruned-kept", "prune-merged.lock"].map((name) => join(claude, name));
+  if (dry) return judge(main, base, viewer, prs, true);
+  if (!lock(locked)) return null;
+  try {
+    const stuck = sweep(trash, held);
+    const done = judge(main, base, viewer, prs, false, (wt) => remove(main, trash, held, wt));
+    done.kept.push(
+      ...stuck.map((path) => ({ where: relative(main, path), branch: null, why: "changes turned up as it was removed", stuck: true })),
+    );
+    return done;
+  } finally {
+    rmSync(locked, { recursive: true, force: true });
   }
+};
 
-  // what a branch's PRs say of its tip: { open }, { merged }, or { keep: why }
+// what goes and what stays, judged on a fresh fetch, and unless `dry`,
+// removed (`removeTree` for a worktree)
+const judge = (main, base, viewer, prs, dry, removeTree) => {
+  run(main, "git", "fetch", "--prune", "--quiet", "origin");
+  const inBase = (tip) => holds(main, `refs/remotes/origin/${base}`, tip);
+
+  // what a branch's PRs say of its tip: { open }, { merged }, or { keep:
+  // why, inBase } (inBase: every commit of it is in origin's default branch,
+  // as when it went in with no PR)
   const verdict = (branch, tip) => {
     const own = prs.get(branch) ?? [];
     const open = own.find((pr) => pr.state === "OPEN");
     if (open) return { open };
     const merged = own.find((pr) => pr.state === "MERGED" && holds(main, pr.headRefOid, tip));
     if (merged) return { merged };
-    if (own.some((pr) => pr.state === "MERGED")) return { keep: "commits its merged PR doesn't have" };
-    return { keep: own.length ? "its PR closed unmerged" : "no PR" };
+    const keep = own.some((pr) => pr.state === "MERGED")
+      ? "commits its merged PR doesn't have"
+      : own.length
+        ? "its PR closed unmerged"
+        : "no PR";
+    return { keep, inBase: inBase(tip) };
   };
 
   const done = { removed: [], kept: [], local: [], remote: [], branchesKept: new Map(), failed: [] };
-  const checkedOut = new Set([base, all[0].branch]);
+  const all = worktrees(main);
+  // a prunable entry's branch too: git won't delete it while the entry stands
+  const checkedOut = new Set([base, all[0].branch, ...all.filter((wt) => wt.skip).map((wt) => wt.branch)]);
   for (const wt of all.slice(1).filter((wt) => !wt.skip)) {
     const where = relative(main, wt.path);
     const keep = (why, stuck = false) => {
@@ -224,12 +334,12 @@ const prune = (cwd, dry) => {
         keep(`open PR #${said.open.number}`);
         continue;
       }
-      if (said.keep) {
+      if (said.keep && !said.inBase) {
         keep(said.keep);
         continue;
       }
       pr = said.merged;
-    } else if (!holds(main, `refs/remotes/origin/${base}`, wt.head)) {
+    } else if (!inBase(wt.head)) {
       keep(`detached, at a commit not in origin/${base}`);
       continue;
     }
@@ -240,7 +350,7 @@ const prune = (cwd, dry) => {
     }
     if (!dry)
       try {
-        remove(main, trash, wt);
+        removeTree(wt);
       } catch (error) {
         keep(`not removed: ${error.message}`, true);
         continue;
@@ -261,7 +371,7 @@ const prune = (cwd, dry) => {
     if (checkedOut.has(branch)) continue;
     if (local.has(branch)) {
       const said = verdict(branch, local.get(branch));
-      if (said.merged) done.local.push(branch);
+      if (said.merged || said.inBase) done.local.push(branch);
       else if (said.keep) keepBranch(said.keep, branch);
     }
     if (remote.has(branch)) {
@@ -314,13 +424,17 @@ const report = (done, dry) => {
     out.push(
       `${remove} ${plural(done.removed.length, "worktree")}:`,
       ...done.removed.map(
-        ({ where, branch, pr, base }) => `  ${where} (${branch ? `${branch}, PR #${pr} merged` : `detached, in origin/${base}`})`,
+        ({ where, branch, pr, base }) =>
+          `  ${where} (${branch ?? "detached"}, ${pr ? `PR #${pr} merged` : `in origin/${base}`})`,
       ),
     );
   if (done.local.length) out.push(`${del} ${plural(done.local.length, "local branch")}: ${done.local.join(", ")}`);
   if (done.remote.length) out.push(`${del} ${plural(done.remote.length, "branch")} on origin: ${done.remote.join(", ")}`);
   if (done.kept.length)
-    out.push("Kept worktrees:", ...done.kept.map(({ where, branch, why }) => `  ${where} (${branch ?? "detached"}): ${why}`));
+    out.push(
+      "Kept worktrees:",
+      ...done.kept.map(({ where, branch, why }) => `  ${where}${branch === null ? "" : ` (${branch ?? "detached"})`}: ${why}`),
+    );
   if (done.branchesKept.size)
     out.push(
       "Kept branches, yours to decide:",
@@ -354,13 +468,15 @@ const summary = (done) => {
 if (process.argv.includes("--hook"))
   hook((input) => {
     if (topOf(input.cwd) !== worktrees(input.cwd)[0].path) return;
-    const message = summary(prune(input.cwd, false));
+    const done = prune(input.cwd, false);
+    const message = done && summary(done);
     return message && { systemMessage: message };
   });
 else {
   const dry = process.argv.includes("--dry-run");
   try {
-    console.log(report(prune(process.cwd(), dry), dry));
+    const done = prune(process.cwd(), dry);
+    console.log(done ? report(done, dry) : "Another prune-merged run has this repo: try again once it's done.");
   } catch (error) {
     console.error(`prune-merged: ${error.message}`);
     process.exitCode = 1;
