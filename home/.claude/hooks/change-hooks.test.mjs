@@ -4,7 +4,8 @@
 // <hook>.mjs`, the tool call's JSON on stdin, with the input fields
 // MORE_INPUT adds, in a scratch repo), and below them plain tests of
 // scratch-gate at a subagent's start, reviewer-gate's other callers, the
-// survey gate on main (one survey per change), lib's cwdFor and
+// survey gate on main (one survey per change), a dictated settings
+// change, lib's cwdFor and
 // substitutions, how copy.mjs and sync.mjs register a repo's copy, and
 // prune-merged (the SessionStart hook that removes merged work). Run from
 // the repo root:
@@ -736,7 +737,7 @@ test("survey-gate on main: one survey per change, until it's pushed", () => {
 // only permission rules, plugins, the model or the theme, five entries at
 // most (the old gate asked for a plan review: red on it)
 test("dictated: a settings change the user typed out skips the reviews, and nothing wider does", () => {
-  const SAID = "add a deny rule for Skill(x:pr) please";
+  const SAID = "add a deny rule for Skill(x:pr) please, and turn on Skill(y:z)";
   const settings = { permissions: { deny: ["Bash(rm *)"] }, hooks: { PreToolUse: [{ matcher: "Edit|Write", hooks: [] }] } };
   const json = (value) => `${JSON.stringify(value, null, 2)}\n`;
   // a branch at main, whose settings file is in it; the survey and a transcript
@@ -772,6 +773,11 @@ test("dictated: a settings change the user typed out skips the reviews, and noth
   assert.equal(editTo(plain, deny("Skill(x:pr)")), null, "a dictated deny rule waits for no plan review");
   assert.match(editTo(plain, { ...settings, hooks: { PreToolUse: [{ matcher: "Write", hooks: [] }] } }), /is dictated, but it changes `hooks\.PreToolUse\[/);
   assert.match(editTo(plain, deny("a", "b", "c", "d", "e", "f")), /is dictated, but it changes 6 entries, more than 5/);
+  // F7: each entry the change makes is named in the user's words
+  assert.match(editTo(plain, deny("Bash(*)")), /is dictated, but the user's quote doesn't name `permissions\.deny\["Bash\(\*\)"\]`'s entry/);
+  assert.equal(editTo(plain, deny("Skill(x:pr)", "Skill(y:z)")), null, "two rules, both named");
+  assert.match(editTo(setUp({ survey: `dictated: "${SAID}" a.txt\n` }), deny("Skill(x:pr)")), /is dictated, but a\.txt isn't a Claude settings file/);
+  assert.match(editTo(setUp({ survey: `dictated: "${SAID}" a.txt .claude/settings.json\n` }), deny("Skill(x:pr)")), /is dictated, but it doesn't name exactly one file/);
   assert.match(editTo(plain, { a: 1 }, ".claude/other.json"), /is dictated, but the change goes past \.claude\/settings\.json/);
   assert.match(editTo(setUp({ origin: { kind: "peer", from: "a1" }, isMeta: true }), deny("Skill(x:pr)")), /isn't in a message the user typed/);
   assert.match(editTo(setUp({ survey: `dictated: "${SAID}" .claude/settings.json\nPlan: none\n` }), deny("Skill(x:pr)")), /has no plan review/);

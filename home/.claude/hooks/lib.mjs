@@ -268,7 +268,12 @@ const planReview = (cwd, key) => {
 // input carries the main session's transcript_path, seen live). It names
 // one file, a Claude settings file, and that file is the whole change.
 // Both sides parse as JSON, and the key paths that differ (an array's
-// entries by value) all fall under DICTATED, five at most.
+// entries by value) all fall under DICTATED, five at most, each named in
+// the quote: the rule itself, the plugin's id, the model or theme's value.
+//
+// What it can't hold: a quote cut from a sentence that negates it ("don't
+// add …"), and the transcript itself, which sits outside any checkout, so
+// no gate stops a write to it.
 const DICTATED = /^(?:permissions\.(?:allow|deny|ask)\[|enabledPlugins\.|model$|theme$)/;
 const DICTATED_MOST = 5;
 
@@ -330,6 +335,14 @@ export const dictatedHolds = (cwd, work, input, pending) => {
     const outside = differ.find((key) => !DICTATED.test(key));
     if (outside) return { why: `it changes \`${outside}\`, where only permission rules, plugins, the model or the theme may change` };
     if (differ.length > DICTATED_MOST) return { why: `it changes ${differ.length} entries, more than ${DICTATED_MOST}` };
+    // each entry's own text: an array's entry, a plugin's id, a value
+    const spoken = quote.replace(/\s+/g, " ");
+    const unnamed = differ.find((key) => {
+      const entry = key.match(/\[(.*)\]$/)?.[1];
+      const text = entry ? JSON.parse(entry) : key.startsWith("enabledPlugins.") ? key.slice(15) : JSON.parse(now[key] ?? old[key]);
+      return !spoken.includes(String(text).replace(/\s+/g, " "));
+    });
+    if (unnamed) return { why: `the user's quote doesn't name \`${unnamed}\`'s entry` };
     return { holds: true };
   } catch {
     return { why: "its file or its base doesn't read as JSON" };

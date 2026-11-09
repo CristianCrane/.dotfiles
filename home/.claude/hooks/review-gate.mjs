@@ -1,7 +1,8 @@
 // The change rules: edited in github.com/CristianCrane/.dotfiles (home/.claude); repos carry copies made by hooks/sync.mjs.
 //
 // `gh pr create` waits for the branch's change review (the `change` skill):
-// it is turned down until the review exists, is of the last commit (or
+// it is turned down until the review exists (a dictated change that holds
+// has none: lib's dictatedHolds), is of the last commit (or
 // of one before it with only comment lines changed since) and, before the
 // last round, leaves no change finding open, and until the PR body, read
 // from its file, is in the skill's shape (its parts, Check these's
