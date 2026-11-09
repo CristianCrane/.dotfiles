@@ -302,7 +302,7 @@ hook((input) => {
   if (path !== undefined) {
     if (ownReview(path)) return;
     return deny(
-      `The change-reviewer writes only its review: the plan-review or review file beside the survey in the git dir (\`<git dir>/claude/review-<branch>.md\`), the output path you were given. ${path} isn't one. Put anything else you'd note in the review itself.`,
+      `The change-reviewer writes only its review: the output path you were given, a plan-review or review file beside the survey in the git dir. ${path} isn't one. Put anything else you'd note in the review itself.`,
     );
   }
   if (command === undefined) return;

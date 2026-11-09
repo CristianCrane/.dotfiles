@@ -2,7 +2,7 @@
 //
 // What the change hooks share: git, and the survey, plan review and review
 // files the `change` skill writes into the git dir (never committed, kept
-// per worktree): one set per branch, and on main one per session.
+// per worktree): one set per branch, and on main one per change.
 //
 // A gate that must know what a command acts on (which PR) has it named one
 // way and turns every other way down, saying how to run it: reading each
@@ -185,13 +185,19 @@ export const cwdFor = (input) => {
 };
 
 // the branch being worked on, and the name its files go by: the branch,
-// or on main the session too (work straight on main is one change per
-// session); null on a detached HEAD (a rebase, a bisect), which is not gated
+// or on main one change's: the session, and the commit where HEAD meets
+// origin (7 characters of it, a length that never grows). That commit
+// holds while the change's commits are unpushed and moves once they land,
+// so the next change's first edit needs a new survey (without it, a
+// session's later changes rode its first one's survey). With no origin,
+// the session alone. null on a detached HEAD (a rebase, a bisect), which
+// is not gated
 export const workOf = (cwd, input) => {
   const branch = git(cwd, "rev-parse", "--abbrev-ref", "HEAD");
   if (branch === "HEAD") return null;
-  const onMain = ["main", "master"].includes(branch) && input.session_id;
-  return { branch, key: onMain ? `${branch}-${input.session_id}` : branch };
+  if (!["main", "master"].includes(branch) || !input.session_id) return { branch, key: branch };
+  const start = originBase(cwd);
+  return { branch, key: [branch, input.session_id, start?.slice(0, 7)].filter(Boolean).join("-") };
 };
 
 export const stateFile = (cwd, kind, key) => {

@@ -54,7 +54,7 @@ Done when no two places hold one lesson.
 
 ## 5. Write the lessons file
 
-Write it beside the review, as `lessons-<branch>.md` with each `/` in the branch's name as `-` (`git rev-parse --path-format=absolute --git-path claude/lessons-fix-x.md` for `fix/x`); a turned-down `gh pr ready` names it too:
+Write it beside the review, at the review's path with `review` swapped for `lessons` (`review-fix-x.md` → `lessons-fix-x.md`); a turned-down `gh pr ready` names it too:
 
 ```
 Lessons for <branch>:

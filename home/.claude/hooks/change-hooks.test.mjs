@@ -43,7 +43,7 @@ import { dirname, join } from "node:path";
 import { after, describe, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { repoCopy, repoHooks } from "./copy.mjs";
-import { cwdFor, lines, stateFile, substitutions } from "./lib.mjs";
+import { cwdFor, lines, stateFile, substitutions, workOf } from "./lib.mjs";
 
 const HOOKS = dirname(fileURLToPath(import.meta.url));
 const BRANCH = "feature";
@@ -665,6 +665,56 @@ test("reviewer-gate: other callers' calls through", () => {
     assert.equal(run({ tool_input }), "");
     assert.equal(run({ tool_input, agent_id: AGENT, agent_type: "general-purpose" }), "");
   }
+});
+
+// on main, a survey covers one change: its files are keyed by the session
+// and where HEAD meets origin, so they hold through the change's unpushed
+// commits and a fetch of others' work, and a pushed change's next edit
+// needs a new survey (the old gate let it ride the first one's: red on it).
+// With no origin, the session alone, as before
+test("survey-gate on main: one survey per change, until it's pushed", () => {
+  const edit = (repo) => {
+    const ran = spawnSync(process.execPath, [join(HOOKS, "survey-gate.mjs")], {
+      input: JSON.stringify({ tool_input: { file_path: join(repo, "b.txt"), content: "x\n" }, cwd: repo, session_id: "s" }),
+      encoding: "utf8",
+    });
+    return ran.stdout.trim() ? JSON.parse(ran.stdout).hookSpecificOutput.permissionDecisionReason : null;
+  };
+  // main with a reviewed survey for the change about to start
+  const started = ({ origin = true } = {}) => {
+    const repo = scratchDir();
+    git(repo, "init", "-qb", "main");
+    commit(repo, "b.txt", "b\n");
+    const bare = origin && withOrigin(repo);
+    const { key } = workOf(repo, { session_id: "s" });
+    writeFileSync(stateFile(repo, "survey", key), "Change: b.\nFiles: b.txt\n");
+    writeFileSync(stateFile(repo, "plan-review", key), "# Change review: main, plan\n");
+    return { repo, bare };
+  };
+
+  const { repo: unpushed } = started();
+  commit(unpushed, "b.txt", "b2\n");
+  assert.equal(edit(unpushed), null, "a review round's fix, after the change's first commit");
+
+  const { repo: fetched, bare } = started();
+  const other = join(scratchDir(), "other");
+  git(fetched, "clone", "-q", bare, other);
+  commit(other, "c.txt", "c\n");
+  git(other, "push", "-q", "origin", "main");
+  git(fetched, "fetch", "-q", "origin");
+  assert.equal(edit(fetched), null, "others' work fetched, not merged");
+
+  const { repo: landed } = started();
+  commit(landed, "b.txt", "b2\n");
+  git(landed, "push", "-q", "origin", "main");
+  const reason = edit(landed);
+  assert.notEqual(reason, null, "the next change rode the pushed one's survey");
+  assert.match(reason, new RegExp(`there is no survey for main: .* ${stateFile(landed, "survey", workOf(landed, { session_id: "s" }).key)}`));
+
+  const { repo: local } = started({ origin: false });
+  commit(local, "b.txt", "b2\n");
+  assert.equal(workOf(local, { session_id: "s" }).key, "main-s");
+  assert.equal(edit(local), null, "no origin: the session's survey, as before");
 });
 
 // a shell command's checkout is where its last cd leaves it, a cd in quoted
