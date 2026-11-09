@@ -65,8 +65,9 @@ const write = (repo, kind, text) => {
 
 // a repo on BRANCH, one commit past main, with the change skill's files
 // given: `review` writes one of HEAD (a string: its findings, after the
-// header), `lessons` and `body` their text (`body` may take HEAD's sha)
-const scratchRepo = ({ review = false, lessons, body } = {}) => {
+// header; `header` replaces the header's words after the sha), `lessons`
+// and `body` their text (`body` may take HEAD's sha)
+const scratchRepo = ({ review = false, header = "round 1, 0 open change findings", lessons, body } = {}) => {
   const repo = scratchDir();
   git(repo, "init", "-qb", "main");
   commit(repo, "a.txt", "a\n");
@@ -74,7 +75,7 @@ const scratchRepo = ({ review = false, lessons, body } = {}) => {
   commit(repo, "b.txt", "b\n");
   const head = git(repo, "rev-parse", "--short", "HEAD");
   if (review)
-    write(repo, "review", `# Change review: ${BRANCH} @ ${head}, round 1, 0 open change findings\n${review === true ? "" : review}`);
+    write(repo, "review", `# Change review: ${BRANCH} @ ${head}, ${header}\n${review === true ? "" : review}`);
   if (lessons !== undefined) write(repo, "lessons", lessons);
   if (typeof body === "function") body = body(head);
   return { repo, body: body === undefined ? undefined : write(repo, "pr-body", body) };
@@ -157,6 +158,15 @@ const STATES = {
       return state;
     },
   ],
+  // review headers the gate must read (dotfiles#12), and one it can't
+  ...Object.fromEntries(
+    Object.entries({
+      headerAside: "round 2 (with a recheck of 037bf37), 0 open change findings",
+      headerAsideOpen: "round 2 (with a recheck of 037bf37), 1 open change findings",
+      headerRecheck: "recheck of round 2, 0 open change findings",
+      headerNoRound: "plan, 0 open change findings",
+    }).map(([name, header]) => [name, ["review-gate", () => scratchRepo({ review: true, header, body: BODY })]]),
+  ),
   // agent-gate reads only the tool call
   agent: ["agent-gate", () => ({ repo: scratchDir() })],
   // a checkout with no survey, and a folder outside any checkout
@@ -227,6 +237,13 @@ const CASES = [
   ]),
   ["noLessons", "echo env gh pr ready", THROUGH],
   ["noLessons", `git commit -m "then gh pr ready"`, THROUGH],
+
+  ["headerAside", "gh pr create --draft --body-file <body>", THROUGH],
+  ["headerAside", "gh pr create --body-file <body>", NO_LESSONS],
+  ["headerAsideOpen", "gh pr create --draft --body-file <body>", /round 2 left 1 change finding\(s\) open/],
+  ["headerRecheck", "gh pr create --draft --body-file <body>", THROUGH],
+  ["headerRecheck", "gh pr create --body-file <body>", NO_LESSONS],
+  ["headerNoRound", "gh pr create --draft --body-file <body>", /its first line reads `# Change review: <branch> @ <short sha>, round <n>, <k> open change findings`/],
 
   // agent-gate: the command is the Agent call's isolation, if any
   ["agent", "worktree", /Spawn it without `isolation`/],

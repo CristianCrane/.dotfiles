@@ -266,8 +266,16 @@ export const review = (cwd, key) => {
   const path = stateFile(cwd, "review", key);
   if (!existsSync(path)) return { path, ok: false, reason: "missing" };
   const text = readFileSync(path, "utf8");
-  const header = text.match(/^# Change review:.* @ ([0-9a-f]{7,40}),.*round (\d+), (\d+) open change finding/m);
-  if (!header) return { path, ok: false, reason: "its header has no commit, round and open count" };
+  // the first `round <n>` after the sha, and the first open count after
+  // that, whatever words come between (a "(with a recheck of …)")
+  const header = text.match(/^# Change review:.* @ ([0-9a-f]{7,40}),.*?\bround (\d+)\b.*?\b(\d+) open change finding/m);
+  if (!header)
+    return {
+      path,
+      ok: false,
+      reason:
+        "its header has no commit, round and open count: its first line reads `# Change review: <branch> @ <short sha>, round <n>, <k> open change findings` (or `recheck of round <n>`), with anything more after the round",
+    };
   const [sha, ...counts] = header.slice(1);
   if (!headSha(cwd).startsWith(sha) && !commentOnly(cwd, sha))
     return { path, ok: false, reason: `it reviewed ${sha}, and the commits since change more than comment lines` };
