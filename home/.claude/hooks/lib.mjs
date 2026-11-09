@@ -12,7 +12,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, isAbsolute, join } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 // A repo's copy of these hooks (for cloud sessions, which have no
@@ -53,6 +53,31 @@ export const deny = (reason) => ({
     permissionDecisionReason: reason,
   },
 });
+
+// the command with heredoc bodies and quoted text blanked out, keeping
+// every other character where it was
+export const masked = (command) =>
+  command
+    .replace(/(<<-?\s*(['"]?)(\w+)\2[^\n]*\n)([\s\S]*?\n)(\t*\3)(?=\n|$)/g, (_, open, _q, _tag, body, close) =>
+      open + body.replace(/[^\n]/g, " ") + close,
+    )
+    .replace(/'[^']*'|"(?:\\.|[^"\\])*"/g, (quoted) => quoted[0] + " ".repeat(quoted.length - 2) + quoted[0]);
+
+// the folder gh runs in: the last `cd` before it, if any, found in the
+// masked command with `$( … )` blanked too (so a `cd` in a heredoc, a
+// quote or a command substitution doesn't count) and read from the original
+export const dirOf = (command, hidden, at, cwd) => {
+  let outside = hidden.slice(0, at);
+  for (let inner = ""; inner !== outside; ) {
+    inner = outside;
+    outside = outside.replace(/\$\([^()]*\)/g, (sub) => " ".repeat(sub.length));
+  }
+  const cds = [...outside.matchAll(/(?:^|[;&|(\n])\s*cd\s+("[^"]+"|'[^']+'|[^\s;&|)]+)/dg)];
+  if (cds.length === 0) return cwd;
+  const [start, end] = cds.at(-1).indices[1];
+  const dir = command.slice(start, end).replace(/^["']|["']$/g, "").replace(/^~(?=\/|$)/, homedir());
+  return resolve(cwd, dir);
+};
 
 // the edited file's own checkout (the nearest folder that exists: a new
 // file's own may not yet), so an edit in a worktree counts that worktree;
