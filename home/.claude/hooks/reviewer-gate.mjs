@@ -117,7 +117,9 @@ const READERS = {
   git,
   gh,
   // these change what later commands run, as a VAR= prefix does
-  set: (words) => (has(words, "-a") || words.includes("allexport") ? "`set -a` exports what's assigned after it" : null),
+  // zsh reads an option's name in any case, with any underscores
+  set: (words) =>
+    has(words, "-a") || words.some((word) => word.toLowerCase().replaceAll("_", "") === "allexport") ? "`set -a` exports what's assigned after it" : null,
   xxd: (words) => positional(words).length > 1 && "xxd's second file is its output",
   systemctl: (words) =>
     ["show", "status", "cat", "list-units", "list-unit-files", "is-active", "is-enabled"].includes(positional(words)[0]) ? null : "systemctl changes a unit",
@@ -140,7 +142,9 @@ const READERS = {
     if (has(own, "-f", "-i", "-l", "-E", "-d", "-D", "-o", "-p", "--file=", "--include=", "--load=", "--exec=", "--dump-variables=", "--debug=", "--pretty-print=", "--profile="))
       return "this awk option edits in place, loads code or writes a file";
     if (has(words, "--sandbox")) return null;
-    const sources = words.flatMap((word, at) => (["-e", "--source"].includes(words[at - 1]) ? [word] : []));
+    const sources = words.flatMap((word, at) =>
+      ["-e", "--source"].includes(words[at - 1]) ? [word] : word.startsWith("--source=") ? [word.slice(9)] : /^-e./.test(word) ? [word.slice(2)] : [],
+    );
     const programs = sources.length ? sources : [after(words, ["-F", "-v"])[0] ?? ""];
     return programs.some((program) => AWK_WRITES.test(program)) && "awk's program writes or runs a command: add --sandbox";
   },
@@ -149,26 +153,32 @@ const READERS = {
   fd: (words) => has(words, "-x", "-X", "--exec=", "--exec-batch=") && "fd's --exec runs a command",
   sort: (words) => has(words, "-o", "--output=", "--compress-program=") && "sort writes a file or runs a program",
   uniq: (words) => positional(words).length > 1 && "uniq's second file is its output",
-  // Node's permission model, in node's own options (those before its
-  // script, `-` or `--`; a script's own --permission is no option): no
-  // writes, child processes, workers, addons or inspector, and no --run
-  // (a package.json script, through the shell) or --test. It has no
-  // network limit: such a script can still reach a database or a server
+  // Node's permission model (no writes, child processes, workers, addons
+  // or inspector), with only the options on NODE_OWN before its script, `-`
+  // or `--` (a script's own --permission is no option). It has no network
+  // limit: such a script can still reach a database or a server. Or
+  // --version, or --check (a syntax check) on files
   node: (words) => {
+    // its version, or a syntax check, which runs nothing
+    if (["--version", "-v"].includes(words[0]) && words.length === 1) return null;
+    if (["--check", "-c"].includes(words[0]) && positional(words.slice(1)).length === words.length - 1) return null;
     const own = [];
     for (let at = 0; at < words.length && words[at].startsWith("-") && !["-", "--"].includes(words[at]); at++) {
+      const valued = NODE_OWN[words[at]];
+      if (valued === undefined && !/^--(?:allow-fs-read|eval|print|input-type)=/.test(words[at]))
+        return `node's \`${words[at]}\` isn't one this reads: use only --permission, --allow-fs-read, -e, -p and --input-type`;
       own.push(words[at]);
-      if (NODE_VALUED.includes(words[at])) own.push(words[++at]);
+      if (valued) at++;
     }
-    if (!own.includes("--permission"))
-      return "node runs only as `node --permission` (reads allowed with `--allow-fs-read='*'`), which turns down its writes and child processes";
-    const loose = own.find((word) => /^--(?:run|test|watch)\b/.test(word) || (/^--allow-/.test(word) && !/^--allow-fs-read\b/.test(word)));
-    return loose && `node's \`${loose}\` runs more than a script that reads`;
+    return own.includes("--permission")
+      ? null
+      : "node runs only as `node --permission` (reads allowed with `--allow-fs-read='*'`), which turns down its writes and child processes";
   },
 };
 
-// node's options that take the next word as their value
-const NODE_VALUED = ["-e", "--eval", "-p", "--print", "-r", "--require", "--import", "--input-type", "--env-file", "-C", "--conditions", "--allow-fs-read", "--run"];
+// node's options a reading script needs, each saying whether it takes the
+// next word as its value
+const NODE_OWN = { "--permission": false, "--allow-fs-read": true, "-e": true, "--eval": true, "-p": true, "--print": true, "--input-type": true };
 
 // commands that run the command in their words: each runs a reader or not
 const WRAPPERS = {
@@ -184,22 +194,34 @@ const KEYWORD = /^(?:do|then|else|elif|if|while|until|!|\{)$/;
 const CLOSER = /^(?:done|fi|\}|esac)$/;
 
 // a variable no command reads from its environment: a name with a
-// lowercase letter, or of two letters at most (S, B, wt, mb)
-const LOCAL = /^(?:\w*[a-z]\w*|[A-Z_]{1,2}\d*)=/;
+// lowercase letter, or of two letters at most (S, B, wt, mb), or IFS (no
+// shell takes it from the environment). zsh ties these lowercase names
+// to PATH and its kin, so they are no local names
+const LOCAL = /^(?:\w*[a-z]\w*|[A-Z_]{1,2}\d*|IFS)$/;
+const TIED = ["path", "cdpath", "fpath", "manpath", "module_path", "mailpath"];
+
+// the names a simple command sets: its NAME= words, for's name, read's
+// names (any word that could be one) and printf -v's
+const assigned = (words) => {
+  if (words.every((word) => /^\w+=/.test(word))) return words.map((word) => word.split("=")[0]);
+  if (words[0] === "for") return [words[1]];
+  if (words[0] === "read") return words.slice(1).filter((word) => /^\w+$/.test(word));
+  if (words[0] === "printf") return words.flatMap((word, at) => (words[at - 1] === "-v" ? [word] : []));
+  return [];
+};
 
 // why one simple command isn't a reader, or null when it is
 const notReader = (words) => {
   while (KEYWORD.test(words[0])) words = words.slice(1);
   if (!words.length || (words.length === 1 && CLOSER.test(words[0]))) return null;
-  if (words[0] === "for" || words[0] === "case") return null; // `for x in …`, `case x in`: no command
   // IFS= only says how `read` splits
   while (/^IFS=/.test(words[0]) && words.length > 1) words = words.slice(1);
-  if (/^\w+=/.test(words[0])) {
-    if (!words.every((word) => /^\w+=/.test(word))) return `\`${words[0]}\` before a command changes what it runs`;
-    // an exported name (PATH, GIT_*, NODE_OPTIONS …) changes what later commands run
-    const exported = words.find((word) => !LOCAL.test(word));
-    return exported ? `\`${exported}\` may change what later commands run: name a variable in lowercase, or two letters at most` : null;
-  }
+  // an exported name (PATH, GIT_*, NODE_OPTIONS …) changes what later commands run
+  const exported = assigned(words).find((name) => !LOCAL.test(name) || TIED.includes(name));
+  if (exported) return `setting \`${exported}\` may change what later commands run: name a variable in lowercase, or two letters at most`;
+  if (words[0] === "for" || words[0] === "case") return null; // `for x in …`, `case x in`: no command
+  if (/^\w+=/.test(words[0]))
+    return words.every((word) => /^\w+=/.test(word)) ? null : `\`${words[0]}\` before a command changes what it runs`;
   const [name, ...args] = words;
   if (WRAPPERS[name]) return args.length ? notReader(WRAPPERS[name](args)) : null;
   const check = READERS[name];
@@ -235,7 +257,7 @@ const notReading = (command) => {
   // a case's patterns (`case x in a|b)`, and each after `;;`) are no commands
   const words = blank
     .join("")
-    .replace(/(\bcase\s+(?:"[^"]*"|'[^']*'|\S)+\s+in\b|;;)(\s*\(?[^;()\n]*\))/g, (_, lead, pattern) => lead + " ".repeat(pattern.length));
+    .replace(/(\bcase\s+(?:"[^"]*"|'[^']*'|\S)+\s+in\b|;;(?!\s*esac\b))(\s*\(?[^;()\n]*\))/g, (_, lead, pattern) => lead + " ".repeat(pattern.length));
 
   // each simple command (a subshell's too), split at lib's boundaries, its
   // words found in the blanked text and read from the original
