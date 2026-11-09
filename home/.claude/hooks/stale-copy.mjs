@@ -13,7 +13,7 @@ hook((input) => {
     hookSpecificOutput: {
       hookEventName: "SessionStart",
       additionalContext:
-        `This repo's copy of the change rules (${COPIED.map(([, copy]) => copy).join(", ")}) differs from ~/.claude, their source. Cloud sessions on this repo get the older rules, and sessions here get the copy's older change-reviewer (a repo's agent comes before a user's). Refreshing it is \`node ~/.claude/hooks/sync.mjs\`, as a cleanup commit of its own.`,
+        `This repo's copy of the change rules (${COPIED.map(([, copy]) => copy).join(", ")}, and the hooks .claude/settings.json registers for them) differs from ~/.claude, their source. Cloud sessions on this repo get the older rules, and sessions here get the copy's older change-reviewer (a repo's agent comes before a user's). Refreshing it is \`node ~/.claude/hooks/sync.mjs\`, as a cleanup commit of its own.`,
     },
   };
 });

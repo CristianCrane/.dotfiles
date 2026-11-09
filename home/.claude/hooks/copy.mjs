@@ -44,8 +44,44 @@ export const repoHooks = ({ hooks = {} } = JSON.parse(readFileSync(join(CLAUDE, 
   );
 };
 
-// whether the repo carries a copy, and whether it matches ~/.claude byte
-// for byte
+// a group in a repo's settings that runs one of the copied hooks
+const ours = (group) => group.hooks?.some((hook) => hook.command?.includes(".claude/hooks/change/"));
+
+// a repo's settings with the copy's hooks registered as repoHooks says:
+// every earlier change entry replaced, in every event (so one dropped from
+// ~/.claude's settings goes), and the repo's own settings and hooks kept
+export const withRepoHooks = (settings, source) => {
+  const wanted = repoHooks(source);
+  const hooks = { ...settings.hooks };
+  for (const event of new Set([...Object.keys(hooks), ...Object.keys(wanted)])) {
+    const groups = [
+      ...(hooks[event] ?? []).filter((group) => !ours(group)),
+      ...(wanted[event] ?? []).map(([matcher, name]) => ({
+        matcher,
+        hooks: [
+          {
+            type: "command",
+            command: `node "$CLAUDE_PROJECT_DIR/.claude/hooks/change/${name}.mjs"`,
+            timeout: 10,
+          },
+        ],
+      })),
+    ];
+    if (groups.length) hooks[event] = groups;
+    else delete hooks[event];
+  }
+  return { ...settings, hooks };
+};
+
+// the repo's .claude/settings.json, {} when it has none
+export const repoSettingsFile = (top) => join(top, ".claude/settings.json");
+export const repoSettings = (top) => {
+  const file = repoSettingsFile(top);
+  return existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : {};
+};
+
+// whether the repo carries a copy, and whether it matches ~/.claude: its
+// files byte for byte, and its settings as a sync would leave them
 export const repoCopy = (cwd) => {
   const top = topOf(cwd);
   if (!existsSync(join(top, ".claude/hooks/change"))) return "none";
@@ -56,5 +92,10 @@ export const repoCopy = (cwd) => {
       return false;
     }
   };
-  return COPIED.every(same) ? "current" : "stale";
+  let registered = false;
+  try {
+    const settings = repoSettings(top);
+    registered = JSON.stringify(withRepoHooks(settings)) === JSON.stringify(settings);
+  } catch {}
+  return COPIED.every(same) && registered ? "current" : "stale";
 };

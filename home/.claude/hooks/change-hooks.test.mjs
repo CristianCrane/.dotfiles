@@ -17,12 +17,12 @@
 // errors) can't pass a through case.
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { after, describe, test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { repoHooks } from "./copy.mjs";
+import { repoCopy, repoHooks } from "./copy.mjs";
 import { stateFile } from "./lib.mjs";
 
 const HOOKS = dirname(fileURLToPath(import.meta.url));
@@ -219,4 +219,17 @@ test("repoHooks: only settings.json's entries that run a copied hook", () => {
     },
   };
   assert.deepEqual(repoHooks(settings), { PreToolUse: [["Bash", "review-gate"]] });
+});
+
+// a repo's copy reads stale when its registered hooks differ from what a
+// sync writes, not only its files (round 1 F6)
+test("repoCopy: current after a sync, stale once a registered hook differs", () => {
+  const { repo } = scratchRepo();
+  execFileSync(process.execPath, [join(HOOKS, "sync.mjs"), repo]);
+  assert.equal(repoCopy(repo), "current");
+  const file = join(repo, ".claude/settings.json");
+  const settings = JSON.parse(readFileSync(file, "utf8"));
+  settings.hooks.PreToolUse.find((group) => group.matcher === "Bash").matcher = "Read";
+  writeFileSync(file, JSON.stringify(settings));
+  assert.equal(repoCopy(repo), "stale");
 });

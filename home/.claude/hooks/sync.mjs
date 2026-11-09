@@ -5,9 +5,9 @@
 // ~/.claude (cloud sessions) hold to them too. Run from ~/.claude:
 //
 //   node ~/.claude/hooks/sync.mjs [repo]   (default: the current repo)
-import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { CLAUDE, COPIED, repoHooks } from "./copy.mjs";
+import { CLAUDE, COPIED, repoSettings, repoSettingsFile, withRepoHooks } from "./copy.mjs";
 import { topOf } from "./lib.mjs";
 
 const top = topOf(process.argv[2] ?? process.cwd());
@@ -19,24 +19,5 @@ for (const [source, copy] of COPIED) {
 }
 
 // the repo's other settings and hooks stay; earlier change entries are replaced
-const file = join(top, ".claude/settings.json");
-const settings = existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : {};
-const ours = (group) => group.hooks?.some((hook) => hook.command?.includes(".claude/hooks/change/"));
-settings.hooks ??= {};
-for (const [event, entries] of Object.entries(repoHooks())) {
-  settings.hooks[event] = [
-    ...(settings.hooks[event] ?? []).filter((group) => !ours(group)),
-    ...entries.map(([matcher, name]) => ({
-      matcher,
-      hooks: [
-        {
-          type: "command",
-          command: `node "$CLAUDE_PROJECT_DIR/.claude/hooks/change/${name}.mjs"`,
-          timeout: 10,
-        },
-      ],
-    })),
-  ];
-}
-writeFileSync(file, JSON.stringify(settings, null, 2) + "\n");
+writeFileSync(repoSettingsFile(top), JSON.stringify(withRepoHooks(repoSettings(top)), null, 2) + "\n");
 console.log("registered the hooks in .claude/settings.json");
