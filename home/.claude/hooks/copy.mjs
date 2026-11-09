@@ -25,10 +25,10 @@ export const COPIED = [
 // the hooks the copy registers in the repo's .claude/settings.json, as
 // { event: [[matcher, hook name], …] }: read from ~/.claude/settings.json,
 // each entry there that runs a copied hook, so cloud sessions are gated on
-// the same tool calls (one that runs no copied hook stays user-level)
-export const repoHooks = () => {
-  const copied = new Set(COPIED.map(([source]) => source.match(/^hooks\/(.+)\.mjs$/)?.[1]));
-  const { hooks = {} } = JSON.parse(readFileSync(join(CLAUDE, "settings.json"), "utf8"));
+// the same tool calls (one that runs no copied hook, or no hook file at
+// all, stays user-level)
+export const repoHooks = ({ hooks = {} } = JSON.parse(readFileSync(join(CLAUDE, "settings.json"), "utf8"))) => {
+  const copied = new Set(COPIED.map(([source]) => source.match(/^hooks\/(.+)\.mjs$/)?.[1]).filter(Boolean));
   return Object.fromEntries(
     Object.entries(hooks)
       .map(([event, groups]) => [

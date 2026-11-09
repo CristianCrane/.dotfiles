@@ -22,6 +22,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { after, describe, test } from "node:test";
 import { fileURLToPath } from "node:url";
+import { repoHooks } from "./copy.mjs";
 import { stateFile } from "./lib.mjs";
 
 const HOOKS = dirname(fileURLToPath(import.meta.url));
@@ -200,4 +201,22 @@ test("every state with a through case holds one too, and every case's state exis
     assert.ok(expected.length, `${name} has no case`);
     if (expected.includes(THROUGH)) assert.ok(expected.some(Boolean), `${name} holds nothing`);
   }
+});
+
+// sync.mjs registers in a repo the entries of settings.json that run a
+// copied hook, and nothing else (round 1 F4: any other entry came out as
+// a hook named undefined)
+test("repoHooks: only settings.json's entries that run a copied hook", () => {
+  const command = (name) => ({ type: "command", command: `node "$HOME/.claude/hooks/${name}.mjs"` });
+  const settings = {
+    hooks: {
+      PreToolUse: [
+        { matcher: "Bash", hooks: [command("review-gate")] },
+        { matcher: "Agent", hooks: [command("agent-gate"), { type: "command", command: "echo hi" }] },
+      ],
+      SessionStart: [{ hooks: [command("stale-copy")] }],
+      Stop: [{ hooks: [{ type: "prompt", prompt: "done?" }] }],
+    },
+  };
+  assert.deepEqual(repoHooks(settings), { PreToolUse: [["Bash", "review-gate"]] });
 });
