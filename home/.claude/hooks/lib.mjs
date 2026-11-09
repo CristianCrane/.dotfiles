@@ -267,15 +267,26 @@ const planReview = (cwd, key) => {
 // agent's relay, a tool result or a task notification (a subagent's hook
 // input carries the main session's transcript_path, seen live). It names
 // one file, a Claude settings file, and that file is the whole change.
-// Both sides parse as JSON, and the key paths that differ (an array's
-// entries by value) all fall under DICTATED, five at most, each named in
-// the quote: the rule itself, the plugin's id, the model or theme's value.
+// Both sides parse as JSON, and every key path that differs (an array's
+// entries by value) only makes Claude ask or refuse more: an allow rule
+// removed, a deny or ask rule added, or the model or theme set (NARROWS);
+// five at most, each named in the quote as a whole token (the rule itself,
+// the value), so a bare `Bash` inside `Bash(rm *)` names nothing. Anything
+// that widens what runs, and a plugin either way, takes the full flow:
+// whatever an agent misreads in a quote, the result can only ask more.
 //
 // What it can't hold: a quote cut from a sentence that negates it ("don't
 // add …"), and the transcript itself, which sits outside any checkout, so
 // no gate stops a write to it.
-const DICTATED = /^(?:permissions\.(?:allow|deny|ask)\[|enabledPlugins\.|model$|theme$)/;
+const NARROWS = [
+  [/^permissions\.allow\[/, (was, is) => is === undefined],
+  [/^permissions\.(?:deny|ask)\[/, (was) => was === undefined],
+  [/^(?:model|theme)$/, (was, is) => is !== undefined],
+];
 const DICTATED_MOST = 5;
+
+// text with its whitespace runs as one space
+const flat = (text) => text.replace(/\s+/g, " ").trim();
 
 // a JSON value's leaves as { path: value }, an array's entries by value
 const leaves = (value, path = "", into = {}) => {
@@ -288,7 +299,6 @@ const leaves = (value, path = "", into = {}) => {
 
 // whether the user typed `quote` in this session
 const userTyped = (transcript, quote) => {
-  const flat = (text) => text.replace(/\s+/g, " ").trim();
   const wanted = flat(quote);
   return lines(readFileSync(transcript, "utf8")).some((line) => {
     try {
@@ -332,15 +342,16 @@ export const dictatedHolds = (cwd, work, input, pending) => {
     const after = JSON.parse(pending ? pending.content : readFileSync(join(top, file), "utf8"));
     const [old, now] = [leaves(before), leaves(after)];
     const differ = [...new Set([...Object.keys(old), ...Object.keys(now)])].filter((key) => old[key] !== now[key]);
-    const outside = differ.find((key) => !DICTATED.test(key));
-    if (outside) return { why: `it changes \`${outside}\`, where only permission rules, plugins, the model or the theme may change` };
+    const wider = differ.find((key) => !NARROWS.some(([path, narrows]) => path.test(key) && narrows(old[key], now[key])));
+    if (wider)
+      return { why: `it changes \`${wider}\`: only an allow rule removed, a deny or ask rule added, or the model or theme set may be dictated` };
     if (differ.length > DICTATED_MOST) return { why: `it changes ${differ.length} entries, more than ${DICTATED_MOST}` };
-    // each entry's own text: an array's entry, a plugin's id, a value
-    const spoken = quote.replace(/\s+/g, " ");
+    // each entry's own text (an array's entry, a value), as a whole token
+    const spoken = flat(quote);
     const unnamed = differ.find((key) => {
       const entry = key.match(/\[(.*)\]$/)?.[1];
-      const text = entry ? JSON.parse(entry) : key.startsWith("enabledPlugins.") ? key.slice(15) : JSON.parse(now[key] ?? old[key]);
-      return !spoken.includes(String(text).replace(/\s+/g, " "));
+      const text = flat(String(entry ? JSON.parse(entry) : JSON.parse(now[key])));
+      return !new RegExp(`(?<!\\w)${text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\w(:_])`).test(spoken);
     });
     if (unnamed) return { why: `the user's quote doesn't name \`${unnamed}\`'s entry` };
     return { holds: true };
@@ -367,7 +378,7 @@ export const beforeEdit = (cwd, work, input = {}, pending = null) => {
     return {
       survey: found,
       missing: dictated
-        ? `the survey for ${work.branch} is dictated, but ${dictated.why}. A dictated change is one Claude settings file the user named, changing only permission rules, plugins, the model or the theme; anything wider gets the full flow: a full survey (${found.path}) and its plan review (the change-reviewer agent in plan mode, output ${plan.path})`
+        ? `the survey for ${work.branch} is dictated, but ${dictated.why}. A dictated change is one Claude settings file the user named, that only makes Claude ask or refuse more, each entry in the user's words; anything wider gets the full flow: a full survey (${found.path}) and its plan review (the change-reviewer agent in plan mode, output ${plan.path})`
         : `the survey for ${work.branch} has no plan review: run the change-reviewer agent on it in plan mode, as the \`change\` skill's Plan review step says, with survey ${found.path} and output ${plan.path}`,
     };
   }

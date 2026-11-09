@@ -737,7 +737,7 @@ test("survey-gate on main: one survey per change, until it's pushed", () => {
 // only permission rules, plugins, the model or the theme, five entries at
 // most (the old gate asked for a plan review: red on it)
 test("dictated: a settings change the user typed out skips the reviews, and nothing wider does", () => {
-  const SAID = "add a deny rule for Skill(x:pr) please, and turn on Skill(y:z)";
+  const SAID = "add a deny rule for Skill(x:pr) please, and ask for Skill(y:z), not Bash(rm *)";
   const settings = { permissions: { deny: ["Bash(rm *)"] }, hooks: { PreToolUse: [{ matcher: "Edit|Write", hooks: [] }] } };
   const json = (value) => `${JSON.stringify(value, null, 2)}\n`;
   // a branch at main, whose settings file is in it; the survey and a transcript
@@ -773,9 +773,17 @@ test("dictated: a settings change the user typed out skips the reviews, and noth
   assert.equal(editTo(plain, deny("Skill(x:pr)")), null, "a dictated deny rule waits for no plan review");
   assert.match(editTo(plain, { ...settings, hooks: { PreToolUse: [{ matcher: "Write", hooks: [] }] } }), /is dictated, but it changes `hooks\.PreToolUse\[/);
   assert.match(editTo(plain, deny("a", "b", "c", "d", "e", "f")), /is dictated, but it changes 6 entries, more than 5/);
-  // F7: each entry the change makes is named in the user's words
+  // F7, F10: each entry the change makes is named in the user's words, as a
+  // whole (a bare Bash inside Bash(rm *) names nothing)
   assert.match(editTo(plain, deny("Bash(*)")), /is dictated, but the user's quote doesn't name `permissions\.deny\["Bash\(\*\)"\]`'s entry/);
   assert.equal(editTo(plain, deny("Skill(x:pr)", "Skill(y:z)")), null, "two rules, both named");
+  assert.match(editTo(plain, deny("Bash")), /the user's quote doesn't name `permissions\.deny\["Bash"\]`'s entry/);
+  // F11: only what makes Claude ask or refuse more; a widening or a plugin
+  // takes the full flow, whatever the quote says
+  const allow = { ...settings, permissions: { ...settings.permissions, allow: ["Skill(x:pr)"] } };
+  assert.match(editTo(plain, allow), /it changes `permissions\.allow\["Skill\(x:pr\)"\]`: only an allow rule removed/);
+  assert.match(editTo(plain, { ...settings, permissions: { deny: [] } }), /it changes `permissions\.deny\["Bash\(rm \*\)"\]`: only/);
+  assert.match(editTo(plain, { ...settings, enabledPlugins: { "Skill(x:pr)": true } }), /it changes `enabledPlugins\.Skill\(x:pr\)`: only/);
   assert.match(editTo(setUp({ survey: `dictated: "${SAID}" a.txt\n` }), deny("Skill(x:pr)")), /is dictated, but a\.txt isn't a Claude settings file/);
   assert.match(editTo(setUp({ survey: `dictated: "${SAID}" a.txt .claude/settings.json\n` }), deny("Skill(x:pr)")), /is dictated, but it doesn't name exactly one file/);
   assert.match(editTo(plain, { a: 1 }, ".claude/other.json"), /is dictated, but the change goes past \.claude\/settings\.json/);
