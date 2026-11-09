@@ -1,8 +1,9 @@
 // The change hooks' cases (CristianCrane/.dotfiles#10): the gates'
 // (survey-gate, review-gate, agent-gate, process-gate), each fed to the hook as Claude
 // Code runs it (`node <hook>.mjs`, the tool call's JSON on stdin, in a
-// scratch repo), and below them plain tests of lib's cwdFor and of how
-// copy.mjs and sync.mjs register a repo's copy. Run from the repo root:
+// scratch repo), and below them plain tests of lib's cwdFor, of how
+// copy.mjs and sync.mjs register a repo's copy, and of prune-merged (the
+// SessionStart hook that removes merged work). Run from the repo root:
 //
 //   node --test 'home/.claude/hooks/*.test.mjs'
 //
@@ -18,14 +19,24 @@
 // below checks), so a hook that fails silently (lib's `hook()` swallows
 // errors) can't pass a through case.
 import assert from "node:assert/strict";
-import { execFileSync, spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { after, describe, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { repoCopy, repoHooks } from "./copy.mjs";
-import { cwdFor, stateFile } from "./lib.mjs";
+import { cwdFor, lines, stateFile } from "./lib.mjs";
 
 const HOOKS = dirname(fileURLToPath(import.meta.url));
 const BRANCH = "feature";
@@ -377,4 +388,163 @@ test("cwdFor: a command's last cd, an edit's file", () => {
   assert.equal(bash(`echo "cd ${repo}"`), outside);
   assert.equal(bash("git status"), outside);
   assert.equal(cwdFor({ tool_input: { file_path: join(repo, "b.txt") }, cwd: outside }), repo);
+});
+
+// prune-merged.mjs, run by hand and as the SessionStart hook, on a scratch
+// repo whose origin stands for GitHub (a bare repo, reached from a
+// github.com URL by insteadOf) and a fake `gh` first on PATH, answering
+// with the scratch repo's PRs
+describe("prune-merged", () => {
+  const PRUNE = join(HOOKS, "prune-merged.mjs");
+  const sleepers = [];
+  after(() => sleepers.forEach((sleeper) => sleeper.kill()));
+
+  // a fake gh in a folder of its own: the repo and its PRs, or, `down`, the
+  // error gh gives offline
+  const fakeGh = (prs, down = false) => {
+    const bin = scratchDir();
+    writeFileSync(join(bin, "prs.json"), JSON.stringify(prs));
+    const answer = down
+      ? `console.error("error connecting to api.github.com"); process.exit(1);`
+      : `console.log(process.argv[2] === "api"
+           ? JSON.stringify({ data: { viewer: { login: "me" }, repository: { defaultBranchRef: { name: "main" } } } })
+           : require("fs").readFileSync(__dirname + "/prs.json", "utf8"));`;
+    writeFileSync(join(bin, "gh"), `#!/usr/bin/env node\n${answer}\n`, { mode: 0o755 });
+    return bin;
+  };
+
+  // a main checkout and its origin, with a branch for each way a worktree
+  // or branch goes or stays; `only` builds just the branches it names
+  const scratch = (only) => {
+    const dir = scratchDir();
+    const origin = join(dir, "origin.git");
+    git(dir, "init", "-q", "--bare", "-b", "main", origin);
+    const main = join(dir, "main");
+    git(dir, "init", "-q", "-b", "main", main);
+    git(main, "config", `url.${origin}.insteadOf`, "https://github.com/o/r");
+    git(main, "remote", "add", "origin", "https://github.com/o/r");
+    commit(main, "a.txt", "a\n");
+    git(main, "push", "-q", "origin", "main");
+    const prs = [];
+    // a branch off main with a commit of its own, in a worktree at
+    // ../<name> (removed again unless `worktree`), pushed unless `local`,
+    // with a PR in `state` by `author` unless null
+    const branch = (name, state, { worktree = true, local = false, author = "me" } = {}) => {
+      if (only && !only.includes(name)) return;
+      const path = join(dir, name);
+      git(main, "worktree", "add", "-q", "-b", name, path, "main");
+      commit(path, `${name}.txt`, `${name}\n`);
+      if (!local) git(path, "push", "-q", "origin", name);
+      const headRefOid = git(path, "rev-parse", "HEAD");
+      if (state) prs.push({ number: prs.length + 1, state, headRefName: name, headRefOid, isCrossRepository: false, author: { login: author } });
+      if (!worktree) git(main, "worktree", "remove", path);
+      return path;
+    };
+    branch("done", "MERGED");
+    branch("live", "OPEN");
+    const dirty = branch("dirty", "MERGED");
+    if (dirty) writeFileSync(join(dirty, "notes.txt"), "not yet\n");
+    const busy = branch("busy", "MERGED");
+    if (busy) sleepers.push(spawn("sleep", ["60"], { cwd: busy, stdio: "ignore" }));
+    // merged, then a commit more, never pushed
+    if (branch("later", "MERGED", { worktree: true })) {
+      commit(join(dir, "later"), "more.txt", "more\n");
+      git(main, "worktree", "remove", join(dir, "later"));
+    }
+    branch("closed", "CLOSED", { worktree: false });
+    branch("theirs", "MERGED", { worktree: false, author: "them" });
+    const proto = branch("proto", null, { worktree: false });
+    // a fork's merged PR from a branch of the same name counts for nothing
+    if (proto !== undefined)
+      prs.push({ number: 99, state: "MERGED", headRefName: "proto", headRefOid: git(main, "rev-parse", "proto"), isCrossRepository: true });
+    branch("mine", null, { worktree: false, local: true });
+    if (!only || only.includes("in-main")) git(main, "worktree", "add", "-q", "--detach", join(dir, "in-main"), "main");
+    if (!only || only.includes("off-main")) {
+      git(main, "worktree", "add", "-q", "--detach", join(dir, "off-main"), "main");
+      commit(join(dir, "off-main"), "off.txt", "off\n");
+    }
+    // every worktree so far last used 7 hours ago; then one used just now
+    const then = new Date(Date.now() - 7 * 60 * 60 * 1000);
+    for (const path of lines(git(main, "worktree", "list", "--porcelain")).filter((line) => line.startsWith("worktree "))) {
+      const gitDir = git(path.slice("worktree ".length), "rev-parse", "--absolute-git-dir");
+      for (const file of ["HEAD", "logs/HEAD"]) utimesSync(join(gitDir, file), then, then);
+    }
+    branch("fresh", "MERGED");
+    return { dir, main, bin: fakeGh(prs) };
+  };
+
+  const prune = (bin, cwd, ...args) =>
+    spawnSync(process.execPath, [PRUNE, ...args], {
+      cwd,
+      encoding: "utf8",
+      input: args.includes("--hook") ? JSON.stringify({ hook_event_name: "SessionStart", cwd, session_id: "s" }) : undefined,
+      env: { ...process.env, PATH: `${bin}:${process.env.PATH}` },
+    });
+  const worktreeNames = (main) =>
+    lines(git(main, "worktree", "list", "--porcelain"))
+      .filter((line) => line.startsWith("worktree "))
+      .map((line) => line.split("/").at(-1));
+  const branches = (main, prefix) => lines(git(main, "for-each-ref", "--format=%(refname:lstrip=2)", prefix)).sort();
+  const remote = (main) => lines(git(main, "ls-remote", "--heads", "origin")).map((line) => line.split("refs/heads/")[1]).sort();
+
+  test("by hand: removes merged work, and lists what it keeps and why", () => {
+    const { main, bin } = scratch();
+    const ran = prune(bin, main);
+    assert.equal(ran.status, 0, ran.stderr);
+    assert.match(ran.stdout, /^Removed 2 worktrees:\n {2}\.\.\/done \(done, PR #1 merged\)\n {2}\.\.\/in-main \(detached, in origin\/main\)$/m);
+    assert.match(ran.stdout, /^ {2}\.\.\/live \(live\): open PR #2$/m);
+    assert.match(ran.stdout, /^ {2}\.\.\/dirty \(dirty\): uncommitted or untracked changes$/m);
+    assert.match(ran.stdout, /^ {2}\.\.\/busy \(busy\): a process works in it \(pid \d+\)$/m);
+    assert.match(ran.stdout, /^ {2}\.\.\/off-main \(detached\): detached, at a commit not in origin\/main$/m);
+    assert.match(ran.stdout, /^ {2}\.\.\/fresh \(fresh\): used 0 min ago$/m);
+    assert.match(ran.stdout, /^ {2}merged, not your PR \(on origin\) \(1\): theirs$/m);
+    assert.match(ran.stdout, /^ {2}commits its merged PR doesn't have \(1\): later$/m);
+    assert.match(ran.stdout, /^ {2}its PR closed unmerged \(1\): closed$/m);
+    assert.match(ran.stdout, /^ {2}no PR \(2\): (?=.*\bproto\b)(?=.*\bmine \(local only\))/m);
+    assert.deepEqual(worktreeNames(main).sort(), ["busy", "dirty", "fresh", "live", "main", "off-main"]);
+    // later: its local copy has a commit more and stays; origin's is its PR's
+    // head. theirs: its local copy goes; origin's is another author's
+    assert.deepEqual(branches(main, "refs/heads/"), ["busy", "closed", "dirty", "fresh", "later", "live", "main", "mine", "proto"]);
+    assert.deepEqual(remote(main), ["busy", "closed", "dirty", "fresh", "live", "main", "proto", "theirs"]);
+    assert.ok(!existsSync(join(main, ".git/claude/pruned")) || !readdirSync(join(main, ".git/claude/pruned")).length);
+  });
+
+  test("--dry-run: says what would go, and removes nothing", () => {
+    const { main, bin } = scratch();
+    const before = [worktreeNames(main), branches(main, "refs/heads/"), remote(main)];
+    const ran = prune(bin, main, "--dry-run");
+    assert.equal(ran.status, 0, ran.stderr);
+    assert.match(ran.stdout, /^Would remove 2 worktrees:/m);
+    assert.match(ran.stdout, /^Would delete 2 local branches: done, theirs$/m);
+    assert.deepEqual([worktreeNames(main), branches(main, "refs/heads/"), remote(main)], before);
+  });
+
+  test("--hook in the main checkout: one line on what went and what merged stayed", () => {
+    const { main, bin } = scratch();
+    const ran = prune(bin, main, "--hook");
+    assert.equal(ran.status, 0, ran.stderr);
+    const { systemMessage } = JSON.parse(ran.stdout);
+    assert.match(systemMessage, /^Pruned merged work: 2 worktrees, 2 local branches, 2 branches on origin\./);
+    assert.match(systemMessage, /Kept \.\.\/dirty, merged but: uncommitted or untracked changes\./);
+    assert.match(systemMessage, /Kept \.\.\/busy, merged but: a process works in it/);
+    assert.doesNotMatch(systemMessage, /live|proto|fresh|theirs/);
+  });
+
+  test("--hook: silent with nothing to do, outside the main checkout, and offline", () => {
+    const quiet = scratch(["live", "proto"]);
+    assert.equal(prune(quiet.bin, quiet.main, "--hook").stdout, "");
+    const { dir, main, bin } = scratch(["done", "live"]);
+    const fromWorktree = prune(bin, join(dir, "live"), "--hook");
+    assert.equal(fromWorktree.status, 0);
+    assert.equal(fromWorktree.stdout, "");
+    const offline = fakeGh([], true);
+    const hooked = prune(offline, main, "--hook");
+    assert.equal(hooked.status, 0);
+    assert.equal(hooked.stdout, "");
+    assert.deepEqual(worktreeNames(main).sort(), ["done", "live", "main"]);
+    // by hand, it says why it couldn't run
+    const byHand = prune(offline, main);
+    assert.equal(byHand.status, 1);
+    assert.match(byHand.stderr, /^prune-merged: error connecting to api\.github\.com$/m);
+  });
 });
