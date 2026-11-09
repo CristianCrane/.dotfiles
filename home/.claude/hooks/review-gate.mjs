@@ -97,7 +97,7 @@ const createGate = (command, hidden, match, input) => {
     const whys = named.map((line) => {
       if (/fixed in the survey\b|answered:\s*\S/.test(line)) return null;
       const sha = line.match(/fixed in ([0-9a-f]{7,40})\b/)?.[1];
-      if (sha) return onBranch(cwd, sha) ? null : `\`fixed in ${sha}\` is no commit on this branch (after a rebase or an amend, give the new sha)`;
+      if (sha) return onBranch(cwd, sha) ? null : `\`fixed in ${sha}\` is no commit on this branch: after a rebase or an amend, give the new sha; a fix that landed elsewhere (main, another PR) is \`answered: <where>\``;
       if (/\bfixed\b/.test(line))
         return "it says fixed, but in no commit on this branch: a fix to the survey's text is `fixed in the survey`, one anywhere else (an issue, a comment) is `answered: <where>`";
       if (/\banswered\b/.test(line)) return "`answered` takes a colon: `answered: <why>`";

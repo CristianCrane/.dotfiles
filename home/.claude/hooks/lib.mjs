@@ -130,7 +130,8 @@ const headSha = (cwd) => {
 // the survey and whether it counts: it must name a path that exists,
 // from the top of the checkout or absolute, with or without its lines
 // (`path:12`, `path:3-5`). When it names none, `fix` says what to
-// write: the full path of a file it names by a shorter one, if any
+// write: the full path of a file it names by its name alone, or the files
+// that name could be, or else a path from the top as an example
 const survey = (cwd, key) => {
   const path = stateFile(cwd, "survey", key);
   if (!existsSync(path)) return { path, ok: false };
@@ -142,8 +143,14 @@ const survey = (cwd, key) => {
     .filter((word) => /\w/.test(word) && /[/.]/.test(word));
   if (!words.some((word) => existsSync(isAbsolute(word) ? word : join(top, word)))) {
     const tracked = lines(git(top, "ls-files"));
-    const short = words.map((word) => [word, tracked.find((file) => file.endsWith(`/${word}`))]).find(([, file]) => file);
-    const fix = short ? `\`${short[0]}\` is \`${short[1]}\`` : `such as \`${tracked[0] ?? "src/index.ts"}\``;
+    const short = words
+      .map((word) => [word, tracked.filter((file) => file.endsWith(`/${word}`))])
+      .find(([, files]) => files.length);
+    const fix = !short
+      ? `such as \`${tracked.find((file) => file.includes("/")) ?? "src/index.ts"}\``
+      : short[1].length === 1
+        ? `\`${short[0]}\` is \`${short[1][0]}\``
+        : `\`${short[0]}\` could be ${short[1].length} files, such as \`${short[1][0]}\`: give the one you mean`;
     return { path, ok: false, fix };
   }
   const expected = Number(text.match(/^Expected files:\s*~?(\d+)/m)?.[1]);

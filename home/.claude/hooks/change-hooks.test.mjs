@@ -134,10 +134,25 @@ const STATES = {
       return state;
     },
   ],
+  // a short name two tracked files go by
+  sharedName: [
+    "survey-gate",
+    () => {
+      const state = scratchRepo();
+      for (const dir of ["src/a", "src/b"]) {
+        mkdirSync(join(state.repo, dir), { recursive: true });
+        commit(state.repo, `${dir}/c.ts`, "c\n");
+      }
+      write(state.repo, "survey", "Change: c.\nPatterns touched:\n  - c.ts\n");
+      return state;
+    },
+  ],
   noPaths: [
     "survey-gate",
     () => {
       const state = scratchRepo();
+      mkdirSync(join(state.repo, "src"));
+      commit(state.repo, "src/d.ts", "d\n");
       write(state.repo, "survey", "Change: something.\n");
       return state;
     },
@@ -199,7 +214,7 @@ const CASES = [
   ["answered", "gh pr create --draft --body-file <body>", THROUGH],
   ["answered", "gh pr create --body-file <body>", NO_LESSONS],
   // dotfiles#9: each says what's wrong with its line
-  ["unanswered", "gh pr create --draft --body-file <body>", /F1: `fixed in deadbee0` is no commit on this branch/],
+  ["unanswered", "gh pr create --draft --body-file <body>", /F1: `fixed in deadbee0` is no commit on this branch: after a rebase or an amend, give the new sha; a fix that landed elsewhere \(main, another PR\) is `answered: <where>`/],
   ["unanswered", "gh pr create --draft --body-file <body>", /F2: it says fixed, but in no commit on this branch: a fix to the survey's text is `fixed in the survey`/],
   ["unanswered", "gh pr create --draft --body-file <body>", /F3: `answered` takes a colon/],
   ["unanswered", "gh pr create --draft --body-file <body>", /F4: no line names it/],
@@ -223,7 +238,8 @@ const CASES = [
   ["noSurvey", "<outside>/c.txt", THROUGH], // outside any checkout
   // dotfiles#9: a survey that exists but names no path says what to write
   ["shortNames", "<repo>/b.txt", /the survey for feature \(.*\) names no file by its path from the top of the checkout \(`c\.ts` is `src\/deep\/c\.ts`\)/],
-  ["noPaths", "<repo>/b.txt", /the survey for feature \(.*\) names no file by its path from the top of the checkout \(such as `a\.txt`\)/],
+  ["noPaths", "<repo>/b.txt", /the survey for feature \(.*\) names no file by its path from the top of the checkout \(such as `src\/d\.ts`\)/],
+  ["sharedName", "<repo>/b.txt", /\(`c\.ts` could be 2 files, such as `src\/a\/c\.ts`: give the one you mean\)/],
 ];
 
 // each gate's tool call, from a row's command
