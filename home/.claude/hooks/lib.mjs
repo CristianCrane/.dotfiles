@@ -82,8 +82,12 @@ export const dirOf = (command, hidden, at, cwd) => {
 // the edited file's own checkout (the nearest folder that exists: a new
 // file's own may not yet), so an edit in a worktree counts that worktree;
 // through a symlink (~/.claude's links into the dotfiles), the checkout
-// it really is in, so the link is gated like its target
+// it really is in, so the link is gated like its target; for a shell
+// command, the folder its last `cd` leaves (an agent's shell starts in its
+// parent's folder on every call, so it works in its own worktree by cd)
 export const cwdFor = (input) => {
+  const command = input.tool_input?.command;
+  if (command) return dirOf(command, masked(command), command.length, input.cwd);
   const path = input.tool_input?.file_path ?? input.tool_input?.notebook_path;
   if (!path) return input.cwd;
   let at = path;
