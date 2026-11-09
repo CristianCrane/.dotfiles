@@ -17,11 +17,12 @@ Done when every review finding, every red run and every correction from the user
 
 ## 2. Keep the lessons
 
-A cost is a lesson only when all three hold:
+A cost is a lesson only when all four hold:
 
 - **It recurs:** it would happen again in other work. A fact about this ticket alone is not a lesson.
 - **It's unrecorded:** search the code, its comments, the docs, git history and the existing rules first. Recorded already is not a lesson.
 - **It changes behaviour:** it reads as "when X, do Y", with why.
+- **It's worth the space:** a small slip that cost one quick fix, or a fact about one helper, isn't a lesson, even if it recurs. Lessons are for what changes how work is approached.
 
 Done when each cost is a lesson in that form or ruled out with its reason.
 
