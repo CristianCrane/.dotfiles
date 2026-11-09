@@ -87,6 +87,16 @@
             "timeout": 10
           }
         ]
+      },
+      {
+        "matcher": "Bash|Monitor|Write|Edit|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.claude/hooks/scratch-gate.mjs\"",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "PostToolUse": [
@@ -96,6 +106,17 @@
           {
             "type": "command",
             "command": "node \"$HOME/.claude/hooks/change-check.mjs\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.claude/hooks/scratch-gate.mjs\"",
             "timeout": 10
           }
         ]

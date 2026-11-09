@@ -1,9 +1,11 @@
 // The change hooks' cases (CristianCrane/.dotfiles#10): the gates'
-// (survey-gate, review-gate, agent-gate, process-gate), each fed to the hook as Claude
-// Code runs it (`node <hook>.mjs`, the tool call's JSON on stdin, in a
-// scratch repo), and below them plain tests of lib's cwdFor, of how
-// copy.mjs and sync.mjs register a repo's copy, and of prune-merged (the
-// SessionStart hook that removes merged work). Run from the repo root:
+// (survey-gate, review-gate, agent-gate, process-gate, scratch-gate), each
+// fed to the hook as Claude Code runs it (`node <hook>.mjs`, the tool
+// call's JSON on stdin, with the input fields MORE_INPUT adds, in a
+// scratch repo), and below them plain tests of scratch-gate at a
+// subagent's start, of lib's cwdFor, of how copy.mjs and sync.mjs register
+// a repo's copy, and of prune-merged (the SessionStart hook that removes
+// merged work). Run from the repo root:
 //
 //   node --test 'home/.claude/hooks/*.test.mjs'
 //
@@ -12,12 +14,15 @@
 // so a copy of it in a checkout of an older commit tests that commit's
 // hooks. Never copied into repos (copy.mjs lists what is).
 //
-// A gate's case is a row: [state, command, expected]. The command's <body>,
-// <repo> and <outside> stand for the state's paths; expected is THROUGH or
-// the gist of the turn-down, so a case held for one reason can't pass for
-// another. Every state with a through row has a row it holds too (a test
-// below checks), so a hook that fails silently (lib's `hook()` swallows
-// errors) can't pass a through case.
+// A gate's case is a row: [state, command, expected]. The command (for
+// scratch-gate, a path to Write or a shell command) is what TOOL_INPUT
+// makes the tool call from; its <body>, <repo>, <outside> and <own> stand
+// for the state's paths. Expected is THROUGH or the gist of the
+// turn-down, so a case held for one reason can't pass for another. Every
+// state with a through row has a row it holds too (a test below checks),
+// so a hook that fails silently (lib's `hook()` swallows errors) can't
+// pass a through case.
+
 import assert from "node:assert/strict";
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import {
@@ -223,6 +228,15 @@ const STATES = {
   agent: ["agent-gate", () => ({ repo: scratchDir() })],
   // process-gate reads only the command
   process: ["process-gate", () => ({ repo: scratchDir() })],
+  // scratch-gate: a subagent's call, the repo standing for the session's
+  // scratchpad and <own> for the agent's folder in it
+  scratch: [
+    "scratch-gate",
+    () => {
+      const repo = scratchDir();
+      return { repo, own: join(repo, "agents", AGENT) };
+    },
+  ],
   // a checkout with no survey, and a folder outside any checkout
   noSurvey: [
     "survey-gate",
@@ -239,6 +253,8 @@ const NO_LESSONS = /can't leave draft before its lessons/;
 const NAMED = /Run `gh pr ready` bare/;
 const NO_SURVEY = /there is no survey for feature/;
 const SELF_MATCH = /match this command's own shell/;
+const AGENT = "a1";
+const NOT_OWN = /is in the scratchpad, outside this agent's own scratch folder, .*\/agents\/a1\. .*Read a file elsewhere in the scratchpad \(one your caller left\) with the Read tool; when a command needs it, Write a copy into your folder/;
 
 // ways of naming a PR after `gh pr ready`, and redirects that may come first
 const NAMING = ["12", "-R o/r 12", "-Ro/r", "-R=o/r 12", "--repo=o/r 12", "12 -R o/r"];
@@ -338,6 +354,30 @@ const CASES = [
     "kill 123",
   ].map((command) => ["process", command, THROUGH]),
 
+  // scratch-gate: a row's command is a path to Write, or else a shell
+  // command (dotfiles#14)
+  ...[
+    "<repo>/test-change.log",
+    "<repo>/agents/other/check.log",
+    "<repo>/agents/a12/x.log", // an id that starts with this one's
+    "<own>/../x.log",
+    "pnpm test:change > <repo>/test-change.log 2>&1",
+    "S=<repo>; pnpm test > $S/x.log",
+    'cd "<repo>" && touch landing.log',
+    "cat '<repo>/brief.md'",
+    "tee <own>/a.log < <repo>/agents/other/b.log",
+  ].map((call) => ["scratch", call, NOT_OWN]),
+  ...[
+    "<own>/x.log",
+    "<own>",
+    "<repo>-other/x.log", // a sibling of the scratchpad
+    "/etc/hostname",
+    "pnpm test:change > <own>/test-change.log 2>&1",
+    "S=<own>; pnpm test > $S/x.log",
+    "cd <own> && ls",
+    "echo hi > /tmp/x.log",
+  ].map((call) => ["scratch", call, THROUGH]),
+
   // survey-gate: the command is the edited file
   ["noSurvey", "<repo>/b.txt", NO_SURVEY],
   ["noSurvey", "<outside>/link.txt", NO_SURVEY], // a symlink into the checkout: gated like its target
@@ -354,15 +394,21 @@ const TOOL_INPUT = {
   "survey-gate": (file_path) => ({ file_path, content: "x\n" }),
   "agent-gate": (isolation) => ({ prompt: "x", ...(isolation && { isolation }) }),
   "process-gate": (command) => ({ command }),
+  "scratch-gate": (call) => (call.startsWith("/") ? { file_path: call, content: "x\n" } : { command: call }),
+};
+
+// what else a gate reads from the hook's input
+const MORE_INPUT = {
+  "scratch-gate": (state) => ({ agent_id: AGENT, scratchpad_dir: state.repo }),
 };
 
 // the hook's answer to the case's tool call: the deny reason, or null
 const answer = (hookName, state, command) => {
-  const filled = command.replace(/<(body|repo|outside)>/g, (_, name) => state[name]);
+  const filled = command.replace(/<(body|repo|outside|own)>/g, (_, name) => state[name]);
   const toolInput = TOOL_INPUT[hookName](filled);
   const cwd = filled.startsWith(state.outside ?? "\0") ? state.outside : state.repo;
   const ran = spawnSync(process.execPath, [join(HOOKS, `${hookName}.mjs`)], {
-    input: JSON.stringify({ tool_input: toolInput, cwd, session_id: "s" }),
+    input: JSON.stringify({ tool_input: toolInput, cwd, session_id: "s", ...MORE_INPUT[hookName]?.(state) }),
     encoding: "utf8",
   });
   assert.equal(ran.status, 0, ran.stderr);
@@ -429,6 +475,24 @@ test("repoCopy: current after a sync, stale once a registered hook differs", () 
   settings.hooks.PreToolUse.find((group) => group.matcher === "Bash").matcher = "Read";
   writeFileSync(file, JSON.stringify(settings));
   assert.equal(repoCopy(repo), "stale");
+});
+
+// scratch-gate at a subagent's start: it makes the agent's folder and
+// names it; the main session's calls (no agent_id), and a session with no
+// scratchpad, go through
+test("scratch-gate: a subagent's folder, made and named at its start; the main session's calls through", () => {
+  const root = scratchDir();
+  const run = (input) =>
+    spawnSync(process.execPath, [join(HOOKS, "scratch-gate.mjs")], { input: JSON.stringify(input), encoding: "utf8" }).stdout;
+  const own = join(root, "agents", AGENT);
+  const started = JSON.parse(run({ hook_event_name: "SubagentStart", agent_id: AGENT, scratchpad_dir: root }));
+  assert.equal(started.hookSpecificOutput.hookEventName, "SubagentStart");
+  assert.match(started.hookSpecificOutput.additionalContext, new RegExp(`^Your own scratch folder is ${own}\\.`));
+  assert.ok(existsSync(own));
+  const write = { hook_event_name: "PreToolUse", tool_input: { file_path: join(root, "x.log"), content: "x" } };
+  assert.equal(run({ ...write, scratchpad_dir: root }), "");
+  assert.equal(run({ ...write, agent_id: AGENT }), "");
+  assert.notEqual(run({ ...write, agent_id: AGENT, scratchpad_dir: root }), ""); // the same call, held in a subagent
 });
 
 // a shell command's checkout is where its last cd leaves it, a cd in quoted
