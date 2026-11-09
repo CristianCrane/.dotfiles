@@ -7,7 +7,8 @@
 // A gate that must know what a command acts on (which PR) has it named one
 // way and turns every other way down, saying how to run it: reading each
 // spelling the tool accepts (-R…, GH_REPO, flags before `pr`) kept missing
-// routes, round after round (the lessons skill's review, rounds 2-5).
+// routes, round after round (47b0a6c, 3b948a6, then 6442db7 took this
+// shape; the cases: CristianCrane/.dotfiles#10).
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
