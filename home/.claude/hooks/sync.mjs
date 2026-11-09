@@ -7,7 +7,7 @@
 //   node ~/.claude/hooks/sync.mjs [repo]   (default: the current repo)
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { CLAUDE, COPIED, REPO_HOOKS } from "./copy.mjs";
+import { CLAUDE, COPIED, repoHooks } from "./copy.mjs";
 import { topOf } from "./lib.mjs";
 
 const top = topOf(process.argv[2] ?? process.cwd());
@@ -23,7 +23,7 @@ const file = join(top, ".claude/settings.json");
 const settings = existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : {};
 const ours = (group) => group.hooks?.some((hook) => hook.command?.includes(".claude/hooks/change/"));
 settings.hooks ??= {};
-for (const [event, entries] of Object.entries(REPO_HOOKS)) {
+for (const [event, entries] of Object.entries(repoHooks())) {
   settings.hooks[event] = [
     ...(settings.hooks[event] ?? []).filter((group) => !ours(group)),
     ...entries.map(([matcher, name]) => ({

@@ -22,14 +22,26 @@ export const COPIED = [
   ]),
 ];
 
-// the hooks the copy registers in the repo's .claude/settings.json
-export const REPO_HOOKS = {
-  PreToolUse: [
-    ["Edit|Write|MultiEdit|NotebookEdit", "survey-gate"],
-    ["Bash", "review-gate"],
-    ["Agent", "agent-gate"],
-  ],
-  PostToolUse: [["Edit|Write|MultiEdit|NotebookEdit|Bash", "change-check"]],
+// the hooks the copy registers in the repo's .claude/settings.json, as
+// { event: [[matcher, hook name], …] }: read from ~/.claude/settings.json,
+// each entry there that runs a copied hook, so cloud sessions are gated on
+// the same tool calls (one that runs no copied hook stays user-level)
+export const repoHooks = () => {
+  const copied = new Set(COPIED.map(([source]) => source.match(/^hooks\/(.+)\.mjs$/)?.[1]));
+  const { hooks = {} } = JSON.parse(readFileSync(join(CLAUDE, "settings.json"), "utf8"));
+  return Object.fromEntries(
+    Object.entries(hooks)
+      .map(([event, groups]) => [
+        event,
+        groups.flatMap((group) =>
+          group.hooks
+            .map((entry) => entry.command?.match(/\.claude\/hooks\/([\w-]+)\.mjs/)?.[1])
+            .filter((name) => copied.has(name))
+            .map((name) => [group.matcher, name]),
+        ),
+      ])
+      .filter(([, entries]) => entries.length),
+  );
 };
 
 // whether the repo carries a copy, and whether it matches ~/.claude byte
