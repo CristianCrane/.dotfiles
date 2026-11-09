@@ -1,12 +1,13 @@
 // The change hooks' cases (CristianCrane/.dotfiles#10): the gates'
 // (survey-gate, review-gate, agent-gate, process-gate, scratch-gate,
-// reviewer-gate), each
-// fed to the hook as Claude Code runs it (`node <hook>.mjs`, the tool
-// call's JSON on stdin, with the input fields MORE_INPUT adds, in a
-// scratch repo), and below them plain tests of scratch-gate at a
-// subagent's start, of lib's cwdFor, of how copy.mjs and sync.mjs register
-// a repo's copy, and of prune-merged (the SessionStart hook that removes
-// merged work). Run from the repo root:
+// reviewer-gate), each fed to the hook as Claude Code runs it (`node
+// <hook>.mjs`, the tool call's JSON on stdin, with the input fields
+// MORE_INPUT adds, in a scratch repo), and below them plain tests of
+// scratch-gate at a subagent's start, reviewer-gate's other callers, the
+// survey gate on main (one survey per change), lib's cwdFor and
+// substitutions, how copy.mjs and sync.mjs register a repo's copy, and
+// prune-merged (the SessionStart hook that removes merged work). Run from
+// the repo root:
 //
 //   node --test 'home/.claude/hooks/*.test.mjs'
 //

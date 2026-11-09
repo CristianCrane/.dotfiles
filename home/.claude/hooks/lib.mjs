@@ -189,7 +189,9 @@ export const cwdFor = (input) => {
 // origin (7 characters of it, a length that never grows). That commit
 // holds while the change's commits are unpushed and moves once they land,
 // so the next change's first edit needs a new survey (without it, a
-// session's later changes rode its first one's survey). With no origin,
+// session's later changes rode its first one's survey). It moves too when
+// HEAD takes in origin's newer work (a pull, a merge, a rebase): then move
+// the change's files to the path the turn-down names. With no origin,
 // the session alone. null on a detached HEAD (a rebase, a bisect), which
 // is not gated
 export const workOf = (cwd, input) => {
