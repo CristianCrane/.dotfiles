@@ -63,7 +63,7 @@ export const masked = (command) =>
     )
     .replace(/'[^']*'|"(?:\\.|[^"\\])*"/g, (quoted) => quoted[0] + " ".repeat(quoted.length - 2) + quoted[0]);
 
-// the folder gh runs in: the last `cd` before it, if any, found in the
+// the folder a command runs in at `at`: the last `cd` before it, if any, found in the
 // masked command with `$( … )` blanked too (so a `cd` in a heredoc, a
 // quote or a command substitution doesn't count) and read from the original
 export const dirOf = (command, hidden, at, cwd) => {
