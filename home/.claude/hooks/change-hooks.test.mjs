@@ -610,4 +610,23 @@ describe("prune-merged", () => {
     assert.ok(existsSync(join(main, ".git/claude/pruned-kept/done-2/notes.txt")));
     assert.ok(existsSync(join(main, ".git/worktrees/done")));
   });
+
+  // round 2 F10: a leftover whose entry went, its name since given to a new
+  // worktree, is deleted, and the new worktree's entry stays
+  test("a killed run's leftover never takes a new worktree's entry of the same name", () => {
+    const { dir, main, bin } = scratch(["live"]);
+    const base = join(dir, "base");
+    const trash = join(main, ".git/claude/pruned");
+    git(main, "worktree", "add", "-q", "--detach", base, "main");
+    mkdirSync(trash, { recursive: true });
+    renameSync(base, join(trash, "base-1"));
+    rmSync(join(main, ".git/worktrees/base"), { recursive: true });
+    git(main, "worktree", "add", "-q", "--detach", base, "main");
+    git(main, "worktree", "lock", base);
+    const ran = prune(bin, main);
+    assert.equal(ran.status, 0, ran.stderr);
+    assert.deepEqual(readdirSync(trash), []);
+    assert.match(ran.stdout, /^ {2}\.\.\/base \(detached\): locked$/m);
+    assert.equal(git(base, "status", "--porcelain"), "");
+  });
 });

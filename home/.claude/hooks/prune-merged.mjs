@@ -219,16 +219,29 @@ const remove = (main, trash, held, wt) => {
   erase(aside);
 };
 
-// finishes what a killed run left in `trash`: a folder whose entry is gone
-// was checked, and is deleted; one whose entry is still there wasn't, so
-// it's checked now, and goes, or moves into `held` (returned) to be kept
+// whether `entry` is still the moved-aside `left`'s own: it exists, and
+// the worktree it names is gone. Once an entry is deleted git may give its
+// name to a new worktree, whose folder then exists (git won't add one at a
+// path still registered).
+const ownEntry = (entry) => {
+  try {
+    return !existsSync(readFileSync(join(entry, "gitdir"), "utf8").trim());
+  } catch {
+    return false;
+  }
+};
+
+// finishes what a killed run left in `trash`: a folder whose own entry is
+// gone was checked, and is deleted; one whose own entry is still there
+// wasn't, so it's checked now, and goes, or moves into `held` (returned)
+// to be kept
 const sweep = (trash, held) => {
   if (!existsSync(trash)) return [];
   const kept = [];
   for (const name of readdirSync(trash)) {
     const left = join(trash, name);
     const entry = entryOf(left);
-    if (entry && existsSync(entry)) {
+    if (entry && ownEntry(entry)) {
       if (git(left, "status", "--porcelain")) {
         mkdirSync(held, { recursive: true });
         renameSync(left, join(held, name));
