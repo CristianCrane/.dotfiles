@@ -47,7 +47,8 @@ const dirOf = (command, hidden, at, cwd) => {
 // this gh command's own arguments, up to the next command: in the masked
 // text (`masked`), so a quoted title or body is blanks
 const argsOf = (hidden, end) => {
-  const stop = hidden.slice(end).search(/[;&|\n]/);
+  // an & in a redirect (2>&1, >&2, &>f, <&0) is no command boundary
+  const stop = hidden.slice(end).search(/[;|\n]|(?<![<>])&(?!>)/);
   return hidden.slice(end, stop < 0 ? undefined : end + stop);
 };
 
@@ -148,7 +149,7 @@ const readyGate = (command, hidden, match, input) => {
   // `ready`; GH_REPO or GH_HOST anywhere in the command) could be another
   // branch's, so it's turned down. Redirects are no argument
   const named = args
-    .replace(/\d*[<>]+&?\s*\S*/g, " ")
+    .replace(/(?:\d*|&)[<>]+&?\s*\S*/g, " ")
     .trim();
   const ghFlags = /gh\s+-/.test(hidden.slice(match.index, end));
   if (named || ghFlags || /\bGH_(?:REPO|HOST)\b/.test(command))
