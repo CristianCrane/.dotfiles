@@ -1,6 +1,8 @@
-// The change hooks' cases (CristianCrane/.dotfiles#10), each fed to the
-// hook as Claude Code runs it: `node <hook>.mjs`, the tool call's JSON on
-// stdin, in a scratch repo. Run from the repo root:
+// The change hooks' cases (CristianCrane/.dotfiles#10): the gates'
+// (survey-gate, review-gate, agent-gate), each fed to the hook as Claude
+// Code runs it (`node <hook>.mjs`, the tool call's JSON on stdin, in a
+// scratch repo), and below them plain tests of lib's cwdFor and of how
+// copy.mjs and sync.mjs register a repo's copy. Run from the repo root:
 //
 //   node --test 'home/.claude/hooks/*.test.mjs'
 //
@@ -9,7 +11,7 @@
 // so a copy of it in a checkout of an older commit tests that commit's
 // hooks. Never copied into repos (copy.mjs lists what is).
 //
-// A case is a row: [state, command, expected]. The command's <body>,
+// A gate's case is a row: [state, command, expected]. The command's <body>,
 // <repo> and <outside> stand for the state's paths; expected is THROUGH or
 // the gist of the turn-down, so a case held for one reason can't pass for
 // another. Every state with a through row has a row it holds too (a test
@@ -23,7 +25,7 @@ import { dirname, join } from "node:path";
 import { after, describe, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { repoCopy, repoHooks } from "./copy.mjs";
-import { stateFile } from "./lib.mjs";
+import { cwdFor, stateFile } from "./lib.mjs";
 
 const HOOKS = dirname(fileURLToPath(import.meta.url));
 const BRANCH = "feature";
@@ -97,6 +99,8 @@ const STATES = {
   // ready to open as a draft: a review and a PR body, no lessons
   createDraft: ["review-gate", () => scratchRepo({ review: true, body: BODY })],
   noReview: ["review-gate", () => scratchRepo({ lessons: ROUTED, body: BODY })],
+  // agent-gate reads only the tool call
+  agent: ["agent-gate", () => ({ repo: scratchDir() })],
   // a checkout with no survey, and a folder outside any checkout
   noSurvey: [
     "survey-gate",
@@ -159,16 +163,27 @@ const CASES = [
   ["noLessons", "echo env gh pr ready", THROUGH],
   ["noLessons", `git commit -m "then gh pr ready"`, THROUGH],
 
+  // agent-gate: the command is the Agent call's isolation, if any
+  ["agent", "worktree", /Spawn it without `isolation`/],
+  ["agent", "", THROUGH],
+
   // survey-gate: the command is the edited file
   ["noSurvey", "<repo>/b.txt", NO_SURVEY],
   ["noSurvey", "<outside>/link.txt", NO_SURVEY], // a symlink into the checkout: gated like its target
   ["noSurvey", "<outside>/c.txt", THROUGH], // outside any checkout
 ];
 
+// each gate's tool call, from a row's command
+const TOOL_INPUT = {
+  "review-gate": (command) => ({ command }),
+  "survey-gate": (file_path) => ({ file_path, content: "x\n" }),
+  "agent-gate": (isolation) => ({ prompt: "x", ...(isolation && { isolation }) }),
+};
+
 // the hook's answer to the case's tool call: the deny reason, or null
 const answer = (hookName, state, command) => {
   const filled = command.replace(/<(body|repo|outside)>/g, (_, name) => state[name]);
-  const toolInput = hookName === "survey-gate" ? { file_path: filled, content: "x\n" } : { command: filled };
+  const toolInput = TOOL_INPUT[hookName](filled);
   const cwd = filled.startsWith(state.outside ?? "\0") ? state.outside : state.repo;
   const ran = spawnSync(process.execPath, [join(HOOKS, `${hookName}.mjs`)], {
     input: JSON.stringify({ tool_input: toolInput, cwd, session_id: "s" }),
@@ -213,12 +228,18 @@ test("repoHooks: only settings.json's entries that run a copied hook", () => {
       PreToolUse: [
         { matcher: "Bash", hooks: [command("review-gate")] },
         { matcher: "Agent", hooks: [command("agent-gate"), { type: "command", command: "echo hi" }] },
+        { matcher: "Read", hooks: [command("user-only")] },
       ],
       SessionStart: [{ hooks: [command("stale-copy")] }],
       Stop: [{ hooks: [{ type: "prompt", prompt: "done?" }] }],
     },
   };
-  assert.deepEqual(repoHooks(settings), { PreToolUse: [["Bash", "review-gate"]] });
+  assert.deepEqual(repoHooks(settings), {
+    PreToolUse: [
+      ["Bash", "review-gate"],
+      ["Agent", "agent-gate"],
+    ],
+  });
 });
 
 // a repo's copy reads stale when its registered hooks differ from what a
@@ -232,4 +253,17 @@ test("repoCopy: current after a sync, stale once a registered hook differs", () 
   settings.hooks.PreToolUse.find((group) => group.matcher === "Bash").matcher = "Read";
   writeFileSync(file, JSON.stringify(settings));
   assert.equal(repoCopy(repo), "stale");
+});
+
+// a shell command's checkout is where its last cd leaves it, a cd in quoted
+// text not counting; an edit's, its file's
+test("cwdFor: a command's last cd, an edit's file", () => {
+  const { repo } = scratchRepo();
+  const outside = scratchDir();
+  const bash = (command) => cwdFor({ tool_input: { command }, cwd: outside });
+  assert.equal(bash(`cd ${repo} && git status`), repo);
+  assert.equal(bash(`cd /tmp; cd ${repo}`), repo);
+  assert.equal(bash(`echo "cd ${repo}"`), outside);
+  assert.equal(bash("git status"), outside);
+  assert.equal(cwdFor({ tool_input: { file_path: join(repo, "b.txt") }, cwd: outside }), repo);
 });

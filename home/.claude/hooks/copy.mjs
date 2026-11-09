@@ -50,8 +50,8 @@ const ours = (group) => group.hooks?.some((hook) => hook.command?.includes(".cla
 // a repo's settings with the copy's hooks registered as repoHooks says:
 // every earlier change entry replaced, in every event (so one dropped from
 // ~/.claude's settings goes), and the repo's own settings and hooks kept
-export const withRepoHooks = (settings, source) => {
-  const wanted = repoHooks(source);
+export const withRepoHooks = (settings) => {
+  const wanted = repoHooks();
   const hooks = { ...settings.hooks };
   for (const event of new Set([...Object.keys(hooks), ...Object.keys(wanted)])) {
     const groups = [
