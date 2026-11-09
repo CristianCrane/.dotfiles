@@ -380,7 +380,7 @@ export const beforeEdit = (cwd, work, input = {}, pending = null) => {
     return {
       survey: found,
       missing: dictated
-        ? `the survey for ${work.branch} is dictated, but ${dictated.why}. A dictated change is one Claude settings file the user named, that only makes Claude ask or refuse more, each entry in the user's words; anything wider gets the full flow: a full survey (${found.path}) and its plan review (the change-reviewer agent in plan mode, output ${plan.path})`
+        ? `the survey for ${work.branch} is dictated, but ${dictated.why}. A dictated change is one Claude settings file the user named, that only makes Claude ask or refuse more, or sets the model or theme to a value the user named, each entry in the user's words; anything wider gets the full flow: a full survey (${found.path}) and its plan review (the change-reviewer agent in plan mode, output ${plan.path})`
         : `the survey for ${work.branch} has no plan review: run the change-reviewer agent on it in plan mode, as the \`change\` skill's Plan review step says, with survey ${found.path} and output ${plan.path}`,
     };
   }
