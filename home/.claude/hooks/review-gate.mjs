@@ -10,21 +10,13 @@
 // `--draft`) once the branch's lessons file (the `lessons` skill) says
 // where every lesson went, and the review is still of the last commit.
 import { existsSync, readFileSync } from "node:fs";
-import { deny, dirOf, hook, lines, masked, onBranch, review, stateFile, workOf } from "./lib.mjs";
+import { argsOf, deny, dirOf, hook, lines, masked, onBranch, review, stateFile, workOf } from "./lib.mjs";
 
 // where a command starts (not inside a message that mentions it), after
 // any VAR=value prefixes, with any gh flags before `pr`
 // (a VAR=value prefix's value may be quoted: in the masked text its quotes
 // hold blanks; a wrapper such as env, command or time runs gh all the same)
 const PR_STEP = /(?:^|[;&|(\n])\s*(?:(?:\w+=(?:"[^"]*"|'[^']*'|[^\s"'])*|env|command|time|nohup|exec)\s+)*gh\s+(?:-\S+(?:\s+[^-\s]\S*)?\s+)*pr\s+(create|ready)\b/g;
-
-// this gh command's own arguments, up to the next command: in the masked
-// text (`masked`), so a quoted title or body is blanks
-const argsOf = (hidden, end) => {
-  // an & in a redirect (2>&1, >&2, &>f, <&0) is no command boundary
-  const stop = hidden.slice(end).search(/[;|\n]|(?<![<>])&(?!>)/);
-  return hidden.slice(end, stop < 0 ? undefined : end + stop);
-};
 
 // the branch `--head` names, if any, in this gh command's own arguments:
 // found in the masked text (so a title or body that mentions --head doesn't

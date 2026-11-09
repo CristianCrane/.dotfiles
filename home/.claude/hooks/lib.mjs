@@ -60,14 +60,27 @@ export const context = (event, text) => ({
   hookSpecificOutput: { hookEventName: event, additionalContext: text },
 });
 
+// a heredoc: its opening line (the tag quoted or not), its body, and the
+// line closing it
+export const HEREDOC = /(<<-?\s*(['"]?)(\w+)\2[^\n]*\n)([\s\S]*?\n)(\t*\3)(?=\n|$)/g;
+
 // the command with heredoc bodies and quoted text blanked out, keeping
 // every other character where it was
 export const masked = (command) =>
   command
-    .replace(/(<<-?\s*(['"]?)(\w+)\2[^\n]*\n)([\s\S]*?\n)(\t*\3)(?=\n|$)/g, (_, open, _q, _tag, body, close) =>
-      open + body.replace(/[^\n]/g, " ") + close,
-    )
+    .replace(HEREDOC, (_, open, _q, _tag, body, close) => open + body.replace(/[^\n]/g, " ") + close)
     .replace(/'[^']*'|"(?:\\.|[^"\\])*"/g, (quoted) => quoted[0] + " ".repeat(quoted.length - 2) + quoted[0]);
+
+// where one command ends and the next starts, in the masked text: an &
+// in a redirect (2>&1, >&2, &>f, <&0) is no command boundary
+export const BOUNDARY = String.raw`[;|\n]|(?<![<>])&(?!>)`;
+
+// a command's own arguments, from `end` up to the next command, in the
+// masked text (so a quoted title or body is blanks)
+export const argsOf = (hidden, end) => {
+  const stop = hidden.slice(end).search(new RegExp(BOUNDARY));
+  return hidden.slice(end, stop < 0 ? undefined : end + stop);
+};
 
 // the folder a command runs in at `at`: the last `cd` before it, if any, found in the
 // masked command with `$( … )` blanked too (so a `cd` in a heredoc, a
