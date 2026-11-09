@@ -1,9 +1,11 @@
 // The change hooks' cases (CristianCrane/.dotfiles#10): the gates'
-// (survey-gate, review-gate, agent-gate, process-gate, scratch-gate), each fed to the hook as Claude
-// Code runs it (`node <hook>.mjs`, the tool call's JSON on stdin, in a
-// scratch repo), and below them plain tests of lib's cwdFor, of how
-// copy.mjs and sync.mjs register a repo's copy, and of prune-merged (the
-// SessionStart hook that removes merged work). Run from the repo root:
+// (survey-gate, review-gate, agent-gate, process-gate, scratch-gate), each
+// fed to the hook as Claude Code runs it (`node <hook>.mjs`, the tool
+// call's JSON on stdin, with the input fields MORE_INPUT adds, in a
+// scratch repo), and below them plain tests of scratch-gate at a
+// subagent's start, of lib's cwdFor, of how copy.mjs and sync.mjs register
+// a repo's copy, and of prune-merged (the SessionStart hook that removes
+// merged work). Run from the repo root:
 //
 //   node --test 'home/.claude/hooks/*.test.mjs'
 //
@@ -12,12 +14,15 @@
 // so a copy of it in a checkout of an older commit tests that commit's
 // hooks. Never copied into repos (copy.mjs lists what is).
 //
-// A gate's case is a row: [state, command, expected]. The command's <body>,
-// <repo> and <outside> stand for the state's paths; expected is THROUGH or
-// the gist of the turn-down, so a case held for one reason can't pass for
-// another. Every state with a through row has a row it holds too (a test
-// below checks), so a hook that fails silently (lib's `hook()` swallows
-// errors) can't pass a through case.
+// A gate's case is a row: [state, command, expected]. The command (for
+// scratch-gate, a path to Write or a shell command) is what TOOL_INPUT
+// makes the tool call from; its <body>, <repo>, <outside> and <own> stand
+// for the state's paths. Expected is THROUGH or the gist of the
+// turn-down, so a case held for one reason can't pass for another. Every
+// state with a through row has a row it holds too (a test below checks),
+// so a hook that fails silently (lib's `hook()` swallows errors) can't
+// pass a through case.
+
 import assert from "node:assert/strict";
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import {
