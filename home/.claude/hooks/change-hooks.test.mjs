@@ -1,5 +1,5 @@
 // The change hooks' cases (CristianCrane/.dotfiles#10): the gates'
-// (survey-gate, review-gate, agent-gate), each fed to the hook as Claude
+// (survey-gate, review-gate, agent-gate, process-gate), each fed to the hook as Claude
 // Code runs it (`node <hook>.mjs`, the tool call's JSON on stdin, in a
 // scratch repo), and below them plain tests of lib's cwdFor and of how
 // copy.mjs and sync.mjs register a repo's copy. Run from the repo root:
@@ -169,6 +169,8 @@ const STATES = {
   ),
   // agent-gate reads only the tool call
   agent: ["agent-gate", () => ({ repo: scratchDir() })],
+  // process-gate reads only the command
+  process: ["process-gate", () => ({ repo: scratchDir() })],
   // a checkout with no survey, and a folder outside any checkout
   noSurvey: [
     "survey-gate",
@@ -184,6 +186,7 @@ const THROUGH = null;
 const NO_LESSONS = /can't leave draft before its lessons/;
 const NAMED = /Run `gh pr ready` bare/;
 const NO_SURVEY = /there is no survey for feature/;
+const SELF_MATCH = /match this command's own shell/;
 
 // ways of naming a PR after `gh pr ready`, and redirects that may come first
 const NAMING = ["12", "-R o/r 12", "-Ro/r", "-R=o/r 12", "--repo=o/r 12", "12 -R o/r"];
@@ -249,6 +252,27 @@ const CASES = [
   ["agent", "worktree", /Spawn it without `isolation`/],
   ["agent", "", THROUGH],
 
+  // process-gate: a full-command-line pgrep/pkill matches its own shell (dotfiles#15)
+  ...[
+    "pgrep -f vite",
+    'pgrep -af "playwright|vitest"',
+    'until ! pgrep -f "playwright test"; do sleep 3; done',
+    'pkill -f "vite --port 5173"',
+    "pgrep -fl x | xargs kill",
+    "pgrep --full x",
+    "sleep 1 && pkill -fa x",
+    "/usr/bin/pgrep -f x",
+    'pgrep "x" -f',
+  ].map((command) => ["process", command, SELF_MATCH]),
+  ...[
+    "pgrep -x node",
+    "pgrep -a vite",
+    "pkill node",
+    'ps -eo pid,args | grep "[p]laywright"',
+    'git commit -m "no more pgrep -f waits"',
+    "kill 123",
+  ].map((command) => ["process", command, THROUGH]),
+
   // survey-gate: the command is the edited file
   ["noSurvey", "<repo>/b.txt", NO_SURVEY],
   ["noSurvey", "<outside>/link.txt", NO_SURVEY], // a symlink into the checkout: gated like its target
@@ -264,6 +288,7 @@ const TOOL_INPUT = {
   "review-gate": (command) => ({ command }),
   "survey-gate": (file_path) => ({ file_path, content: "x\n" }),
   "agent-gate": (isolation) => ({ prompt: "x", ...(isolation && { isolation }) }),
+  "process-gate": (command) => ({ command }),
 };
 
 // the hook's answer to the case's tool call: the deny reason, or null
