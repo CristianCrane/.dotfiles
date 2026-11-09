@@ -103,10 +103,10 @@ A PR body says what a reader needs to check the change, and nothing else. Write 
 - **Problem** and **Fix**: one sentence each, in the repo's own words.
 - **Check these**: 3 to 5 links to the lines that matter most, each a permalink at HEAD's full sha as the body is written, with a few words on why.
 - **Before / after**: only for a change a person sees, and then always: screenshots of each screen it changes, before and after side by side, made as the repo's CLAUDE.md says.
-- **Tests**: only for a change to the server or other code a person doesn't see: links to the most relevant tests, saying which one was red on the old code.
+- **Tests**: only for a change to the server or other code a person doesn't see: permalinks to the most relevant tests, at HEAD's full sha too, saying which one was red on the old code.
 - **Change**, collapsed: the blank line after `</summary>` lets GitHub draw the heading. One line per pattern, per review finding and per `Seen nearby:` item. When the PR has refactor commits, Change names what they retired and says how behaviour was shown unchanged.
 
-No other headings or labels: no summary of runs, no list of commits. The gate turns the PR down until the body has Problem, Fix, Check these with 3 to 5 permalinks at commits on the branch, and Change in its closed `<details>`, with no other heading or label, and until Change answers every finding of the last review, by id.
+No other headings or labels (a line led by bold is a label): no summary of runs, no list of commits. The gate turns the PR down until the body has Problem and Fix with their sentences, Check these with 3 to 5 permalinks, every permalink at a commit on the branch, and Change in its closed `<details>`, with no other heading or label, and until Change answers every finding of the last review, by id.
 
 ## 6. Lessons
 

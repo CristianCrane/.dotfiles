@@ -204,10 +204,14 @@ const STATES = {
         check: `**Check these:**\n${[1, 2, 3, 4, 5].map((n) => `- https://github.com/o/r/blob/${head}/b.txt#L${n}\n`).join("")}`,
       }),
       bodyBare: () => ({ problem: null, fix: "**Fix:**\n" }),
-      bodyExtra: () => ({ problem: "## Summary\n\n**Problem:** a thing.\n\n**Evidence:** it ran\n\n### Merge Danger\n" }),
+      bodyExtra: () => ({
+        problem: "## Summary\n\n**Problem:** a thing.\n\n**Evidence:** it ran\n\n### Merge Danger\n\n**Evidence**\n",
+        footer: "**Left open**: x\n",
+      }),
       bodyFewLinks: (head) => ({ check: `**Check these:**\n- https://github.com/o/r/blob/${head}/b.txt#L1\n- https://github.com/o/r/blob/main/b.txt\n` }),
       bodyLinksElsewhere: (head) => ({
         check: `**Check these:**\n${[head, head, "0".repeat(40)].map((sha) => `- https://github.com/o/r/blob/${sha}/b.txt\n`).join("")}`,
+        tests: `**Tests:**\n- https://github.com/o/r/blob/${"1".repeat(40)}/b.test.mjs#L3\n`,
       }),
       bodyOpen: () => ({ change: "## Change\n- New: nothing\n" }),
       bodyNoBlank: () => ({ change: "<details><summary>Change</summary>\n## Change\n- New: nothing\n</details>\n" }),
@@ -292,10 +296,10 @@ const CASES = [
   // the body's shape (the change skill's PR body step)
   ["bodyMore", "gh pr create --draft --body-file <body>", THROUGH],
   ["bodyMore", "gh pr create --body-file <body>", NO_LESSONS],
-  ["bodyBare", "gh pr create --draft --body-file <body>", /no `\*\*Problem:\*\*` line with its sentence; no `\*\*Fix:\*\*` line/],
-  ["bodyExtra", "gh pr create --draft --body-file <body>", /parts it doesn't have: `\*\*Evidence:\*\*`, `## Summary`, `### Merge Danger`/],
+  ["bodyBare", "gh pr create --draft --body-file <body>", /no `\*\*Problem:\*\*`; `\*\*Fix:\*\*` has no sentence on its line/],
+  ["bodyExtra", "gh pr create --draft --body-file <body>", /parts it doesn't have: `\*\*Evidence\*\*`, `\*\*Left open\*\*`, `## Summary`, `### Merge Danger`/],
   ["bodyFewLinks", "gh pr create --draft --body-file <body>", /has 1 permalink\(s\) .*, not 3 to 5/],
-  ["bodyLinksElsewhere", "gh pr create --draft --body-file <body>", /links at 0000000, no commit on this branch/],
+  ["bodyLinksElsewhere", "gh pr create --draft --body-file <body>", /permalinks at 0000000, 1111111, no commit on this branch/],
   ...["bodyOpen", "bodyNoBlank", "bodyUnclosed", "bodyShown"].map((state) => [
     state,
     "gh pr create --draft --body-file <body>",

@@ -56,11 +56,16 @@ const lessonsMissing = (cwd, work) => {
     return `The lessons file for ${work.branch} (${file}) ${items.length ? `has ${unsaid.length} lesson(s) that don't say where they went` : "lists none"}: ${how}.`;
 };
 
-// the PR body's labels (the `change` skill's PR body step), in its order:
-// Problem and Fix each hold a sentence on their line, and Check these its
-// permalinks; Before / after and Tests come only with the change that needs
-// them. `## Change` follows, collapsed
-const LABELS = ["Problem", "Fix", "Check these", "Before / after", "Tests"];
+// the PR body's labelled parts (the `change` skill's PR body step), in its
+// order: whether each must be there, whether its sentence is on its line, and
+// how many permalinks it holds. `## Change` follows, collapsed
+const PARTS = [
+  { label: "Problem", required: true, sentence: true },
+  { label: "Fix", required: true, sentence: true },
+  { label: "Check these", required: true, links: [3, 5] },
+  { label: "Before / after" },
+  { label: "Tests" },
+];
 
 // the Change section, collapsed in a closed <details>: the blank line after
 // </summary> lets GitHub draw its heading
@@ -70,34 +75,44 @@ const COLLAPSED = /^<details>\s*<summary>Change<\/summary>[ \t]*\n[ \t]*\n(## Ch
 const PERMALINK = /https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/blob\/([0-9a-f]{40})\//g;
 
 // what keeps the body from the skill's shape, outside fenced code: a part
-// missing, a heading or label it doesn't have, Check these without 3 to 5
-// permalinks at commits on the branch, or Change not collapsed. The Change
-// section, when it's there, comes back to be checked against the review
+// missing or short of what it holds, a label (any line led by bold) or
+// heading it doesn't have, a permalink at no commit on the branch, or
+// Change not collapsed. The Change section, when it's there, comes back to
+// be checked against the review
 const shapeOf = (text, cwd) => {
   const prose = text.replace(/^```[\s\S]*?^```/gm, "");
   const problems = [];
-  for (const label of ["Problem", "Fix"])
-    if (!new RegExp(`^\\*\\*${label}:\\*\\*[ \\t]*\\S`, "m").test(prose))
-      problems.push(`no \`**${label}:**\` line with its sentence`);
+  // each label's block: its line's rest, then the lines up to the next
+  // label or the collapsed Change
+  const blocks = new Map();
+  let block = null;
+  for (const line of prose.split("\n")) {
+    const label = /^\*\*(.+?):?\*\*:?(.*)$/.exec(line);
+    if (label) blocks.set(label[1], (block = { rest: label[2].trim(), text: "" }));
+    else if (/^<details>/.test(line)) block = null;
+    else if (block) block.text += `${line}\n`;
+  }
+  for (const { label, required, sentence, links } of PARTS) {
+    const part = blocks.get(label);
+    if (!part) {
+      if (required) problems.push(`no \`**${label}:**\``);
+      continue;
+    }
+    if (sentence && !part.rest) problems.push(`\`**${label}:**\` has no sentence on its line`);
+    const count = links && [...part.text.matchAll(PERMALINK)].length;
+    if (links && (count < links[0] || count > links[1]))
+      problems.push(
+        `\`**${label}:**\` has ${count} permalink(s) (\`https://github.com/<owner>/<repo>/blob/<full sha>/<path>#L<a>-L<b>\`), not ${links.join(" to ")}`,
+      );
+  }
   const stray = [
-    ...lines(prose)
-      .flatMap((line) => line.match(/^\*\*([^*]+):\*\*/)?.[1] ?? [])
-      .filter((label) => !LABELS.includes(label))
-      .map((label) => `**${label}:**`),
+    ...[...blocks.keys()].filter((label) => !PARTS.some((part) => part.label === label)).map((label) => `**${label}**`),
     ...lines(prose).filter((line) => /^#{1,6}\s/.test(line) && !/^## Change\s*$/.test(line)),
   ];
   if (stray.length) problems.push(`parts it doesn't have: ${stray.map((part) => `\`${part}\``).join(", ")}`);
-  const at = prose.search(/^\*\*Check these:\*\*/m);
-  if (at < 0) problems.push("no `**Check these:**` list");
-  else {
-    const list = prose.slice(at).split(/\n(?=\*\*[^*]+:\*\*|<details>)/)[0];
-    const shas = [...list.matchAll(PERMALINK)].map((link) => link[1]);
-    if (shas.length < 3 || shas.length > 5)
-      problems.push(`\`**Check these:**\` has ${shas.length} permalink(s) (\`https://github.com/<owner>/<repo>/blob/<full sha>/<path>#L<a>-L<b>\`), not 3 to 5`);
-    const elsewhere = [...new Set(shas)].filter((sha) => !onBranch(cwd, sha));
-    if (elsewhere.length)
-      problems.push(`\`**Check these:**\` links at ${elsewhere.map((sha) => sha.slice(0, 7)).join(", ")}, no commit on this branch: link at HEAD's full sha`);
-  }
+  const elsewhere = [...new Set([...prose.matchAll(PERMALINK)].map((link) => link[1]))].filter((sha) => !onBranch(cwd, sha));
+  if (elsewhere.length)
+    problems.push(`permalinks at ${elsewhere.map((sha) => sha.slice(0, 7)).join(", ")}, no commit on this branch: link at HEAD's full sha`);
   const collapsed = COLLAPSED.exec(prose);
   if (!collapsed)
     problems.push(
