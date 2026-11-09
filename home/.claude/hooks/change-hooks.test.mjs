@@ -19,7 +19,7 @@
 // errors) can't pass a through case.
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { after, describe, test } from "node:test";
@@ -122,6 +122,26 @@ const STATES = {
         body: "## Change\n- Review: F1 a → fixed in deadbee0\n- Review: F2 b → fixed: #313's body revised\n- Review: F3 c → answered on #266\n",
       }),
   ],
+  // a survey that names its file by a short name only, and one that
+  // names no file at all
+  shortNames: [
+    "survey-gate",
+    () => {
+      const state = scratchRepo();
+      mkdirSync(join(state.repo, "src/deep"), { recursive: true });
+      commit(state.repo, "src/deep/c.ts", "c\n");
+      write(state.repo, "survey", "Change: c.\nPatterns touched:\n  - c.ts\n");
+      return state;
+    },
+  ],
+  noPaths: [
+    "survey-gate",
+    () => {
+      const state = scratchRepo();
+      write(state.repo, "survey", "Change: something.\n");
+      return state;
+    },
+  ],
   // agent-gate reads only the tool call
   agent: ["agent-gate", () => ({ repo: scratchDir() })],
   // a checkout with no survey, and a folder outside any checkout
@@ -201,6 +221,9 @@ const CASES = [
   ["noSurvey", "<repo>/b.txt", NO_SURVEY],
   ["noSurvey", "<outside>/link.txt", NO_SURVEY], // a symlink into the checkout: gated like its target
   ["noSurvey", "<outside>/c.txt", THROUGH], // outside any checkout
+  // dotfiles#9: a survey that exists but names no path says what to write
+  ["shortNames", "<repo>/b.txt", /the survey for feature \(.*\) names no file by its path from the top of the checkout \(`c\.ts` is `src\/deep\/c\.ts`\)/],
+  ["noPaths", "<repo>/b.txt", /the survey for feature \(.*\) names no file by its path from the top of the checkout \(such as `a\.txt`\)/],
 ];
 
 // each gate's tool call, from a row's command
