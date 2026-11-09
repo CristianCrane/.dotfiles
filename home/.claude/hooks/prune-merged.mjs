@@ -123,18 +123,20 @@ const lastUsed = (wt) => {
 };
 
 // why a merged worktree stays: { why, stuck } (stuck: it won't go by
-// itself; a process or a recent use means it's live, and a later run
-// takes it), or null when nothing keeps it
+// itself, so the session start names it; a recent use means it's live and
+// a later run takes it, but a process in a worktree unused for RECENT, a
+// server or watcher left running, may never end), or null when nothing
+// keeps it
 const busy = (wt) => {
   if (wt.locked) return { why: "locked", stuck: true };
   if (git(wt.path, "status", "--porcelain")) return { why: "uncommitted or untracked changes", stuck: true };
+  const since = Date.now() - lastUsed(wt);
   try {
     const pids = processesIn(wt.path);
-    if (pids.length) return { why: `a process works in it (pid ${pids.join(", ")})`, stuck: false };
+    if (pids.length) return { why: `a process works in it (pid ${pids.join(", ")})`, stuck: since >= RECENT };
   } catch {
     return { why: "can't tell whether a process works in it", stuck: true };
   }
-  const since = Date.now() - lastUsed(wt);
   if (since < RECENT) return { why: `used ${Math.round(since / 60_000)} min ago`, stuck: false };
   return null;
 };

@@ -527,14 +527,18 @@ describe("prune-merged", () => {
   });
 
   test("--hook in the main checkout: one line on what went and what merged stayed", () => {
-    const { main, bin } = scratch();
+    const { dir, main, bin } = scratch();
+    // a process in a worktree used just now: an agent at work
+    sleepers.push(spawn("sleep", ["60"], { cwd: join(dir, "fresh"), stdio: "ignore" }));
     const ran = prune(bin, main, "--hook");
     assert.equal(ran.status, 0, ran.stderr);
     const { systemMessage } = JSON.parse(ran.stdout);
     assert.match(systemMessage, /^Pruned merged work: 2 worktrees, 2 local branches, 2 branches on origin\./);
     assert.match(systemMessage, /Kept \.\.\/dirty, merged but: uncommitted or untracked changes\./);
-    // a process or a recent use: live, so a later run takes it, unsaid
-    assert.doesNotMatch(systemMessage, /live|proto|fresh|theirs|busy/);
+    // a process in a worktree unused for hours may never end, so it's said;
+    // in one used just now it's an agent at work, unsaid
+    assert.match(systemMessage, /Kept \.\.\/busy, merged but: a process works in it/);
+    assert.doesNotMatch(systemMessage, /live|proto|fresh|theirs/);
   });
 
   test("--hook: silent with nothing to do, outside the main checkout, and offline", () => {
