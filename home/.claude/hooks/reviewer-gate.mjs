@@ -9,10 +9,17 @@
 //
 // Its Bash runs only when every command in it, substitutions included, is
 // a reader on READERS (built from the Bash calls of past reviewers), with
-// output to /dev/null or another fd at most. What this can't read (a
-// VAR= prefix, a command it doesn't know) is turned down, as is any error
-// reading the call: lib's hook() would let it through. Its Write (or Edit)
-// goes only to a plan-review or review file beside a survey in a git dir.
+// output to /dev/null, stdout, stderr or another fd at most. What this
+// can't read (a VAR= prefix, a command it doesn't know) is turned down, as
+// is any error reading the call: lib's hook() would let it through. Its
+// Write (or Edit) goes only to a plan-review or review file beside a
+// survey in a git dir.
+//
+// It holds a reviewer's own calls and their plain workarounds; it is no
+// sandbox. It reads words as written, so an expansion's value (`git diff
+// $x` with x=--output=f), zsh's rarer ways to set a name (`set -A`,
+// `${X::=}`) and gawk's abbreviated long options aren't read (round 3's
+// F15 lists each). Closing the first would turn down `git diff $mb`.
 import { existsSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { BOUNDARY, deny, has, HEREDOC, hook, inGitDir, masked, REDIRECT, substitutions, unquote, WORD } from "./lib.mjs";
