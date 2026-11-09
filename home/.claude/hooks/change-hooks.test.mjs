@@ -68,6 +68,17 @@ const scratchDir = () => {
 
 const git = (cwd, ...args) => execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
 
+// a bare origin for `repo`, on main, reached by a github.com URL (as gh
+// and prune-merged see one), with main pushed; its path
+const withOrigin = (repo, dir = scratchDir()) => {
+  const origin = join(dir, "origin.git");
+  git(dir, "init", "-q", "--bare", "-b", "main", origin);
+  git(repo, "config", `url.${origin}.insteadOf`, "https://github.com/o/r");
+  git(repo, "remote", "add", "origin", "https://github.com/o/r");
+  git(repo, "push", "-q", "origin", "main");
+  return origin;
+};
+
 const commit = (repo, file, text) => {
   writeFileSync(join(repo, file), text);
   git(repo, "add", file);
@@ -719,14 +730,10 @@ describe("prune-merged", () => {
   // or branch goes or stays; `only` builds just the branches it names
   const scratch = (only) => {
     const dir = scratchDir();
-    const origin = join(dir, "origin.git");
-    git(dir, "init", "-q", "--bare", "-b", "main", origin);
     const main = join(dir, "main");
     git(dir, "init", "-q", "-b", "main", main);
-    git(main, "config", `url.${origin}.insteadOf`, "https://github.com/o/r");
-    git(main, "remote", "add", "origin", "https://github.com/o/r");
     commit(main, "a.txt", "a\n");
-    git(main, "push", "-q", "origin", "main");
+    withOrigin(main, dir);
     const prs = [];
     // a branch off main with a commit of its own, in a worktree at
     // ../<name> (removed again unless `worktree`), pushed unless `local`,

@@ -389,9 +389,22 @@ export const onBranch = (cwd, sha) => {
   }
 };
 
+// where HEAD meets origin's default branch, as a full sha; null with no
+// origin
+export const originBase = (cwd) => {
+  for (const ref of ["origin/HEAD", "origin/main", "origin/master"]) {
+    try {
+      return git(cwd, "merge-base", "HEAD", ref);
+    } catch {}
+  }
+  return null;
+};
+
 // what the branch is measured against: where it left the default branch
 const base = (cwd) => {
-  for (const ref of ["origin/HEAD", "origin/main", "origin/master", "main", "master"]) {
+  const found = originBase(cwd);
+  if (found) return found;
+  for (const ref of ["main", "master"]) {
     try {
       return git(cwd, "merge-base", "HEAD", ref);
     } catch {}
