@@ -59,6 +59,9 @@ Write it beside the review, as `lessons-<branch>.md` with each `/` in the branch
 ```
 Lessons for <branch>:
 - <when X, do Y> → <where it went: a commit, a file, an issue, a memory>
+
+Ruled out:
+- <cost>: <why it isn't a lesson>
 ```
 
-or `None: <what it cost, and why none of it is a lesson>`. A PR leaves draft (`gh pr ready`, or `gh pr create` without `--draft`) once this file says where every lesson went and the review is of the last commit (after a lessons commit, its recheck). Then show the user each lesson and where it went.
+The gate reads the `- ` bullets before `Ruled out:` as lessons, each needing its `→`; with no lessons, the Ruled out list alone. A PR leaves draft (`gh pr ready`, or `gh pr create` without `--draft`) once this file says where every lesson went and the review is of the last commit (after a lessons commit, its recheck). Then show the user each lesson and where it went.

@@ -123,6 +123,12 @@ const STATES = {
   lessonNoArrow: ["review-gate", () => scratchRepo({ review: true, lessons: "- A lesson\n" })],
   lessonsEmpty: ["review-gate", () => scratchRepo({ review: true, lessons: "" })],
   lessonsNone: ["review-gate", () => scratchRepo({ review: true, lessons: "None: a one-line fix\n" })],
+  // the costs ruled out after the lessons (the lessons skill's step 5)
+  lessonsRuledOut: ["review-gate", () => scratchRepo({ review: true, lessons: `${ROUTED}\nRuled out:\n- F1 a cost: one quick fix\n` })],
+  lessonsOnlyRuledOut: ["review-gate", () => scratchRepo({ review: true, lessons: "Ruled out (none of the costs is a lesson):\n- F1 a cost: one quick fix\n" })],
+  lessonsRuledOutEmpty: ["review-gate", () => scratchRepo({ review: true, lessons: "Ruled out:\n" })],
+  // a lesson with no → before None: (None: once let the whole file through)
+  lessonUnroutedNone: ["review-gate", () => scratchRepo({ review: true, lessons: "- A lesson\nNone: the rest\n" })],
   // a lessons commit after the review, with no recheck of it
   staleReview: [
     "review-gate",
@@ -286,6 +292,12 @@ const CASES = [
   ["lessonsEmpty", "gh pr ready", /lists none/],
   ["ready", "gh pr ready", THROUGH],
   ["lessonsNone", "gh pr ready", THROUGH],
+  ["lessonsRuledOut", "gh pr ready", THROUGH],
+  ["lessonsOnlyRuledOut", "gh pr ready", THROUGH],
+  ["lessonsRuledOut", "gh pr ready 12", NAMED],
+  ["lessonsOnlyRuledOut", "gh pr ready 12", NAMED],
+  ["lessonsRuledOutEmpty", "gh pr ready", /lists none/],
+  ["lessonUnroutedNone", "gh pr ready", /1 lesson\(s\) that don't say where they went/],
   ["lessonsNone", "gh pr ready 12", NAMED],
   ["noLessons", "gh pr ready --undo", THROUGH],
   ["staleReview", "gh pr ready", /it reviewed [0-9a-f]+, and the commits since change more than comment lines/],

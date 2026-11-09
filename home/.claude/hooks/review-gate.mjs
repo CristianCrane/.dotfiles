@@ -38,16 +38,19 @@ const turnDown = (reason, verb) =>
   deny(`${reason} Nothing in this command ran, steps before gh pr ${verb} included: run each one as its own command.`);
 
 // why the branch's PR can't leave draft yet, if it can't: its lessons file
-// is missing, lists nothing, or has a lesson that doesn't say where it went
+// is missing, lists nothing, or has a lesson that doesn't say where it went.
+// The lessons are the bullets before the first line starting `Ruled out`
+// (or `None:`, its older spelling); the costs ruled out follow, in any form
 const lessonsMissing = (cwd, work) => {
   const file = stateFile(cwd, "lessons", work.key);
-  const how = `run the \`lessons\` skill (the \`change\` skill's step 6) and write them to ${file}, each lesson saying where it went (\`→ <where>\`), or \`None: <why>\``;
+  const how = `run the \`lessons\` skill (the \`change\` skill's step 6) and write them to ${file}, each lesson saying where it went (\`→ <where>\`), and the costs that aren't lessons after a \`Ruled out:\` line`;
   if (!existsSync(file)) return `${work.branch}'s PR can't leave draft before its lessons: ${how}.`;
-  const text = readFileSync(file, "utf8");
-  if (/^None:\s*\S/m.test(text)) return;
-  const items = lines(text).filter((line) => /^\s*-\s/.test(line));
+  const all = lines(readFileSync(file, "utf8"));
+  const split = all.findIndex((line) => /^(?:ruled out|none:)/i.test(line.trim()));
+  const items = (split < 0 ? all : all.slice(0, split)).filter((line) => /^\s*-\s/.test(line));
+  const ruledOut = split >= 0 && /\w/.test(all.slice(split).join(" ").replace(/^\s*(?:ruled out|none)\W*/i, ""));
   const unsaid = items.filter((line) => !/→\s*\S/.test(line));
-  if (items.length === 0 || unsaid.length)
+  if ((items.length === 0 && !ruledOut) || unsaid.length)
     return `The lessons file for ${work.branch} (${file}) ${items.length ? `has ${unsaid.length} lesson(s) that don't say where they went` : "lists none"}: ${how}.`;
 };
 
