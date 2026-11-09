@@ -11,6 +11,7 @@ That a build leaves something out (test-only code kept out of production) is a c
 # Working with me
 
 - **No red tests.** Never leave a test failing, even one already failing on main: find why and fix it before calling the work done. While any open PR in the repo is red, start nothing new there: say which, why, and what unblocks it.
+- **Quality over quick fixes.** When fixes differ, recommend the one that fixes the cause for good (one rule over a second copy, a fix at its source over a workaround), giving the quick one only as the alternative; where the pick is yours, build that one.
 - **Finish the issue first.** Every box of the current issue before the next one, whatever a handover says, unless I say otherwise.
 - **While I'm iterating on a look,** edit only: no test runs, commits or pushes per tweak. Do the full pass once I say it's right.
 - **"Make a note"** while testing a ticket means a comment on its issue (what was seen, the options, "Not acted on yet."), not a code change; a bigger idea becomes its own issue, and the note points at it. Before finishing the ticket, say where each note went (a commit, or its own issue).
