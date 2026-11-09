@@ -1,5 +1,6 @@
 // The change hooks' cases (CristianCrane/.dotfiles#10): the gates'
-// (survey-gate, review-gate, agent-gate, process-gate, scratch-gate), each
+// (survey-gate, review-gate, agent-gate, process-gate, scratch-gate,
+// reviewer-gate), each
 // fed to the hook as Claude Code runs it (`node <hook>.mjs`, the tool
 // call's JSON on stdin, with the input fields MORE_INPUT adds, in a
 // scratch repo), and below them plain tests of scratch-gate at a
@@ -237,6 +238,15 @@ const STATES = {
       return { repo, own: join(repo, "agents", AGENT) };
     },
   ],
+  // reviewer-gate: the change-reviewer's call, <own> standing for the
+  // folder its survey (and so its review) is in
+  reviewer: [
+    "reviewer-gate",
+    () => {
+      const state = scratchRepo();
+      return { ...state, own: dirname(write(state.repo, "survey", "Change: b.\n")) };
+    },
+  ],
   // a checkout with no survey, and a folder outside any checkout
   noSurvey: [
     "survey-gate",
@@ -254,6 +264,15 @@ const NAMED = /Run `gh pr ready` bare/;
 const NO_SURVEY = /there is no survey for feature/;
 const SELF_MATCH = /match this command's own shell/;
 const AGENT = "a1";
+// the gist of a reviewer-gate turn-down of a command: the rule, why this
+// one (its text, <repo> and <own> standing for any path), and what to do
+const reads = (why) =>
+  new RegExp(
+    String.raw`^The change-reviewer runs only commands that read: .*\. Here ` +
+      why.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/<(?:repo|own)>/g, ".*") +
+      String.raw`.*\. The author runs the tests, builds and checks beside you in this same checkout.*take the author's numbers, or call the claim unshown`,
+  );
+const NOT_REVIEW = /^The change-reviewer writes only its review: .* isn't one\./;
 const NOT_OWN = /is in the scratchpad, outside this agent's own scratch folder, .*\/agents\/a1\. .*Read a file elsewhere in the scratchpad \(one your caller left\) with the Read tool; when a command needs it, Write a copy into your folder/;
 
 // ways of naming a PR after `gh pr ready`, and redirects that may come first
@@ -384,6 +403,85 @@ const CASES = [
     "echo hi > /tmp/x.log",
   ].map((call) => ["scratch", call, THROUGH]),
 
+  // reviewer-gate: the change-reviewer reads and writes its review, nothing
+  // else (dotfiles#17); a row's command is a path to Write, or else a shell
+  // command. The through rows are shaped like past reviewers' reads, the
+  // held ones like the writes and runs among them
+  ...[
+    ["pnpm test:change", "`pnpm` isn't a reading command"],
+    ["cd <repo> && npx vitest run a.test.ts", "`npx` isn't a reading command"],
+    ["node -e 'console.log(1)'", "node runs only as `node --permission`"],
+    ["node --permission --allow-fs-write='*' -e 1", "node runs only as"],
+    ["git diff > <repo>/d.patch", "`> <repo>/d.patch` writes a file"],
+    ['git log >> "<repo>/x"', "`>> \"<repo>/x\"` writes a file"],
+    ["cat > <own>/review-feature.md <<'EOF'\nx\nEOF", "`> <own>/review-feature.md` writes a file"],
+    ["git log | tee x", "`tee` isn't a reading command"],
+    ["git fetch origin", "`git fetch` isn't one of git's reading subcommands"],
+    ["git -c core.pager=rm log", "git's `-c` can change what git runs"],
+    ["git diff --output=x", "git's --output writes a file"],
+    ["git stash", "`git stash` changes the stash"],
+    ["git branch new-one", "`git branch` changes branches"],
+    ["git config user.name x", "`git config` changes the config"],
+    ["git worktree add ../x", "`git worktree` changes the worktrees"],
+    ["sed -i s/a/b/ b.txt", "sed edits a file in place"],
+    ["sed -i.bak 1p b.txt", "sed edits a file in place"],
+    ["sed -n '1w x' b.txt", "sed's script `1w x` isn't only"],
+    ["sed 's/a/b/e' b.txt", "sed's script `s/a/b/e` isn't only"],
+    ["awk '{print > \"x\"}' b.txt", "awk's program writes or runs a command"],
+    ["awk 'BEGIN{system(\"rm x\")}'", "awk's program writes or runs a command"],
+    ["find . -delete", "find's action runs a command or writes"],
+    ["fd -x rm", "fd's --exec runs a command"],
+    ["rg --pre cat x", "rg's --pre runs a command"],
+    ["sort -o x b.txt", "sort writes a file"],
+    ["xargs rm < list", "`rm` isn't a reading command"],
+    ["timeout 5 pnpm test", "`pnpm` isn't a reading command"],
+    ["FOO=1 git diff", "`FOO=1` before a command changes what it runs"],
+    ["gh pr checkout 12", "`gh pr checkout` isn't a view or list"],
+    ["gh api -X POST repos/o/r/issues", "`gh api` sends more than a GET"],
+    ["gh api repos/o/r/issues -f title=x", "`gh api` sends more than a GET"],
+    // F2: substitutions the shell runs where masked() blanks them
+    ['echo "$(pnpm test)"', "`pnpm` isn't a reading command"],
+    ["cat <<EOF\n$(pnpm test)\nEOF", "`pnpm` isn't a reading command"],
+    ['rg x "`node -e 1`"', "node runs only as"],
+    ["git diff $(touch x)", "`touch` isn't a reading command"],
+    ["diff <(rm x) b.txt", "`rm` isn't a reading command"],
+    ["$(echo rm) cat", "`__________` isn't a reading command"], // a substitution never names a reader
+    ["(cd <repo> && make)", "`make` isn't a reading command"],
+  ].map(([call, why]) => ["reviewer", call, reads(why)]),
+  ...[
+    "git diff $(git merge-base HEAD origin/main)..HEAD",
+    'git diff --stat "$(git merge-base HEAD origin/main)"',
+    "cd <repo> && git log --oneline -5 && git status --short",
+    "git -C <repo> show HEAD:b.txt | head -20",
+    "rg -n 'pnpm test|`x`|$(y)' <repo> 2>/dev/null | wc -l",
+    "command ls <repo> && cat <repo>/b.txt 2>&1 >/dev/null",
+    "sed -n '1,40p;60,80p' <repo>/b.txt",
+    "sed -n '/^export const x/,/^};/p' <repo>/b.txt",
+    "n=$(rg -n x b.txt | cut -d: -f1); sed -n \"$((n-6)),$((n+4))p\" b.txt",
+    "awk -F'|' 'NF>7 {print $2}' b.txt | sort | uniq -c | sort -rn",
+    "awk --sandbox '{print > \"x\"}' b.txt",
+    "find <repo> \\( -name '*.txt' -o -name '*.md' \\) -newer <repo>/a.txt",
+    "for f in a.txt b.txt; do git log -1 --format=%h -- $f; done",
+    "for p in a b; do case $p in a|b) echo x;; *) echo y;; esac; done",
+    "if git diff --quiet; then echo same; fi",
+    "[ -f b.txt ] && echo yes || echo no",
+    "diff <(git show HEAD~1:b.txt) <(git show HEAD:b.txt)",
+    "cat <<'EOF'\nhello (world) > x `y` $(z)\nEOF",
+    "S=<repo>; ls $S; command -v git",
+    "gh pr view 12 --json body -q .body; gh repo view --json defaultBranchRef -q .defaultBranchRef.name",
+    "gh api repos/o/r/pulls/1/comments --paginate",
+    "git branch --list 'feat*'; git branch --show-current; git config --get user.name; git stash list",
+    "timeout 20 git log -1 | xargs -n1 echo",
+    "node --permission --allow-fs-read='*' - <<'EOF'\nconsole.log(`${1}`)\nEOF",
+    "uptime; ps -eo pid,args | grep '[n]ode'",
+    "<own>/review-feature.md",
+    "<own>/plan-review-feature.md",
+  ].map((call) => ["reviewer", call, THROUGH]),
+  ["reviewer", "<own>/survey-feature.md", NOT_REVIEW],
+  ["reviewer", "<own>/review-other.md", NOT_REVIEW], // no survey of its own beside it
+  ["reviewer", "<repo>/b.txt", NOT_REVIEW],
+  ["reviewer", "<repo>/review-feature.md", NOT_REVIEW],
+
   // survey-gate: the command is the edited file
   ["noSurvey", "<repo>/b.txt", NO_SURVEY],
   ["noSurvey", "<outside>/link.txt", NO_SURVEY], // a symlink into the checkout: gated like its target
@@ -401,11 +499,13 @@ const TOOL_INPUT = {
   "agent-gate": (isolation) => ({ prompt: "x", ...(isolation && { isolation }) }),
   "process-gate": (command) => ({ command }),
   "scratch-gate": (call) => (call.startsWith("/") ? { file_path: call, content: "x\n" } : { command: call }),
+  "reviewer-gate": (call) => (call.startsWith("/") ? { file_path: call, content: "x\n" } : { command: call }),
 };
 
 // what else a gate reads from the hook's input
 const MORE_INPUT = {
   "scratch-gate": (state) => ({ agent_id: AGENT, scratchpad_dir: state.repo }),
+  "reviewer-gate": () => ({ agent_id: AGENT, agent_type: "change-reviewer" }),
 };
 
 // the hook's answer to the case's tool call: the deny reason, or null
@@ -499,6 +599,19 @@ test("scratch-gate: a subagent's folder, made and named at its start; the main s
   assert.equal(run({ ...write, scratchpad_dir: root }), "");
   assert.equal(run({ ...write, agent_id: AGENT }), "");
   assert.notEqual(run({ ...write, agent_id: AGENT, scratchpad_dir: root }), ""); // the same call, held in a subagent
+});
+
+// reviewer-gate holds the change-reviewer only: the same calls from the
+// main session or another agent go through
+test("reviewer-gate: other callers' calls through", () => {
+  const { repo } = scratchRepo();
+  const run = (input) =>
+    spawnSync(process.execPath, [join(HOOKS, "reviewer-gate.mjs")], { input: JSON.stringify({ cwd: repo, ...input }), encoding: "utf8" }).stdout;
+  for (const tool_input of [{ command: "pnpm test:change" }, { file_path: join(repo, "b.txt"), content: "x" }]) {
+    assert.notEqual(run({ tool_input, agent_id: AGENT, agent_type: "change-reviewer" }), ""); // held for the reviewer
+    assert.equal(run({ tool_input }), "");
+    assert.equal(run({ tool_input, agent_id: AGENT, agent_type: "general-purpose" }), "");
+  }
 });
 
 // a shell command's checkout is where its last cd leaves it, a cd in quoted

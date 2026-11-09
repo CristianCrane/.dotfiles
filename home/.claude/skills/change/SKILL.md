@@ -56,7 +56,7 @@ Keep the survey true: when the plan or the file count changes, update it, and wh
 
 Once the change is committed, before opening the PR (`gh pr create` is turned down until the review is of the last commit, or of one before it with only comment lines changed since, and, before the last round, has no open change findings), run the `change-reviewer` agent: **round 1**, with the branch, the repo root, which commits are refactors (the survey's `Commits:`), the survey's and plan review's paths, and the review's path (`review-…` beside the survey).
 
-A round is the reviewer and you arguing about shape, and about a bug's evidence. The reviewer reads the diff and the survey and runs no tests, so tests never hold it up: start each round as its commit lands, and run the repo's quick tests beside it (its CLAUDE.md or AGENTS.md names them, and its full suite).
+A round is the reviewer and you arguing about shape, and about a bug's evidence. The reviewer reads the diff and the survey and runs nothing that writes (a gate holds it to reading), so tests never hold it up: start each round as its commit lands, and run the repo's quick tests beside it (its CLAUDE.md or AGENTS.md names them, and its full suite).
 
 - **Every finding is a fix**, made now and never filed for later. Each has an id (`F<n>`) and a severity:
   - **`[change]`**: a shape decision, or a bug's unshown cause (the reviewer's impact list). Fix it, with any failure the round's quick tests found, commit, and run the reviewer again: **round 2**, **round 3**, and on. A follow-up round checks only the fixes, against the previous review in the same file. Only these fixes count rounds.
