@@ -3,6 +3,11 @@
 // What the change hooks share: git, and the survey, plan review and review
 // files the `change` skill writes into the git dir (never committed, kept
 // per worktree): one set per branch, and on main one per session.
+//
+// A gate that must know what a command acts on (which PR) has it named one
+// way and turns every other way down, saying how to run it: reading each
+// spelling the tool accepts (-R…, GH_REPO, flags before `pr`) kept missing
+// routes, round after round (the lessons skill's review, rounds 2-5).
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
