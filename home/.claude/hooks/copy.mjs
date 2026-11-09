@@ -16,7 +16,7 @@ export const COPIED = [
   ["skills/change/SKILL.md", ".claude/skills/change/SKILL.md"],
   ["skills/lessons/SKILL.md", ".claude/skills/lessons/SKILL.md"],
   ["agents/change-reviewer.md", ".claude/agents/change-reviewer.md"],
-  ...["lib", "survey-gate", "review-gate", "change-check"].map((name) => [
+  ...["lib", "survey-gate", "review-gate", "change-check", "agent-gate"].map((name) => [
     `hooks/${name}.mjs`,
     `.claude/hooks/change/${name}.mjs`,
   ]),
@@ -27,6 +27,7 @@ export const REPO_HOOKS = {
   PreToolUse: [
     ["Edit|Write|MultiEdit|NotebookEdit", "survey-gate"],
     ["Bash", "review-gate"],
+    ["Agent", "agent-gate"],
   ],
   PostToolUse: [["Edit|Write|MultiEdit|NotebookEdit|Bash", "change-check"]],
 };
