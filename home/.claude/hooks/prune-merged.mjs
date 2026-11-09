@@ -123,13 +123,14 @@ const lastUsed = (wt) => {
 };
 
 // why a merged worktree stays: { why, stuck } (stuck: it won't go by
-// itself), or null when nothing keeps it
+// itself; a process or a recent use means it's live, and a later run
+// takes it), or null when nothing keeps it
 const busy = (wt) => {
   if (wt.locked) return { why: "locked", stuck: true };
   if (git(wt.path, "status", "--porcelain")) return { why: "uncommitted or untracked changes", stuck: true };
   try {
     const pids = processesIn(wt.path);
-    if (pids.length) return { why: `a process works in it (pid ${pids.join(", ")})`, stuck: true };
+    if (pids.length) return { why: `a process works in it (pid ${pids.join(", ")})`, stuck: false };
   } catch {
     return { why: "can't tell whether a process works in it", stuck: true };
   }

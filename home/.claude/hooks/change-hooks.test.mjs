@@ -533,8 +533,8 @@ describe("prune-merged", () => {
     const { systemMessage } = JSON.parse(ran.stdout);
     assert.match(systemMessage, /^Pruned merged work: 2 worktrees, 2 local branches, 2 branches on origin\./);
     assert.match(systemMessage, /Kept \.\.\/dirty, merged but: uncommitted or untracked changes\./);
-    assert.match(systemMessage, /Kept \.\.\/busy, merged but: a process works in it/);
-    assert.doesNotMatch(systemMessage, /live|proto|fresh|theirs/);
+    // a process or a recent use: live, so a later run takes it, unsaid
+    assert.doesNotMatch(systemMessage, /live|proto|fresh|theirs|busy/);
   });
 
   test("--hook: silent with nothing to do, outside the main checkout, and offline", () => {
