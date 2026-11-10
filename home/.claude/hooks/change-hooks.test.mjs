@@ -1204,11 +1204,24 @@ describe("usage", () => {
     assert.match(run(["--since", "2999-01-01"]).stdout, /^total {2,}0 /m);
   });
 
-  test("a failed recording is an error row the report counts; a flag it doesn't know runs nothing", () => {
+  // round 1 F11: Claude Code's progress summary of a busy background agent
+  // stops as an agent with no type and no transcript (seen live)
+  test("a progress summary's stop is a fork row, counted apart; a failed recording an error row", () => {
     const { run, ledger } = scratch();
-    run(["--hook"], { hook_event_name: "SubagentStop", session_id: "s1", agent_id: "a9", agent_transcript_path: "/nowhere/agent-a9.jsonl" });
-    assert.match(ledger()[0].error, /ENOENT/);
-    assert.match(run([]).stdout, /^1 recording failed: the ledger's "error" rows say why\.$/m);
+    const stop = { hook_event_name: "SubagentStop", session_id: "s1", agent_transcript_path: "/nowhere/agent-a9.jsonl" };
+    run(["--hook"], { ...stop, agent_id: "f1", agent_type: "", last_assistant_message: "Running step 1" });
+    run(["--hook"], { ...stop, agent_id: "a9", agent_type: "general-purpose" });
+    const [fork, error] = ledger();
+    assert.deepEqual({ ...fork, at: undefined }, { kind: "fork", at: undefined, session: "s1", agent: "f1" });
+    assert.deepEqual([error.kind, error.agent, error.event, error.type], ["error", "a9", "SubagentStop", "general-purpose"]);
+    assert.match(error.error, /ENOENT/);
+    const report = run([]).stdout;
+    assert.match(report, /^Not counted: 1 progress summary Claude Code forked from background agents, whose tokens no transcript holds\.$/m);
+    assert.match(report, /^1 recording failed: the ledger's "error" rows say why\.$/m);
+  });
+
+  test("a flag it doesn't know runs nothing", () => {
+    const { run } = scratch();
     const typo = run(["--sinse", "2026-11-10"]);
     assert.equal(typo.status, 1);
     assert.match(typo.stderr, /^usage: .*'--sinse'.*\nUsage: node ~\/\.claude\/hooks\/usage\.mjs \[--agent <id>\] \[--since <YYYY-MM-DD>\]$/m);

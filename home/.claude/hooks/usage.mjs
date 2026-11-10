@@ -12,8 +12,15 @@
 // - an "agent" row per agent stop: its parent, depth, type, description,
 //   effort and cwd, from the input and the meta.json beside its transcript;
 //   a "session" row per main session stop, with its cwd
-// - an "error" row when recording fails, which the report counts: a record
-//   lost can't be rebuilt once the transcript is gone
+// - a "fork" row per stop of Claude Code's own progress summary: while a
+//   background agent works, every ~30 s it forks the agent for one turn to
+//   summarize it (forkLabel "agent_summary", skipTranscript, in 2.1.308's
+//   bundle), and that fork stops with agent_type "" and a transcript path
+//   never written (seen live 2026-11-10). Its tokens are in no transcript,
+//   so the report counts the forks and can't sum them
+// - an "error" row when recording fails, with the event and agent type, which
+//   the report counts: a record lost can't be rebuilt once the transcript is
+//   gone
 // A resumed or forked session's transcript repeats the earlier one's
 // messages under its own id (523 of 19,271 message ids sat in two of
 // empire-cleaning's transcripts, 2026-11-10), so the report counts each
@@ -83,7 +90,8 @@ const messages = (text, who) => {
 
 const record = (input) => {
   const at = new Date().toISOString();
-  const { session_id: session, agent_id: agent = null, cwd } = input;
+  const { session_id: session, agent_id: agent = null, agent_type: type, cwd } = input;
+  if (agent && type === "") return append([{ kind: "fork", at, session, agent }]);
   try {
     const transcript = agent ? input.agent_transcript_path : input.transcript_path;
     const offsetFile = join(USAGE, "offsets", `${session}-${agent ?? "main"}`);
@@ -100,7 +108,7 @@ const record = (input) => {
             agent,
             parent: parentAgentId ?? null,
             depth: spawnDepth ?? null,
-            type: input.agent_type,
+            type,
             description: description ?? null,
             effort: input.effort?.level ?? null,
             cwd,
@@ -110,16 +118,17 @@ const record = (input) => {
     mkdirSync(dirname(offsetFile), { recursive: true });
     writeFileSync(offsetFile, String(to));
   } catch (error) {
-    append([{ kind: "error", at, session, agent, error: error.message }]);
+    append([{ kind: "error", at, session, agent, event: input.hook_event_name, type, error: error.message }]);
   }
 };
 
 // the ledger: each agent's and session's latest row, each message id's
-// first row, and how many rows say recording failed (or can't be read)
+// first row, and the forks and errors (a row that can't be read is one)
 const ledger = () => {
   const agents = new Map();
   const sessions = new Map();
   const counted = new Map();
+  const forks = [];
   let errors = 0;
   for (const line of existsSync(LEDGER) ? lines(readFileSync(LEDGER, "utf8")) : []) {
     let row;
@@ -132,9 +141,10 @@ const ledger = () => {
     if (row.kind === "agent") agents.set(row.agent, row);
     else if (row.kind === "session") sessions.set(row.session, row);
     else if (row.kind === "message" && !counted.has(row.id)) counted.set(row.id, row);
+    else if (row.kind === "fork") forks.push(row);
     else if (row.kind === "error") errors++;
   }
-  return { agents, sessions, messages: [...counted.values()], errors };
+  return { agents, sessions, messages: [...counted.values()], forks, errors };
 };
 
 // the agents up from `agent` to the one the main session started
@@ -173,7 +183,7 @@ const tokensLine = (id) => {
 
 // each workstream and main session with messages since `day`, the costliest first
 const table = (day) => {
-  const { agents, sessions, messages, errors } = ledger();
+  const { agents, sessions, messages, forks, errors } = ledger();
   const from = new Date(`${day}T00:00`);
   const groups = new Map();
   for (const row of messages.filter((row) => new Date(row.at) >= from)) {
@@ -201,11 +211,14 @@ const table = (day) => {
     ...COUNTS.map((count) => [count.replace(/[A-Z]/, (c) => ` ${c.toLowerCase()}`), (row) => short(row[count])]),
     ["agents", (row) => row.agents],
   ];
+  const summaries = forks.filter((row) => new Date(row.at) >= from).length;
   const cells = [columns.map(([head]) => head), ...rows.map((row) => columns.map(([, cell]) => cell(row)))];
   const widths = columns.map((_, i) => Math.max(...cells.map((line) => line[i].length)));
   return [
     `Usage since ${day} (${LEDGER}):`,
     ...cells.map((line) => line.map((cell, i) => (i ? cell.padStart(widths[i]) : cell.padEnd(widths[i]))).join("  ")),
+    summaries &&
+      `Not counted: ${summaries} progress ${summaries === 1 ? "summary" : "summaries"} Claude Code forked from background agents, whose tokens no transcript holds.`,
     errors && `${plural(errors, "recording")} failed: the ledger's "error" rows say why.`,
   ]
     .filter(Boolean)
