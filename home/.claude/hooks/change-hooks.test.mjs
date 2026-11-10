@@ -70,6 +70,16 @@ const scratchDir = () => {
 
 const git = (cwd, ...args) => execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
 
+// runs hooks/<name>.mjs as Claude Code does: `input` as JSON on stdin (none
+// when undefined), then `args` after the script and any other spawnSync
+// `options`
+const runHook = (name, input, { args = [], ...options } = {}) =>
+  spawnSync(process.execPath, [join(HOOKS, `${name}.mjs`), ...args], {
+    input: input === undefined ? undefined : JSON.stringify(input),
+    encoding: "utf8",
+    ...options,
+  });
+
 // a bare origin for `repo`, on main, reached by a github.com URL (as gh
 // and prune-merged see one), with main pushed; its path
 const withOrigin = (repo, dir = scratchDir()) => {
@@ -580,10 +590,7 @@ const answer = (hookName, state, command) => {
   const filled = command.replace(/<(body|repo|outside|own)>/g, (_, name) => state[name]);
   const toolInput = TOOL_INPUT[hookName](filled);
   const cwd = filled.startsWith(state.outside ?? "\0") ? state.outside : state.repo;
-  const ran = spawnSync(process.execPath, [join(HOOKS, `${hookName}.mjs`)], {
-    input: JSON.stringify({ tool_input: toolInput, cwd, session_id: "s", ...MORE_INPUT[hookName]?.(state) }),
-    encoding: "utf8",
-  });
+  const ran = runHook(hookName, { tool_input: toolInput, cwd, session_id: "s", ...MORE_INPUT[hookName]?.(state) });
   assert.equal(ran.status, 0, ran.stderr);
   if (!ran.stdout.trim()) return null;
   const decision = JSON.parse(ran.stdout).hookSpecificOutput;
@@ -641,7 +648,7 @@ test("repoHooks: only settings.json's entries that run a copied hook", () => {
 // sync writes, not only its files (round 1 F6)
 test("repoCopy: current after a sync, stale once a registered hook differs", () => {
   const { repo } = scratchRepo();
-  execFileSync(process.execPath, [join(HOOKS, "sync.mjs"), repo]);
+  assert.equal(runHook("sync", undefined, { args: [repo] }).status, 0);
   assert.equal(repoCopy(repo), "current");
   const file = join(repo, ".claude/settings.json");
   const settings = JSON.parse(readFileSync(file, "utf8"));
@@ -655,8 +662,7 @@ test("repoCopy: current after a sync, stale once a registered hook differs", () 
 // scratchpad, go through
 test("scratch-gate: a subagent's folder, made and named at its start; the main session's calls through", () => {
   const root = scratchDir();
-  const run = (input) =>
-    spawnSync(process.execPath, [join(HOOKS, "scratch-gate.mjs")], { input: JSON.stringify(input), encoding: "utf8" }).stdout;
+  const run = (input) => runHook("scratch-gate", input).stdout;
   const own = join(root, "agents", AGENT);
   const started = JSON.parse(run({ hook_event_name: "SubagentStart", agent_id: AGENT, scratchpad_dir: root }));
   assert.equal(started.hookSpecificOutput.hookEventName, "SubagentStart");
@@ -672,8 +678,7 @@ test("scratch-gate: a subagent's folder, made and named at its start; the main s
 // main session or another agent go through
 test("reviewer-gate: other callers' calls through", () => {
   const { repo } = scratchRepo();
-  const run = (input) =>
-    spawnSync(process.execPath, [join(HOOKS, "reviewer-gate.mjs")], { input: JSON.stringify({ cwd: repo, ...input }), encoding: "utf8" }).stdout;
+  const run = (input) => runHook("reviewer-gate", { cwd: repo, ...input }).stdout;
   for (const tool_input of [{ command: "pnpm test:change" }, { file_path: join(repo, "b.txt"), content: "x" }]) {
     assert.notEqual(run({ tool_input, agent_id: AGENT, agent_type: "change-reviewer" }), ""); // held for the reviewer
     assert.equal(run({ tool_input }), "");
@@ -688,9 +693,10 @@ test("reviewer-gate: other callers' calls through", () => {
 // With no origin, the session alone, as before
 test("survey-gate on main: one survey per change, until it's pushed", () => {
   const edit = (repo) => {
-    const ran = spawnSync(process.execPath, [join(HOOKS, "survey-gate.mjs")], {
-      input: JSON.stringify({ tool_input: { file_path: join(repo, "b.txt"), content: "x\n" }, cwd: repo, session_id: "s" }),
-      encoding: "utf8",
+    const ran = runHook("survey-gate", {
+      tool_input: { file_path: join(repo, "b.txt"), content: "x\n" },
+      cwd: repo,
+      session_id: "s",
     });
     return ran.stdout.trim() ? JSON.parse(ran.stdout).hookSpecificOutput.permissionDecisionReason : null;
   };
@@ -761,10 +767,7 @@ test("dictated: a settings change the user typed out skips the reviews, and noth
     return { repo, transcript };
   };
   const run = (hook, { repo, transcript }, tool_input) => {
-    const ran = spawnSync(process.execPath, [join(HOOKS, `${hook}.mjs`)], {
-      input: JSON.stringify({ tool_input, cwd: repo, session_id: "s", transcript_path: transcript }),
-      encoding: "utf8",
-    });
+    const ran = runHook(hook, { tool_input, cwd: repo, session_id: "s", transcript_path: transcript });
     return ran.stdout.trim() ? JSON.parse(ran.stdout).hookSpecificOutput.permissionDecisionReason : null;
   };
   const editTo = (state, value, file = ".claude/settings.json") =>
@@ -848,7 +851,6 @@ test("substitutions: each the shell runs, outermost first", () => {
 // github.com URL by insteadOf) and a fake `gh` first on PATH, answering
 // with the scratch repo's PRs
 describe("prune-merged", () => {
-  const PRUNE = join(HOOKS, "prune-merged.mjs");
   const sleepers = [];
   after(() => sleepers.forEach((sleeper) => sleeper.kill()));
 
@@ -929,10 +931,9 @@ describe("prune-merged", () => {
   };
 
   const prune = (bin, cwd, ...args) =>
-    spawnSync(process.execPath, [PRUNE, ...args], {
+    runHook("prune-merged", args.includes("--hook") ? { hook_event_name: "SessionStart", cwd, session_id: "s" } : undefined, {
+      args,
       cwd,
-      encoding: "utf8",
-      input: args.includes("--hook") ? JSON.stringify({ hook_event_name: "SessionStart", cwd, session_id: "s" }) : undefined,
       env: { ...process.env, PATH: `${bin}:${process.env.PATH}` },
     });
   const worktreeNames = (main) =>
