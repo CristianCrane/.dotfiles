@@ -15,6 +15,7 @@
     "sentry@claude-plugins-official": true
   },
   "theme": "dark",
+  "autoCompactWindow": 300000,
   "autoMode": {
     "environment": [
       "### Org-wide",
