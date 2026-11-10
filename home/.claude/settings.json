@@ -124,6 +124,28 @@
         ]
       }
     ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.claude/hooks/usage.mjs\" --hook",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.claude/hooks/usage.mjs\" --hook",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
     "SubagentStart": [
       {
         "hooks": [

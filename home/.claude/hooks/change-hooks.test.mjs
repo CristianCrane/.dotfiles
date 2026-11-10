@@ -6,8 +6,9 @@
 // scratch-gate at a subagent's start, reviewer-gate's other callers, the
 // survey gate on main (one survey per change), a dictated settings
 // change, lib's cwdFor and
-// substitutions, how copy.mjs and sync.mjs register a repo's copy, and
-// prune-merged (the SessionStart hook that removes merged work). Run from
+// substitutions, how copy.mjs and sync.mjs register a repo's copy, the
+// scripts' flags, prune-merged (the SessionStart hook that removes merged
+// work) and usage (the ledger of tokens spent). Run from
 // the repo root:
 //
 //   node --test 'home/.claude/hooks/*.test.mjs'
@@ -29,6 +30,7 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import {
+  appendFileSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -1101,5 +1103,115 @@ describe("prune-merged", () => {
     assert.deepEqual(readdirSync(trash), []);
     assert.match(ran.stdout, /^ {2}\.\.\/base \(detached\): locked$/m);
     assert.equal(git(base, "status", "--porcelain"), "");
+  });
+});
+
+// usage.mjs: the ledger of tokens spent, recorded at each stop (in a
+// scratch HOME), and its reports
+describe("usage", () => {
+  const now = new Date().toISOString();
+  // an assistant message's lines: one per content block, the same id and usage
+  const said = (id, cacheRead, { blocks = 1, model = "claude-opus-5-5" } = {}) =>
+    Array.from({ length: blocks }, () => ({
+      type: "assistant",
+      timestamp: now,
+      message: { id, model, usage: { input_tokens: 1, cache_read_input_tokens: cacheRead, cache_creation_input_tokens: 10, output_tokens: 5 } },
+    }));
+  const jsonl = (entries) => entries.map((entry) => JSON.stringify(entry) + "\n").join("");
+  const scratch = () => {
+    const home = scratchDir();
+    const project = join(home, ".claude/projects/p");
+    mkdirSync(join(project, "s1/subagents"), { recursive: true });
+    const run = (args, input) => runHook("usage", input, { args, env: { ...process.env, HOME: home } });
+    const ledger = () => lines(readFileSync(join(home, ".claude/usage/ledger.jsonl"), "utf8")).map((line) => JSON.parse(line));
+    // an agent's transcript and meta.json, and its stop
+    const agent = (id, entries, meta) => {
+      const transcript = join(project, `s1/subagents/agent-${id}.jsonl`);
+      appendFileSync(transcript, typeof entries === "string" ? entries : jsonl(entries));
+      if (meta) writeFileSync(transcript.replace(/\.jsonl$/, ".meta.json"), JSON.stringify(meta));
+      return run(["--hook"], {
+        hook_event_name: "SubagentStop",
+        session_id: "s1",
+        cwd: "/w/repo",
+        agent_id: id,
+        agent_type: "general-purpose",
+        agent_transcript_path: transcript,
+        effort: { level: "high" },
+        last_assistant_message: "a reply the ledger never keeps",
+      });
+    };
+    const session = (id, entries) => {
+      const transcript = join(project, `${id}.jsonl`);
+      appendFileSync(transcript, jsonl(entries));
+      return run(["--hook"], { hook_event_name: "Stop", session_id: id, cwd: "/w/repo", transcript_path: transcript });
+    };
+    return { run, ledger, agent, session };
+  };
+
+  test("--hook: a row per message once, only what's new at each stop, and the agent's place", () => {
+    const { ledger, agent } = scratch();
+    const meta = { agentType: "general-purpose", description: "Fix issue 1", spawnDepth: 1 };
+    assert.equal(agent("a1", [{ type: "user", message: { content: "a prompt the ledger never keeps" } }, ...said("m1", 100, { blocks: 3 })], meta).status, 0);
+    // stopped again: m2, and m3's first line half written
+    const half = JSON.stringify(said("m3", 300)[0]);
+    agent("a1", jsonl(said("m2", 200)) + half.slice(0, 20));
+    // done: the rest of m3's line
+    agent("a1", half.slice(20) + "\n");
+    const rows = ledger();
+    assert.deepEqual(
+      rows.filter((row) => row.kind === "message").map((row) => [row.id, row.agent, row.cacheRead]),
+      [["m1", "a1", 100], ["m2", "a1", 200], ["m3", "a1", 300]],
+    );
+    const stops = rows.filter((row) => row.kind === "agent");
+    assert.equal(stops.length, 3);
+    assert.deepEqual(
+      { ...stops[0], at: undefined },
+      { kind: "agent", at: undefined, session: "s1", agent: "a1", parent: null, depth: 1, type: "general-purpose", description: "Fix issue 1", effort: "high", cwd: "/w/repo" },
+    );
+    assert.doesNotMatch(JSON.stringify(rows), /never keeps/);
+  });
+
+  test("--agent: the Tokens line sums the agent and every agent below it, and only them", () => {
+    const { run, agent } = scratch();
+    agent("a1", said("m1", 1_000_000), { description: "Fix issue 1", spawnDepth: 1 });
+    agent("r1", said("m2", 2_000_000), { description: "Round 1 review", spawnDepth: 2, parentAgentId: "a1" });
+    agent("x1", said("m3", 3_000_000), { description: "Explore", spawnDepth: 3, parentAgentId: "r1" });
+    agent("b1", said("m4", 9_000_000), { description: "Fix issue 2", spawnDepth: 1 });
+    const ran = run(["--agent", "a1"]);
+    assert.equal(ran.status, 0, ran.stderr);
+    assert.equal(ran.stdout, "Tokens: 6.0M cache read, 30 cache write, 15 output, 3 input over 3 turns (this agent and the 2 it started)\n");
+    assert.match(run(["--agent", "x1"]).stdout, /^Tokens: 3\.0M cache read.* over 1 turn \(this agent\)$/m);
+    const none = run(["--agent", "zz"]);
+    assert.equal(none.status, 1);
+    assert.equal(none.stdout, "No usage recorded for agent zz.\n");
+  });
+
+  // a resumed session's transcript repeats the earlier one's messages
+  test("--since: each workstream and main session, a message in two transcripts counted once", () => {
+    const { run, agent, session } = scratch();
+    session("s1", said("m1", 500));
+    session("s2", [...said("m1", 500), ...said("m2", 700)]);
+    agent("a1", said("m3", 100), { description: "Fix issue 1", spawnDepth: 1 });
+    agent("r1", said("m4", 50), { description: "Round 1 review", spawnDepth: 2, parentAgentId: "a1" });
+    const ran = run([]);
+    assert.equal(ran.status, 0, ran.stderr);
+    const table = ran.stdout.split("\n").map((line) => line.split(/\s{2,}/));
+    assert.deepEqual(table[1], ["", "turns", "cache read", "cache write", "output", "input", "agents"]);
+    assert.deepEqual(table[2], ["main s2 repo", "1", "700", "10", "5", "1", ""]);
+    assert.deepEqual(table[3], ["main s1 repo", "1", "500", "10", "5", "1", ""]);
+    assert.deepEqual(table[4], ["Fix issue 1", "2", "150", "20", "10", "2", "2"]);
+    assert.deepEqual(table[5], ["total", "4", "1k", "40", "20", "4", ""]);
+    assert.match(run(["--since", "2999-01-01"]).stdout, /^total {2,}0 /m);
+  });
+
+  test("a failed recording is an error row the report counts; a flag it doesn't know runs nothing", () => {
+    const { run, ledger } = scratch();
+    run(["--hook"], { hook_event_name: "SubagentStop", session_id: "s1", agent_id: "a9", agent_transcript_path: "/nowhere/agent-a9.jsonl" });
+    assert.match(ledger()[0].error, /ENOENT/);
+    assert.match(run([]).stdout, /^1 recording failed: the ledger's "error" rows say why\.$/m);
+    const typo = run(["--sinse", "2026-11-10"]);
+    assert.equal(typo.status, 1);
+    assert.match(typo.stderr, /^usage: .*'--sinse'.*\nUsage: node ~\/\.claude\/hooks\/usage\.mjs \[--agent <id>\] \[--since <YYYY-MM-DD>\]$/m);
+    assert.equal(run(["--since", "11/10"]).status, 1);
   });
 });
