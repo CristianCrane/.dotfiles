@@ -657,6 +657,16 @@ test("repoCopy: current after a sync, stale once a registered hook differs", () 
   assert.equal(repoCopy(repo), "stale");
 });
 
+// a flag isn't a repo: sync says how it runs, not a stack trace from git
+// in a folder named --help
+test("sync: a flag it doesn't know says how it runs, and copies nothing", () => {
+  const { repo } = scratchRepo();
+  const ran = runHook("sync", undefined, { args: ["--help"], cwd: repo });
+  assert.equal(ran.status, 1);
+  assert.match(ran.stderr, /^sync: .*'--help'.*\nUsage: node ~\/\.claude\/hooks\/sync\.mjs \[repo\]$/m);
+  assert.ok(!existsSync(join(repo, ".claude/hooks/change")));
+});
+
 // scratch-gate at a subagent's start: it makes the agent's folder and
 // names it; the main session's calls (no agent_id), and a session with no
 // scratchpad, go through
@@ -972,6 +982,16 @@ describe("prune-merged", () => {
     assert.equal(ran.status, 0, ran.stderr);
     assert.match(ran.stdout, /^Would remove 2 worktrees:/m);
     assert.match(ran.stdout, /^Would delete 2 local branches: done, theirs$/m);
+    assert.deepEqual([worktreeNames(main), branches(main, "refs/heads/"), remote(main)], before);
+  });
+
+  // a mistyped flag once ran a real prune: it was ignored, not refused
+  test("a flag it doesn't know: says how it runs, and removes nothing", () => {
+    const { main, bin } = scratch();
+    const before = [worktreeNames(main), branches(main, "refs/heads/"), remote(main)];
+    const ran = prune(bin, main, "--dryrun");
+    assert.equal(ran.status, 1);
+    assert.match(ran.stderr, /^prune-merged: .*'--dryrun'.*\nUsage: node ~\/\.claude\/hooks\/prune-merged\.mjs \[--dry-run\]$/m);
     assert.deepEqual([worktreeNames(main), branches(main, "refs/heads/"), remote(main)], before);
   });
 

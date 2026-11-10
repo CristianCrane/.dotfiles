@@ -40,7 +40,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { basename, dirname, join, relative } from "node:path";
-import { git, hook, lines, topOf } from "./lib.mjs";
+import { flagsOf, git, hook, lines, topOf } from "./lib.mjs";
 
 // how long a worktree stays after its last use: empire-cleaning's live ones
 // had been used 0–6 minutes before, its stale ones 11–20 hours (2026-11-09)
@@ -481,7 +481,11 @@ const summary = (done) => {
     .join(" ");
 };
 
-if (process.argv.includes("--hook"))
+const flags = flagsOf("prune-merged", "[--dry-run]", {
+  options: { hook: { type: "boolean" }, "dry-run": { type: "boolean" } },
+}).values;
+
+if (flags.hook)
   hook((input) => {
     if (topOf(input.cwd) !== worktrees(input.cwd)[0].path) return;
     const done = prune(input.cwd, false);
@@ -489,7 +493,7 @@ if (process.argv.includes("--hook"))
     return message && { systemMessage: message };
   });
 else {
-  const dry = process.argv.includes("--dry-run");
+  const dry = flags["dry-run"] ?? false;
   try {
     const done = prune(process.cwd(), dry);
     console.log(done ? report(done, dry) : "Another prune-merged run has this repo: try again once it's done.");

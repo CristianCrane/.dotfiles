@@ -8,9 +8,10 @@
 import { copyFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { CLAUDE, COPIED, repoSettings, repoSettingsFile, withRepoHooks } from "./copy.mjs";
-import { topOf } from "./lib.mjs";
+import { flagsOf, topOf } from "./lib.mjs";
 
-const top = topOf(process.argv[2] ?? process.cwd());
+const [repo = process.cwd()] = flagsOf("sync", "[repo]", { allowPositionals: true }).positionals;
+const top = topOf(repo);
 
 for (const [source, copy] of COPIED) {
   mkdirSync(dirname(join(top, copy)), { recursive: true });
