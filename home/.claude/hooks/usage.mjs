@@ -17,7 +17,10 @@
 //   summarize it (forkLabel "agent_summary", skipTranscript, in 2.1.308's
 //   bundle), and that fork stops with agent_type "" and a transcript path
 //   never written (seen live 2026-11-10). Its tokens are in no transcript,
-//   so the report counts the forks and can't sum them
+//   so the report counts the forks and can't sum them. A fork names no
+//   parent, so its row keeps the ids of the agents running as it stopped
+//   (the input's background_tasks, ids only): one of them is the one it
+//   summarized
 // - an "error" row when recording fails, with the event and agent type, which
 //   the report counts: a record lost can't be rebuilt once the transcript is
 //   gone
@@ -91,7 +94,10 @@ const messages = (text, who) => {
 const record = (input) => {
   const at = new Date().toISOString();
   const { session_id: session, agent_id: agent = null, agent_type: type, cwd } = input;
-  if (agent && type === "") return append([{ kind: "fork", at, session, agent }]);
+  if (agent && type === "") {
+    const running = (input.background_tasks ?? []).filter((task) => task.type === "subagent" && task.status === "running");
+    return append([{ kind: "fork", at, session, agent, running: running.map((task) => task.id) }]);
+  }
   try {
     const transcript = agent ? input.agent_transcript_path : input.transcript_path;
     const offsetFile = join(USAGE, "offsets", `${session}-${agent ?? "main"}`);
@@ -170,14 +176,18 @@ const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 // one workstream: the agent and every agent below it
 const tokensLine = (id) => {
-  const { agents, messages } = ledger();
+  const { agents, messages, forks } = ledger();
   const own = messages.filter((row) => row.agent && lineage(agents, row.agent).includes(id));
   if (!own.length) return null;
-  const started = new Set(own.map((row) => row.agent)).size - 1;
+  const ids = new Set(own.map((row) => row.agent));
+  // forks while one of its agents ran; with others running too, the fork
+  // may have summarized one of them
+  const summaries = forks.filter((row) => row.running?.some((agent) => ids.has(agent))).length;
   const sum = total(own);
   return (
     `Tokens: ${short(sum.cacheRead)} cache read, ${short(sum.cacheWrite)} cache write, ${short(sum.output)} output, ` +
-    `${short(sum.input)} input over ${plural(sum.turns, "turn")} (this agent${started ? ` and the ${started} it started` : ""})`
+    `${short(sum.input)} input over ${plural(sum.turns, "turn")} (this agent${ids.size > 1 ? ` and the ${ids.size - 1} it started` : ""})` +
+    (summaries ? `; not counted: up to ${summaries} progress ${summaries === 1 ? "summary" : "summaries"} Claude Code forked while it ran` : "")
   );
 };
 

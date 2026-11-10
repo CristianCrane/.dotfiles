@@ -1177,9 +1177,21 @@ describe("usage", () => {
     agent("r1", said("m2", 2_000_000), { description: "Round 1 review", spawnDepth: 2, parentAgentId: "a1" });
     agent("x1", said("m3", 3_000_000), { description: "Explore", spawnDepth: 3, parentAgentId: "r1" });
     agent("b1", said("m4", 9_000_000), { description: "Fix issue 2", spawnDepth: 1 });
+    // progress summaries (round 2 F12): two while r1 ran, one while only b1 did
+    const running = (...ids) => ids.map((id) => ({ id, type: "subagent", status: "running", description: "x" }));
+    const fork = (agent_id, background_tasks) =>
+      run(["--hook"], { hook_event_name: "SubagentStop", session_id: "s1", agent_id, agent_type: "", agent_transcript_path: "/nowhere", background_tasks });
+    fork("f1", [...running("r1", "b1"), { id: "c1", type: "shell", status: "running", description: "a command" }]);
+    fork("f2", running("r1"));
+    fork("f3", running("b1"));
     const ran = run(["--agent", "a1"]);
     assert.equal(ran.status, 0, ran.stderr);
-    assert.equal(ran.stdout, "Tokens: 6.0M cache read, 30 cache write, 15 output, 3 input over 3 turns (this agent and the 2 it started)\n");
+    assert.equal(
+      ran.stdout,
+      "Tokens: 6.0M cache read, 30 cache write, 15 output, 3 input over 3 turns (this agent and the 2 it started); " +
+        "not counted: up to 2 progress summaries Claude Code forked while it ran\n",
+    );
+    assert.match(run(["--agent", "b1"]).stdout, /; not counted: up to 2 progress summaries/);
     assert.match(run(["--agent", "x1"]).stdout, /^Tokens: 3\.0M cache read.* over 1 turn \(this agent\)$/m);
     const none = run(["--agent", "zz"]);
     assert.equal(none.status, 1);
@@ -1212,7 +1224,7 @@ describe("usage", () => {
     run(["--hook"], { ...stop, agent_id: "f1", agent_type: "", last_assistant_message: "Running step 1" });
     run(["--hook"], { ...stop, agent_id: "a9", agent_type: "general-purpose" });
     const [fork, error] = ledger();
-    assert.deepEqual({ ...fork, at: undefined }, { kind: "fork", at: undefined, session: "s1", agent: "f1" });
+    assert.deepEqual({ ...fork, at: undefined }, { kind: "fork", at: undefined, session: "s1", agent: "f1", running: [] });
     assert.deepEqual([error.kind, error.agent, error.event, error.type], ["error", "a9", "SubagentStop", "general-purpose"]);
     assert.match(error.error, /ENOENT/);
     const report = run([]).stdout;
