@@ -5,7 +5,7 @@
 // MORE_INPUT adds, in a scratch repo), and below them plain tests of
 // scratch-gate at a subagent's start, reviewer-gate's other callers, the
 // survey gate on main (one survey per change), a dictated settings
-// change, lib's cwdFor and
+// change, a prototype branch, lib's cwdFor and
 // substitutions, how copy.mjs and sync.mjs register a repo's copy, the
 // scripts' flags, prune-merged (the SessionStart hook that removes merged
 // work) and usage (the ledger of tokens spent). Run from
@@ -256,6 +256,24 @@ const STATES = {
       bodyShown: () => ({ change: "<details open><summary>Change</summary>\n\n## Change\n- New: nothing\n</details>\n" }),
     }).map(([name, parts]) => [name, ["review-gate", () => scratchRepo({ review: true, body: (head) => prBody(head, undefined, parts(head)) })]]),
   ),
+  // a prototype branch's checkout (lib's prototypeBranch), and a detached
+  // one: neither has work to gate, but neither opens a PR unchecked
+  prototype: [
+    "review-gate",
+    () => {
+      const state = scratchRepo({ body: BODY });
+      git(state.repo, "switch", "-qc", PROTOTYPE_BRANCH);
+      return state;
+    },
+  ],
+  detached: [
+    "review-gate",
+    () => {
+      const state = scratchRepo();
+      git(state.repo, "switch", "-q", "--detach");
+      return state;
+    },
+  ],
   // agent-gate reads only the tool call
   agent: ["agent-gate", () => ({ repo: scratchDir() })],
   // process-gate reads only the command
@@ -293,6 +311,8 @@ const THROUGH = null;
 const NO_LESSONS = /can't leave draft before its lessons/;
 const NAMED = /Run `gh pr ready` bare/;
 const NO_SURVEY = /there is no survey for feature/;
+const PROTOTYPE_BRANCH = "prototype-look";
+const PROTOTYPE = /^prototype-look is a prototype branch: .* never becomes a PR\. Build the pick on its own branch/;
 const SELF_MATCH = /match this command's own shell/;
 const AGENT = "a1";
 // the gist of a reviewer-gate turn-down of a command: the rule, why this
@@ -380,6 +400,20 @@ const CASES = [
     "gh pr create --draft --body-file <body>",
     /no `## Change` collapsed as/,
   ]),
+
+  // a prototype branch never becomes a PR; from its checkout, as from a
+  // detached one, another branch's PR is turned down as from any (plan
+  // review F1, F2: both returned before the --head and named-PR checks)
+  ["prototype", "gh pr create --draft --body-file <body>", PROTOTYPE],
+  ["prototype", "gh pr ready", PROTOTYPE],
+  ["prototype", "gh pr ready --undo", THROUGH],
+  ["prototype", "gh pr create --draft --head feature", /--head feature runs from prototype-look's checkout/],
+  ["prototype", "gh pr ready 5", NAMED],
+  ["createDraft", "gh pr create --draft --body-file <body> --head prototype-look", PROTOTYPE],
+  ["createDraft", "gh pr create --draft --body-file <body> --head o:prototype-look", PROTOTYPE],
+  ["detached", "gh pr create --draft --head feature", /--head feature runs from HEAD's checkout/],
+  ["detached", "gh pr ready 5", NAMED],
+  ["detached", "gh pr ready", THROUGH],
 
   ["headerAside", "gh pr create --draft --body-file <body>", THROUGH],
   ["headerAside", "gh pr create --body-file <body>", NO_LESSONS],
@@ -820,6 +854,27 @@ test("dictated: a settings change the user typed out skips the reviews, and noth
   writeFileSync(join(plain.repo, ".claude/settings.json"), json({ ...deny("Skill(x:pr)"), env: { A: "1" } }));
   git(plain.repo, "commit", "-qam", "env");
   assert.match(run("review-gate", plain, { command: "gh pr ready" }), /its survey is dictated, but it changes `env\.A`/);
+});
+
+// a prototype branch (the change skill's rule) skips the survey and the
+// plan review: its edits go through, and change-check, which nags a
+// branch with no survey, says nothing (the gate asked for a survey: red
+// on it). Its PR is held by review-gate's rows above
+test("prototype: a prototype-<name> branch's edits wait for nothing", () => {
+  const edit = (repo, hook) => {
+    const ran = runHook(hook, { tool_input: { file_path: join(repo, "b.txt"), content: "x\n" }, cwd: repo, session_id: "s" });
+    assert.equal(ran.status, 0, ran.stderr);
+    return ran.stdout.trim();
+  };
+  const { repo } = scratchRepo();
+  assert.match(edit(repo, "survey-gate"), NO_SURVEY, "a feature branch waits for its survey");
+  writeFileSync(join(repo, "b.txt"), "x\n");
+  assert.match(edit(repo, "change-check"), /there is no survey for feature/, "change-check nags a feature branch");
+  git(repo, "switch", "-qc", PROTOTYPE_BRANCH);
+  assert.equal(edit(repo, "survey-gate"), "");
+  assert.equal(edit(repo, "change-check"), "");
+  git(repo, "switch", "-qc", "prototypes-later");
+  assert.match(edit(repo, "survey-gate"), /there is no survey for prototypes-later/, "only prototype-<name>");
 });
 
 // a shell command's checkout is where its last cd leaves it, a cd in quoted
