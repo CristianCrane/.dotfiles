@@ -33,16 +33,41 @@
 //
 // It is also the status line (`--status`, settings.json's statusLine): the
 // model, how full the context is and its tokens, from the input Claude Code
-// gives a status line.
+// gives a status line. That input carries the plan's two windows too
+// (`rate_limits`: five_hour and seven_day, each a used_percentage and a
+// resets_at in epoch seconds; absent until a session's first reply, seen in
+// 2.1.308), and each reading that differs from the last is appended to
+// ~/.claude/usage/windows.jsonl.
 //
 // By hand:
 //
-//   node ~/.claude/hooks/usage.mjs --agent <id>             one workstream's Tokens line
-//   node ~/.claude/hooks/usage.mjs [--since <YYYY-MM-DD>]   each workstream and main session since then (default: today)
+//   node ~/.claude/hooks/usage.mjs --agent <id>             one workstream's Tokens line: its share of each window
+//   node ~/.claude/hooks/usage.mjs [--since <YYYY-MM-DD>]   each workstream and main session since then, in token counts (default: today)
 //
 // A workstream is an agent with every agent it started in turn (its
 // change-reviewers, say).
-import { appendFileSync, closeSync, existsSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, writeFileSync } from "node:fs";
+//
+// The Tokens line is an estimate, and says "about" at each number. The readings are the
+// account's, so nothing gives a workstream's own share: it is the
+// workstream's ledger tokens inside the window, over all the ledger's
+// tokens inside it, times the window's used %. Shares add up to the used %
+// by construction, so nothing here checks the estimate yet: windows.jsonl
+// keeps every reading so that two in one window can be set against the
+// ledger's tokens between them. What is known to skew it:
+// - WEIGHTS takes the plan to count tokens as API prices do, which nobody
+//   has confirmed, and leaves the model out: a Haiku workstream beside an
+//   Opus ledger would read about 5 times high. Small while one model is
+//   nearly all of the ledger (claude-opus-5-5 was 98.3% of its weighted
+//   tokens on 2026-11-11).
+// - Use on other devices is in the used % and not in the ledger, so every
+//   share here reads high by that much.
+// - A session or agent still running has no rows for its tokens since its
+//   last stop, so a share read while others work reads high.
+// - Progress summaries are in the used % and in no transcript, and only
+//   agents have them, so a workstream reads low beside a main session.
+// - A window that began before the ledger's first row (2026-11-09) reads
+//   high: the tokens before it are in the used % only.
+import { appendFileSync, closeSync, existsSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { flagsOf, hook, lines } from "./lib.mjs";
@@ -50,10 +75,22 @@ import { flagsOf, hook, lines } from "./lib.mjs";
 const USAGE = join(homedir(), ".claude/usage");
 const LEDGER = join(USAGE, "ledger.jsonl");
 const COUNTS = ["cacheRead", "cacheWrite", "output", "input"];
+// what a token of each kind costs beside an input token, at API prices. A
+// cache write is the 1-hour cache's (2; the 5-minute cache's is 1.25): the
+// ledger doesn't keep which, and every cache write in empire-cleaning's
+// transcripts was 1-hour (178.5M tokens to 0, 2026-11-11).
+const WEIGHTS = { cacheRead: 0.1, cacheWrite: 2, output: 5, input: 1 };
+const READINGS = join(USAGE, "windows.jsonl");
+// the plan's windows as the status line's input names them, in the Tokens
+// line's order
+const WINDOWS = [
+  { key: "seven_day", hours: 7 * 24, name: "the week" },
+  { key: "five_hour", hours: 5, name: "this 5-hour window" },
+];
 
-const append = (rows) => {
+const append = (rows, file = LEDGER) => {
   mkdirSync(USAGE, { recursive: true });
-  appendFileSync(LEDGER, rows.map((row) => JSON.stringify(row) + "\n").join(""));
+  appendFileSync(file, rows.map((row) => JSON.stringify(row) + "\n").join(""));
 };
 
 // the transcript's whole lines after `from` (from the start, if it has
@@ -174,11 +211,36 @@ const total = (rows) =>
     { turns: 0, cacheRead: 0, cacheWrite: 0, output: 0, input: 0 },
   );
 
+// Each window as last read, or why it can't be used. The reading that
+// counts is the one of the latest window (resets_at), and in it the highest
+// used %: several sessions append, and an idle one's is older.
+const windowsNow = () => {
+  const rows = [];
+  for (const line of existsSync(READINGS) ? lines(readFileSync(READINGS, "utf8")) : []) {
+    try {
+      rows.push(JSON.parse(line));
+    } catch {}
+  }
+  return WINDOWS.map(({ key, hours, name }) => {
+    const read = rows.map((row) => row[key]).filter(Boolean);
+    if (!read.length) return { why: `no reading of ${name} yet` };
+    const resetsAt = Math.max(...read.map((window) => window.resetsAt));
+    if (resetsAt * 1000 <= Date.now()) return { why: `${name} has reset since its last reading` };
+    const used = Math.max(...read.filter((window) => window.resetsAt === resetsAt).map((window) => window.used));
+    return { name, used, from: new Date((resetsAt - hours * 3600) * 1000), to: new Date(resetsAt * 1000) };
+  });
+};
+
+const weighed = (rows) => rows.reduce((sum, row) => sum + COUNTS.reduce((cost, count) => cost + row[count] * WEIGHTS[count], 0), 0);
+
 const short = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}k` : String(n));
 
 const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
-// one workstream: the agent and every agent below it
+// One workstream, the agent and every agent below it, as its share of each
+// of the plan's windows (the header says how far to trust it). A window
+// with no reading to go by is left out and the line says why; with
+// neither, the line gives the counts.
 const tokensLine = (id) => {
   const { agents, messages, forks } = ledger();
   const own = messages.filter((row) => row.agent && lineage(agents, row.agent).includes(id));
@@ -187,10 +249,24 @@ const tokensLine = (id) => {
   // forks while one of its agents ran; with others running too, the fork
   // may have summarized one of them
   const summaries = forks.filter((row) => row.running?.some((agent) => ids.has(agent))).length;
+  const windows = windowsNow();
+  const shares = windows
+    .filter((window) => !window.why)
+    .map(({ name, used, from, to }) => {
+      const inside = (row) => new Date(row.at) >= from && new Date(row.at) < to;
+      const mine = weighed(own.filter(inside));
+      if (!mine) return `none of ${name}`;
+      const share = (mine / weighed(messages.filter(inside))) * used;
+      return `${share < 1 ? "under 1%" : `about ${Math.round(share)}%`} of ${name}`;
+    });
   const sum = total(own);
   return (
-    `Tokens: ${short(sum.cacheRead)} cache read, ${short(sum.cacheWrite)} cache write, ${short(sum.output)} output, ` +
-    `${short(sum.input)} input over ${plural(sum.turns, "turn")} (this agent${ids.size > 1 ? ` and the ${ids.size - 1} it started` : ""})` +
+    (shares.length
+      ? `Tokens: ${shares.join(", ")}`
+      : `Tokens: ${short(sum.cacheRead)} cache read, ${short(sum.cacheWrite)} cache write, ${short(sum.output)} output, ` +
+        `${short(sum.input)} input over ${plural(sum.turns, "turn")}`) +
+    ` (this agent${ids.size > 1 ? ` and the ${ids.size - 1} it started` : ""})` +
+    windows.map((window) => (window.why ? `; ${window.why}` : "")).join("") +
     (summaries ? `; not counted: up to ${summaries} progress ${summaries === 1 ? "summary" : "summaries"} Claude Code forked while it ran` : "")
   );
 };
@@ -245,9 +321,22 @@ const wholeHalfEven = (n) => {
   return Math.abs(n % 1) === 0.5 && rounded % 2 ? rounded - 1 : rounded;
 };
 
+// the plan's windows in a status line's input, as a row of windows.jsonl
+// keeps them; null when it has none
+const reading = (limits) => {
+  const row = {};
+  for (const { key } of WINDOWS) {
+    const { used_percentage: used, resets_at: resetsAt } = limits?.[key] ?? {};
+    if (typeof used === "number" && typeof resetsAt === "number") row[key] = { used, resetsAt };
+  }
+  return Object.keys(row).length ? row : null;
+};
+
 // The status line: the model in cyan, how full the context is, and its
 // tokens. Input that can't be read still prints the line's frame and exits
-// 1, as the jq one-liner this replaced did.
+// 1, as the jq one-liner this replaced did. The line is printed before the
+// reading is saved, and a save that fails costs only the reading: the
+// Tokens line then says the window has no reading, or has reset.
 const status = () => {
   let input = null;
   try {
@@ -259,6 +348,14 @@ const status = () => {
   const tokens = input ? (context?.total_input_tokens ?? 0) + (context?.total_output_tokens ?? 0) : "";
   process.stdout.write(`\x1b[36m${model}\x1b[0m | ctx: ${wholeHalfEven(context?.used_percentage ?? 0)}% | tokens: ${tokens}`);
   if (!input) process.exitCode = 1;
+  try {
+    const row = reading(input?.rate_limits);
+    if (!row) return;
+    // the last row, from the file's end: the status line runs after every
+    // reply, and the file gains a row each time a window's used % moves
+    const last = existsSync(READINGS) ? lines(unread(READINGS, Math.max(0, statSync(READINGS).size - 1024)).text).at(-1) : null;
+    if (last?.replace(/^\{"at":"[^"]*",/, "{") !== JSON.stringify(row)) append([{ at: new Date().toISOString(), ...row }], READINGS);
+  } catch {}
 };
 
 const { values: flags } = flagsOf("usage", "[--agent <id>] [--since <YYYY-MM-DD>]", {

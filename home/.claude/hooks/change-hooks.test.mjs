@@ -1200,7 +1200,17 @@ describe("usage", () => {
       appendFileSync(transcript, jsonl(entries));
       return run(["--hook"], { hook_event_name: "Stop", session_id: id, cwd: "/w/repo", transcript_path: transcript });
     };
-    return { run, ledger, agent, session };
+    // the plan's windows as a status line's input gives them: each window's
+    // used % and when it resets, in hours from now
+    const windows = (week, fiveHour) => {
+      const window = ([used_percentage, hours]) => ({ used_percentage, resets_at: Math.round(Date.now() / 1000 + hours * 3600) });
+      return run(["--status"], { rate_limits: { ...(week && { seven_day: window(week) }), ...(fiveHour && { five_hour: window(fiveHour) }) } });
+    };
+    const readings = () => {
+      const file = join(home, ".claude/usage/windows.jsonl");
+      return existsSync(file) ? lines(readFileSync(file, "utf8")).map((line) => JSON.parse(line)) : [];
+    };
+    return { home, run, ledger, agent, session, windows, readings };
   };
 
   test("--hook: a row per message once, only what's new at each stop, and the agent's place", () => {
@@ -1265,7 +1275,66 @@ describe("usage", () => {
     }
   });
 
-  test("--agent: the Tokens line sums the agent and every agent below it, and only them", () => {
+  test("--status: each reading of the plan's windows that differs from the last is kept, and a save that fails still prints", () => {
+    const { home, run, readings } = scratch();
+    const limits = (used, resets_at = 1794389400) => ({ five_hour: { used_percentage: used, resets_at }, seven_day: { used_percentage: 71, resets_at: 1794740400 } });
+    // a session's first input has no windows yet
+    run(["--status"], { model: { display_name: "Opus 5.5" } });
+    assert.deepEqual(readings(), []);
+    run(["--status"], { rate_limits: limits(2) });
+    run(["--status"], { rate_limits: limits(2) });
+    run(["--status"], { rate_limits: limits(3) });
+    run(["--status"], { rate_limits: { five_hour: { used_percentage: 4, resets_at: 1794389400 } } });
+    assert.deepEqual(
+      readings().map(({ at, ...row }) => row),
+      [
+        { seven_day: { used: 71, resetsAt: 1794740400 }, five_hour: { used: 2, resetsAt: 1794389400 } },
+        { seven_day: { used: 71, resetsAt: 1794740400 }, five_hour: { used: 3, resetsAt: 1794389400 } },
+        { five_hour: { used: 4, resetsAt: 1794389400 } },
+      ],
+    );
+    // a last row cut short is no reason to stop keeping them
+    appendFileSync(join(home, ".claude/usage/windows.jsonl"), '{"at":"2026-11-11T0\n');
+    run(["--status"], { rate_limits: limits(5) });
+    assert.equal(lines(readFileSync(join(home, ".claude/usage/windows.jsonl"), "utf8")).length, 5);
+    // nowhere to save: the line is printed all the same
+    const nowhere = scratchDir();
+    writeFileSync(join(nowhere, ".claude"), "a file where the folder would go");
+    const ran = runHook("usage", { model: { display_name: "Opus 5.5" }, rate_limits: limits(6) }, { args: ["--status"], env: { ...process.env, HOME: nowhere } });
+    assert.equal(ran.stdout, "\x1b[36mOpus 5.5\x1b[0m | ctx: 0% | tokens: 0");
+    assert.equal(ran.status, 0, ran.stderr);
+  });
+
+  test("--agent: the Tokens line is the workstream's share of each window, by what its tokens cost", () => {
+    const { run, agent, windows } = scratch();
+    // a1's workstream: 6M of the 15M cache read, the rest alike message by message
+    agent("a1", said("m1", 1_000_000), { description: "Fix issue 1", spawnDepth: 1 });
+    agent("r1", said("m2", 2_000_000), { description: "Round 1 review", spawnDepth: 2, parentAgentId: "a1" });
+    agent("x1", said("m3", 3_000_000), { description: "Explore", spawnDepth: 3, parentAgentId: "r1" });
+    agent("b1", said("m4", 9_000_000), { description: "Fix issue 2", spawnDepth: 1 });
+    agent("c1", said("m5", 100), { description: "A look", spawnDepth: 1 });
+    windows([50, 100], [20, 2]);
+    // an idle session's older reading of the same windows, and one of a week since reset
+    windows([40, 100], [10, 2]);
+    windows([99, -1]);
+    assert.equal(run(["--agent", "a1"]).stdout, "Tokens: about 20% of the week, about 8% of this 5-hour window (this agent and the 2 it started)\n");
+    assert.equal(run(["--agent", "b1"]).stdout, "Tokens: about 30% of the week, about 12% of this 5-hour window (this agent)\n");
+    assert.equal(run(["--agent", "c1"]).stdout, "Tokens: under 1% of the week, under 1% of this 5-hour window (this agent)\n");
+    // a 5-hour window that began after the work
+    windows(null, [1, 5.5]);
+    assert.equal(run(["--agent", "a1"]).stdout, "Tokens: about 20% of the week, none of this 5-hour window (this agent and the 2 it started)\n");
+  });
+
+  test("--agent: a window with no reading, or one that has reset, is left out and the line says why", () => {
+    const { run, agent, windows } = scratch();
+    agent("a1", said("m1", 1_000_000), { description: "Fix issue 1", spawnDepth: 1 });
+    windows([50, 100]);
+    assert.equal(run(["--agent", "a1"]).stdout, "Tokens: about 50% of the week (this agent); no reading of this 5-hour window yet\n");
+    windows(null, [20, -1]);
+    assert.equal(run(["--agent", "a1"]).stdout, "Tokens: about 50% of the week (this agent); this 5-hour window has reset since its last reading\n");
+  });
+
+  test("--agent: with no window to go by, the Tokens line sums the agent and every agent below it, and only them", () => {
     const { run, agent } = scratch();
     agent("a1", said("m1", 1_000_000), { description: "Fix issue 1", spawnDepth: 1 });
     agent("r1", said("m2", 2_000_000), { description: "Round 1 review", spawnDepth: 2, parentAgentId: "a1" });
@@ -1283,10 +1352,11 @@ describe("usage", () => {
     assert.equal(
       ran.stdout,
       "Tokens: 6.0M cache read, 30 cache write, 15 output, 3 input over 3 turns (this agent and the 2 it started); " +
+        "no reading of the week yet; no reading of this 5-hour window yet; " +
         "not counted: up to 2 progress summaries Claude Code forked while it ran\n",
     );
     assert.match(run(["--agent", "b1"]).stdout, /; not counted: up to 2 progress summaries/);
-    assert.match(run(["--agent", "x1"]).stdout, /^Tokens: 3\.0M cache read.* over 1 turn \(this agent\)$/m);
+    assert.match(run(["--agent", "x1"]).stdout, /^Tokens: 3\.0M cache read.* over 1 turn \(this agent\); no reading of the week yet/m);
     const none = run(["--agent", "zz"]);
     assert.equal(none.status, 1);
     assert.equal(none.stdout, "No usage recorded for agent zz.\n");
