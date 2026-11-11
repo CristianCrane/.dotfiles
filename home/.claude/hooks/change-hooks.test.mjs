@@ -1177,7 +1177,7 @@ describe("usage", () => {
     const home = scratchDir();
     const project = join(home, ".claude/projects/p");
     mkdirSync(join(project, "s1/subagents"), { recursive: true });
-    const run = (args, input) => runHook("usage", input, { args, env: { ...process.env, HOME: home } });
+    const run = (args, input, options) => runHook("usage", input, { args, env: { ...process.env, HOME: home }, ...options });
     const ledger = () => lines(readFileSync(join(home, ".claude/usage/ledger.jsonl"), "utf8")).map((line) => JSON.parse(line));
     // an agent's transcript and meta.json, and its stop
     const agent = (id, entries, meta) => {
@@ -1224,6 +1224,45 @@ describe("usage", () => {
       { kind: "agent", at: undefined, session: "s1", agent: "a1", parent: null, depth: 1, type: "general-purpose", description: "Fix issue 1", effort: "high", cwd: "/w/repo" },
     );
     assert.doesNotMatch(JSON.stringify(rows), /never keeps/);
+  });
+
+  // each line is what settings.json's jq one-liner printed for that input,
+  // run under bash before --status replaced it (2026-11-11)
+  test("--status: the status line the jq one-liner printed, input by input", () => {
+    const { run } = scratch();
+    const context = (used_percentage, total_input_tokens, total_output_tokens) => ({
+      model: { id: "claude-opus-5-5", display_name: "Opus 5.5" },
+      context_window: { used_percentage, total_input_tokens, total_output_tokens },
+    });
+    const line = (model, used, tokens) => `\x1b[36m${model}\x1b[0m | ctx: ${used}% | tokens: ${tokens}`;
+    for (const [input, stdout, status = 0] of [
+      // a real input's fields (Claude Code 2.1.308)
+      [
+        {
+          model: { id: "claude-haiku-5-5", display_name: "Haiku 5.5" },
+          context_window: { total_input_tokens: 47233, total_output_tokens: 4, context_window_size: 1000000, used_percentage: 5, remaining_percentage: 95 },
+        },
+        line("Haiku 5.5", 5, 47237),
+      ],
+      // a session's first input, before any reply
+      [{ model: { display_name: "Haiku 5.5" }, context_window: { total_input_tokens: 0, total_output_tokens: 0, used_percentage: null } }, line("Haiku 5.5", 0, 0)],
+      [{ model: {}, context_window: { used_percentage: null } }, line("unknown", 0, 0)],
+      [{}, line("unknown", 0, 0)],
+      [context(41.7, 1200, 345), line("Opus 5.5", 42, 1545)],
+      [context(2.49, 1, 1), line("Opus 5.5", 2, 2)],
+      // a half goes to the even number
+      [context(0.5, 1, 1), line("Opus 5.5", 0, 2)],
+      [context(2.5, 1, 1), line("Opus 5.5", 2, 2)],
+      [context(3.5, 1, 1), line("Opus 5.5", 4, 2)],
+      [context(100, 1234567, 7654321), line("Opus 5.5", 100, 8888888)],
+      ["", line("", 0, ""), 1],
+      ["not json", line("", 0, ""), 1],
+    ]) {
+      // text goes in as it is: stdin that isn't JSON
+      const ran = typeof input === "string" ? run(["--status"], undefined, { input }) : run(["--status"], input);
+      assert.equal(ran.stdout, stdout, JSON.stringify(input));
+      assert.equal(ran.status, status, JSON.stringify(input));
+    }
   });
 
   test("--agent: the Tokens line sums the agent and every agent below it, and only them", () => {

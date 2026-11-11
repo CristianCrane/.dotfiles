@@ -31,6 +31,10 @@
 // at once. An agent stops up to 3 times (waiting on its own agents, then
 // done): each stop reads only what's new.
 //
+// It is also the status line (`--status`, settings.json's statusLine): the
+// model, how full the context is and its tokens, from the input Claude Code
+// gives a status line.
+//
 // By hand:
 //
 //   node ~/.claude/hooks/usage.mjs --agent <id>             one workstream's Tokens line
@@ -235,11 +239,34 @@ const table = (day) => {
     .join("\n");
 };
 
+// printf's %.0f: a half goes to the even number, where toFixed rounds it up
+const wholeHalfEven = (n) => {
+  const rounded = Math.round(n);
+  return Math.abs(n % 1) === 0.5 && rounded % 2 ? rounded - 1 : rounded;
+};
+
+// The status line: the model in cyan, how full the context is, and its
+// tokens. Input that can't be read still prints the line's frame and exits
+// 1, as the jq one-liner this replaced did.
+const status = () => {
+  let input = null;
+  try {
+    const parsed = JSON.parse(readFileSync(0, "utf8"));
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) input = parsed;
+  } catch {}
+  const context = input?.context_window;
+  const model = input ? (input.model?.display_name ?? "unknown") : "";
+  const tokens = input ? (context?.total_input_tokens ?? 0) + (context?.total_output_tokens ?? 0) : "";
+  process.stdout.write(`\x1b[36m${model}\x1b[0m | ctx: ${wholeHalfEven(context?.used_percentage ?? 0)}% | tokens: ${tokens}`);
+  if (!input) process.exitCode = 1;
+};
+
 const { values: flags } = flagsOf("usage", "[--agent <id>] [--since <YYYY-MM-DD>]", {
-  options: { hook: { type: "boolean" }, agent: { type: "string" }, since: { type: "string" } },
+  options: { hook: { type: "boolean" }, status: { type: "boolean" }, agent: { type: "string" }, since: { type: "string" } },
 });
 
 if (flags.hook) hook(record);
+else if (flags.status) status();
 else if (flags.agent) {
   const line = tokensLine(flags.agent);
   console.log(line ?? `No usage recorded for agent ${flags.agent}.`);
