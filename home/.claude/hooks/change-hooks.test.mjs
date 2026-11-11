@@ -1201,9 +1201,10 @@ describe("usage", () => {
       return run(["--hook"], { hook_event_name: "Stop", session_id: id, cwd: "/w/repo", transcript_path: transcript });
     };
     // the plan's windows as a status line's input gives them: each window's
-    // used % and when it resets, in hours from now
+    // used % and when it resets, in hours from the suite's `now`, so two
+    // readings of one window give the same second
     const windows = (week, fiveHour) => {
-      const window = ([used_percentage, hours]) => ({ used_percentage, resets_at: Math.round(Date.now() / 1000 + hours * 3600) });
+      const window = ([used_percentage, hours]) => ({ used_percentage, resets_at: Math.round(Date.parse(now) / 1000 + hours * 3600) });
       return run(["--status"], { rate_limits: { ...(week && { seven_day: window(week) }), ...(fiveHour && { five_hour: window(fiveHour) }) } });
     };
     const readings = () => {
@@ -1317,9 +1318,9 @@ describe("usage", () => {
     // an idle session's older reading of the same windows, and one of a week since reset
     windows([40, 100], [10, 2]);
     windows([99, -1]);
-    assert.equal(run(["--agent", "a1"]).stdout, "Tokens: about 20% of the week, about 8% of this 5-hour window (this agent and the 2 it started)\n");
+    assert.equal(run(["--agent", "a1"]).stdout, "Tokens: about 20% of the week, about 8.0% of this 5-hour window (this agent and the 2 it started)\n");
     assert.equal(run(["--agent", "b1"]).stdout, "Tokens: about 30% of the week, about 12% of this 5-hour window (this agent)\n");
-    assert.equal(run(["--agent", "c1"]).stdout, "Tokens: under 1% of the week, under 1% of this 5-hour window (this agent)\n");
+    assert.equal(run(["--agent", "c1"]).stdout, "Tokens: under 0.1% of the week, under 0.1% of this 5-hour window (this agent)\n");
     // a 5-hour window that began after the work
     windows(null, [1, 5.5]);
     assert.equal(run(["--agent", "a1"]).stdout, "Tokens: about 20% of the week, none of this 5-hour window (this agent and the 2 it started)\n");

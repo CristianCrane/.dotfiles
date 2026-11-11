@@ -257,7 +257,8 @@ const tokensLine = (id) => {
       const mine = weighed(own.filter(inside));
       if (!mine) return `none of ${name}`;
       const share = (mine / weighed(messages.filter(inside))) * used;
-      return `${share < 1 ? "under 1%" : `about ${Math.round(share)}%`} of ${name}`;
+      // most workstreams are under 1% of a week (a PR's whole one was 0.55%), so a share under 10% keeps a decimal
+      return `${share < 0.1 ? "under 0.1%" : `about ${share < 9.95 ? share.toFixed(1) : Math.round(share)}%`} of ${name}`;
     });
   const sum = total(own);
   return (
