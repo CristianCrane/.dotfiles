@@ -64,8 +64,8 @@
 // change-reviewers, say).
 //
 // The weekly report is the same measures every week, so one week can be
-// set against another. Exact: token counts, turns, context per turn,
-// agents, compactions, and merged PRs (gh's search for the account's own,
+// set against another. Exact: active days, context per turn, agents,
+// compactions, progress summaries, and merged PRs (gh's search for the account's own,
 // in every repo). Estimates: every weighted number (WEIGHTS below) and the
 // tokens per 1% of a window (the Tokens line's skews, below). Weighted per
 // merged PR is the week's whole spend over the PRs merged in it, so work
@@ -260,18 +260,21 @@ const readings = () => {
   return rows;
 };
 
+// when the plan's window `key` that resets at `resetsAt` (epoch seconds) began
+const windowFrom = (key, resetsAt) => new Date((resetsAt - WINDOWS.find((window) => window.key === key).hours * 3600) * 1000);
+
 // Each window as last read, or why it can't be used. The reading that
 // counts is the one of the latest window (resets_at), and in it the highest
 // used %: several sessions append, and an idle one's is older.
 const windowsNow = () => {
   const rows = readings();
-  return WINDOWS.map(({ key, hours, name }) => {
+  return WINDOWS.map(({ key, name }) => {
     const read = rows.map((row) => row[key]).filter(Boolean);
     if (!read.length) return { why: `no reading of ${name} yet` };
     const resetsAt = Math.max(...read.map((window) => window.resetsAt));
     if (resetsAt * 1000 <= Date.now()) return { why: `${name} has reset since its last reading` };
     const used = Math.max(...read.filter((window) => window.resetsAt === resetsAt).map((window) => window.used));
-    return { name, used, from: new Date((resetsAt - hours * 3600) * 1000), to: new Date(resetsAt * 1000) };
+    return { name, used, from: windowFrom(key, resetsAt), to: new Date(resetsAt * 1000) };
   });
 };
 
@@ -282,6 +285,15 @@ const cost = (row) =>
   (row.cacheWrite1h ?? (row.agent ? 0 : row.cacheWrite)) * (WEIGHTS.cacheWrite1h - WEIGHTS.cacheWrite);
 
 const weighed = (rows) => rows.reduce((sum, row) => sum + cost(row), 0);
+
+// groups of rows (each with its `rows`), each given its weighed cost, the costliest first
+const costliest = (groups) => groups.map((group) => ({ ...group, cost: weighed(group.rows) })).sort((a, b) => b.cost - a.cost);
+
+// whether a row is from `from` up to `to`
+const within =
+  ({ from, to }) =>
+  (row) =>
+    new Date(row.at) >= from && new Date(row.at) < to;
 
 const short = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}k` : String(n));
 
@@ -303,7 +315,7 @@ const tokensLine = (id) => {
   const shares = windows
     .filter((window) => !window.why)
     .map(({ name, used, from, to }) => {
-      const inside = (row) => new Date(row.at) >= from && new Date(row.at) < to;
+      const inside = within({ from, to });
       const mine = weighed(own.filter(inside));
       if (!mine) return `none of ${name}`;
       const share = (mine / weighed(messages.filter(inside))) * used;
@@ -325,11 +337,7 @@ const tokensLine = (id) => {
 // the workstreams and main sessions `rows` belong to, each with its label,
 // its messages and how many agents it ran (none for a main session)
 const workstreams = (rows, { agents, sessions }) => {
-  const groups = new Map();
-  for (const row of rows) {
-    const key = row.agent ? lineage(agents, row.agent).at(-1) : `session ${row.session}`;
-    groups.set(key, [...(groups.get(key) ?? []), row]);
-  }
+  const groups = Map.groupBy(rows, (row) => (row.agent ? lineage(agents, row.agent).at(-1) : `session ${row.session}`));
   return [...groups].map(([key, rows]) => {
     if (!key.startsWith("session ")) return { label: agents.get(key)?.description ?? key, agents: new Set(rows.map((row) => row.agent)).size, rows };
     const session = key.slice("session ".length);
@@ -350,8 +358,7 @@ const table = (day) => {
   const { agents, sessions, messages, forks, errors } = ledger();
   const from = new Date(`${day}T00:00`);
   const since = messages.filter((row) => new Date(row.at) >= from);
-  const rows = workstreams(since, { agents, sessions }).map(({ label, agents, rows }) => ({ label, agents: agents ? String(agents) : "", cost: weighed(rows), ...total(rows) }));
-  rows.sort((a, b) => b.cost - a.cost);
+  const rows = costliest(workstreams(since, { agents, sessions })).map(({ label, agents, rows }) => ({ label, agents: agents ? String(agents) : "", ...total(rows) }));
   rows.push({ label: "total", agents: "", ...total(since) });
   const fields = [
     ["", (row) => row.label.slice(0, 44)],
@@ -458,7 +465,6 @@ const week = (day) => {
     { from, to: later(from, 7) },
     { from: later(from, -7), to: from },
   ];
-  const within = ({ from, to }) => (row) => new Date(row.at) >= from && new Date(row.at) < to;
   const measured = periods.map((period) => {
     const rows = messages.filter(within(period));
     const main = rows.filter((row) => !row.agent);
@@ -487,17 +493,12 @@ const week = (day) => {
   const [now] = measured;
   const head = ({ from, to }) => `${stamp(from).slice(0, 10)}..${stamp(later(to, -1)).slice(0, 10)}`;
   const first = messages.map((row) => row.at).sort()[0];
-  const ranked = (groups) => groups.map((group) => ({ ...group, cost: weighed(group.rows) })).sort((a, b) => b.cost - a.cost);
-  const types = new Map();
-  for (const row of now.rows) {
-    const type = row.agent ? (agents.get(row.agent)?.type ?? "unknown") : "main sessions";
-    types.set(type, [...(types.get(type) ?? []), row]);
-  }
+  const types = Map.groupBy(now.rows, (row) => (row.agent ? (agents.get(row.agent)?.type ?? "unknown") : "main sessions"));
   // each seven_day window that overlaps this week, at its highest reading
   const windows = new Map();
   for (const reading of readings().filter((reading) => reading.seven_day)) {
     const { resetsAt, used } = reading.seven_day;
-    const start = new Date((resetsAt - 7 * 24 * 3600) * 1000);
+    const start = windowFrom("seven_day", resetsAt);
     if (start >= periods[0].to || resetsAt * 1000 <= from.getTime()) continue;
     const best = windows.get(resetsAt);
     if (!best || used >= best.used) windows.set(resetsAt, { start, used, at: new Date(reading.at) });
@@ -519,14 +520,14 @@ const week = (day) => {
     "",
     "Costliest workstreams this week (weighted, share):",
     ...columns(
-      ranked(workstreams(now.rows, book))
+      costliest(workstreams(now.rows, book))
         .slice(0, 5)
         .map(({ label, agents, cost }) => [`  ${label.slice(0, 60)}${agents ? ` (${plural(agents, "agent")})` : ""}`, short(cost), percent(cost, now.all)]),
     ),
     "",
     "Cost by agent type this week (weighted, share, agents):",
     ...columns(
-      ranked([...types].map(([type, rows]) => ({ type, rows }))).map(({ type, rows, cost }) => [
+      costliest([...types].map(([type, rows]) => ({ type, rows }))).map(({ type, rows, cost }) => [
         `  ${type}`,
         short(cost),
         percent(cost, now.all),
