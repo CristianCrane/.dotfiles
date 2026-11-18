@@ -272,42 +272,46 @@ const tokensLine = (id) => {
   );
 };
 
+// the workstreams and main sessions `rows` belong to, each with its label,
+// its messages and how many agents it ran (none for a main session)
+const workstreams = (rows, { agents, sessions }) => {
+  const groups = new Map();
+  for (const row of rows) {
+    const key = row.agent ? lineage(agents, row.agent).at(-1) : `session ${row.session}`;
+    groups.set(key, [...(groups.get(key) ?? []), row]);
+  }
+  return [...groups].map(([key, rows]) => {
+    if (!key.startsWith("session ")) return { label: agents.get(key)?.description ?? key, agents: new Set(rows.map((row) => row.agent)).size, rows };
+    const session = key.slice("session ".length);
+    const cwd = sessions.get(session)?.cwd;
+    return { label: `main ${session.slice(0, 8)}${cwd ? ` ${basename(cwd)}` : ""}`, agents: 0, rows };
+  });
+};
+
+// lines of cells in columns: the first padded on the right, the rest on the left
+const columns = (cells) => {
+  const widths = cells[0].map((_, i) => Math.max(...cells.map((line) => line[i].length)));
+  return cells.map((line) => line.map((cell, i) => (i ? cell.padStart(widths[i]) : cell.padEnd(widths[i]))).join("  "));
+};
+
 // each workstream and main session with messages since `day`, the costliest first
 const table = (day) => {
   const { agents, sessions, messages, forks, errors } = ledger();
   const from = new Date(`${day}T00:00`);
-  const groups = new Map();
-  for (const row of messages.filter((row) => new Date(row.at) >= from)) {
-    const key = row.agent ? lineage(agents, row.agent).at(-1) : `session ${row.session}`;
-    groups.set(key, [...(groups.get(key) ?? []), row]);
-  }
-  const label = (key) => {
-    if (key.startsWith("session ")) {
-      const session = key.slice("session ".length);
-      const cwd = sessions.get(session)?.cwd;
-      return `main ${session.slice(0, 8)}${cwd ? ` ${basename(cwd)}` : ""}`;
-    }
-    return agents.get(key)?.description ?? key;
-  };
-  const rows = [...groups].map(([key, rows]) => ({
-    label: label(key),
-    agents: key.startsWith("session ") ? "" : String(new Set(rows.map((row) => row.agent)).size),
-    ...total(rows),
-  }));
+  const since = messages.filter((row) => new Date(row.at) >= from);
+  const rows = workstreams(since, { agents, sessions }).map(({ label, agents, rows }) => ({ label, agents: agents ? String(agents) : "", ...total(rows) }));
   rows.sort((a, b) => COUNTS.reduce((d, count) => d + b[count] - a[count], 0));
-  rows.push({ label: "total", agents: "", ...total(messages.filter((row) => new Date(row.at) >= from)) });
-  const columns = [
+  rows.push({ label: "total", agents: "", ...total(since) });
+  const fields = [
     ["", (row) => row.label.slice(0, 44)],
     ["turns", (row) => String(row.turns)],
     ...COUNTS.map((count) => [count.replace(/[A-Z]/, (c) => ` ${c.toLowerCase()}`), (row) => short(row[count])]),
     ["agents", (row) => row.agents],
   ];
   const summaries = forks.filter((row) => new Date(row.at) >= from).length;
-  const cells = [columns.map(([head]) => head), ...rows.map((row) => columns.map(([, cell]) => cell(row)))];
-  const widths = columns.map((_, i) => Math.max(...cells.map((line) => line[i].length)));
   return [
     `Usage since ${day} (${LEDGER}):`,
-    ...cells.map((line) => line.map((cell, i) => (i ? cell.padStart(widths[i]) : cell.padEnd(widths[i]))).join("  ")),
+    ...columns([fields.map(([head]) => head), ...rows.map((row) => fields.map(([, cell]) => cell(row)))]),
     summaries &&
       `Not counted: ${summaries} progress ${summaries === 1 ? "summary" : "summaries"} Claude Code forked from background agents, whose tokens no transcript holds.`,
     errors && `${plural(errors, "recording")} failed: the ledger's "error" rows say why.`,
