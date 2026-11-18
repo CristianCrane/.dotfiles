@@ -171,6 +171,11 @@
             "command": "node \"$HOME/.claude/hooks/prune-merged.mjs\" --hook",
             "timeout": 600,
             "async": true
+          },
+          {
+            "type": "command",
+            "command": "node \"$HOME/.claude/hooks/usage.mjs\" --hook",
+            "timeout": 10
           }
         ]
       }

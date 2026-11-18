@@ -8,7 +8,14 @@
 // ~/.claude/usage/ledger.jsonl, never a prompt or a reply:
 // - a "message" row per assistant message the transcript gained since its
 //   last stop (each transcript's offset is kept in usage/offsets/): its id,
-//   time, session, agent, model and token counts
+//   time, session, agent, model and token counts, with the part of its
+//   cache write that went to the 1-hour cache (cacheWrite1h): main
+//   sessions write the 1-hour cache and agents the 5-minute one, which
+//   costs less (every day 2026-11-09 to 11-18). A row recorded before
+//   cacheWrite1h (2026-11-18) is weighed by that: an agent's write as
+//   5-minute, a main session's as 1-hour
+// - a "compact" row per compaction the transcript gained: its uuid as id,
+//   its trigger (auto or manual) and the context it compacted (preTokens)
 // - an "agent" row per agent stop: its parent, depth, type, description,
 //   effort and cwd, from the input and the meta.json beside its transcript;
 //   a "session" row per main session stop, with its cwd
@@ -27,9 +34,17 @@
 // A resumed or forked session's transcript repeats the earlier one's
 // messages under its own id (523 of 19,271 message ids sat in two of
 // empire-cleaning's transcripts, 2026-11-10), so the report counts each
-// message id once; that also absorbs a message appended twice by two stops
-// at once. An agent stops up to 3 times (waiting on its own agents, then
-// done): each stop reads only what's new.
+// message id, and each compaction's, once; that also absorbs a message
+// appended twice by two stops at once. An agent stops up to 3 times (waiting on its own agents, then done): each
+// stop reads only what's new.
+//
+// From the SessionStart hook (`--hook` too) it says when the weekly token
+// review is due: in a main session's startup (not a resume, clear, compact
+// or an agent) once 7 days have passed since both the newest entry of the
+// review's log (docs/token-review.md in the dotfiles, found from this
+// file's real path, so a worktree's copy reads its own) and the last time
+// it said so (usage/review-offered). Once a week, then, whether or not the
+// review runs; otherwise it reads two small files and prints nothing.
 //
 // It is also the status line (`--status`, settings.json's statusLine): the
 // model, how full the context is and its tokens, from the input Claude Code
@@ -43,9 +58,19 @@
 //
 //   node ~/.claude/hooks/usage.mjs --agent <id>             one workstream's Tokens line: its share of each window
 //   node ~/.claude/hooks/usage.mjs [--since <YYYY-MM-DD>]   each workstream and main session since then, in token counts (default: today)
+//   node ~/.claude/hooks/usage.mjs --week [--since <YYYY-MM-DD>]   the weekly review's measures: the 7 days from then beside the 7 before (default: the 7 days before today)
 //
 // A workstream is an agent with every agent it started in turn (its
 // change-reviewers, say).
+//
+// The weekly report is the same measures every week, so one week can be
+// set against another. Exact: token counts, turns, context per turn,
+// agents, compactions, and merged PRs (gh's search for the account's own,
+// in every repo). Estimates: every weighted number (WEIGHTS below) and the
+// tokens per 1% of a window (the Tokens line's skews, below). Weighted per
+// merged PR is the week's whole spend over the PRs merged in it, so work
+// with no PR (the dotfiles, straight to main) and PRs merged a week after
+// their work both move it.
 //
 // The Tokens line is an estimate, and says "about" at each number. The readings are the
 // account's, so nothing gives a workstream's own share: it is the
@@ -69,18 +94,23 @@
 //   high: the tokens before it are in the used % only.
 import { appendFileSync, closeSync, existsSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
+import { execFileSync } from "node:child_process";
 import { basename, dirname, join } from "node:path";
-import { flagsOf, hook, lines } from "./lib.mjs";
+import { CLAUDE } from "./copy.mjs";
+import { context, flagsOf, hook, lines } from "./lib.mjs";
 
 const USAGE = join(homedir(), ".claude/usage");
 const LEDGER = join(USAGE, "ledger.jsonl");
 const COUNTS = ["cacheRead", "cacheWrite", "output", "input"];
-// what a token of each kind costs beside an input token, at API prices. A
-// cache write is the 1-hour cache's (2; the 5-minute cache's is 1.25): the
-// ledger doesn't keep which, and every cache write in empire-cleaning's
-// transcripts was 1-hour (178.5M tokens to 0, 2026-11-11).
-const WEIGHTS = { cacheRead: 0.1, cacheWrite: 2, output: 5, input: 1 };
+// what a token of each kind costs beside an input token, at API prices: a
+// cache write at the 5-minute cache's rate, and its 1-hour part at that
+// cache's
+const WEIGHTS = { cacheRead: 0.1, cacheWrite: 1.25, cacheWrite1h: 2, output: 5, input: 1 };
 const READINGS = join(USAGE, "windows.jsonl");
+// the weekly review's log, and when the hook last said a review was due
+const LOG = join(CLAUDE, "../../docs/token-review.md");
+const OFFERED = join(USAGE, "review-offered");
+const DAY = 24 * 3600 * 1000;
 // the plan's windows as the status line's input names them, in the Tokens
 // line's order
 const WINDOWS = [
@@ -109,12 +139,16 @@ const unread = (transcript, from) => {
   }
 };
 
-// a row per assistant message in `text`: one message spans several lines,
-// each with the same id and usage
+// a row per assistant message in `text` (one message spans several lines,
+// each with the same id and usage) and per compaction
 const messages = (text, who) => {
   const rows = new Map();
   for (const line of lines(text)) {
-    const { type, timestamp, message } = JSON.parse(line);
+    const { type, subtype, uuid, timestamp, message, compactMetadata } = JSON.parse(line);
+    if (type === "system" && subtype === "compact_boundary") {
+      rows.set(uuid, { kind: "compact", id: uuid, at: timestamp, ...who, trigger: compactMetadata?.trigger ?? null, preTokens: compactMetadata?.preTokens ?? null });
+      continue;
+    }
     if (type !== "assistant" || !message?.usage || message.model === "<synthetic>" || rows.has(message.id)) continue;
     const usage = message.usage;
     rows.set(message.id, {
@@ -125,6 +159,7 @@ const messages = (text, who) => {
       model: message.model,
       cacheRead: usage.cache_read_input_tokens ?? 0,
       cacheWrite: usage.cache_creation_input_tokens ?? 0,
+      ...(usage.cache_creation && { cacheWrite1h: usage.cache_creation.ephemeral_1h_input_tokens ?? 0 }),
       output: usage.output_tokens ?? 0,
       input: usage.input_tokens ?? 0,
     });
@@ -170,11 +205,13 @@ const record = (input) => {
 };
 
 // the ledger: each agent's and session's latest row, each message id's
-// first row, and the forks and errors (a row that can't be read is one)
+// first row, each compaction's, and the forks and errors (a row that can't be read
+// is one)
 const ledger = () => {
   const agents = new Map();
   const sessions = new Map();
   const counted = new Map();
+  const compactions = new Map();
   const forks = [];
   let errors = 0;
   for (const line of existsSync(LEDGER) ? lines(readFileSync(LEDGER, "utf8")) : []) {
@@ -188,10 +225,11 @@ const ledger = () => {
     if (row.kind === "agent") agents.set(row.agent, row);
     else if (row.kind === "session") sessions.set(row.session, row);
     else if (row.kind === "message" && !counted.has(row.id)) counted.set(row.id, row);
+    else if (row.kind === "compact" && !compactions.has(row.id)) compactions.set(row.id, row);
     else if (row.kind === "fork") forks.push(row);
     else if (row.kind === "error") errors++;
   }
-  return { agents, sessions, messages: [...counted.values()], forks, errors };
+  return { agents, sessions, messages: [...counted.values()], compactions: [...compactions.values()], forks, errors };
 };
 
 // the agents up from `agent` to the one the main session started
@@ -211,16 +249,22 @@ const total = (rows) =>
     { turns: 0, cacheRead: 0, cacheWrite: 0, output: 0, input: 0 },
   );
 
-// Each window as last read, or why it can't be used. The reading that
-// counts is the one of the latest window (resets_at), and in it the highest
-// used %: several sessions append, and an idle one's is older.
-const windowsNow = () => {
+// every reading of the plan's windows kept, a row that can't be read left out
+const readings = () => {
   const rows = [];
   for (const line of existsSync(READINGS) ? lines(readFileSync(READINGS, "utf8")) : []) {
     try {
       rows.push(JSON.parse(line));
     } catch {}
   }
+  return rows;
+};
+
+// Each window as last read, or why it can't be used. The reading that
+// counts is the one of the latest window (resets_at), and in it the highest
+// used %: several sessions append, and an idle one's is older.
+const windowsNow = () => {
+  const rows = readings();
   return WINDOWS.map(({ key, hours, name }) => {
     const read = rows.map((row) => row[key]).filter(Boolean);
     if (!read.length) return { why: `no reading of ${name} yet` };
@@ -231,7 +275,13 @@ const windowsNow = () => {
   });
 };
 
-const weighed = (rows) => rows.reduce((sum, row) => sum + COUNTS.reduce((cost, count) => cost + row[count] * WEIGHTS[count], 0), 0);
+// what a message cost, in input tokens; a row with no split (recorded
+// before it) is weighed by who wrote it, as the header says
+const cost = (row) =>
+  COUNTS.reduce((sum, count) => sum + row[count] * WEIGHTS[count], 0) +
+  (row.cacheWrite1h ?? (row.agent ? 0 : row.cacheWrite)) * (WEIGHTS.cacheWrite1h - WEIGHTS.cacheWrite);
+
+const weighed = (rows) => rows.reduce((sum, row) => sum + cost(row), 0);
 
 const short = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}k` : String(n));
 
@@ -290,6 +340,7 @@ const workstreams = (rows, { agents, sessions }) => {
 
 // lines of cells in columns: the first padded on the right, the rest on the left
 const columns = (cells) => {
+  if (!cells.length) return [];
   const widths = cells[0].map((_, i) => Math.max(...cells.map((line) => line[i].length)));
   return cells.map((line) => line.map((cell, i) => (i ? cell.padStart(widths[i]) : cell.padEnd(widths[i]))).join("  "));
 };
@@ -299,8 +350,8 @@ const table = (day) => {
   const { agents, sessions, messages, forks, errors } = ledger();
   const from = new Date(`${day}T00:00`);
   const since = messages.filter((row) => new Date(row.at) >= from);
-  const rows = workstreams(since, { agents, sessions }).map(({ label, agents, rows }) => ({ label, agents: agents ? String(agents) : "", ...total(rows) }));
-  rows.sort((a, b) => COUNTS.reduce((d, count) => d + b[count] - a[count], 0));
+  const rows = workstreams(since, { agents, sessions }).map(({ label, agents, rows }) => ({ label, agents: agents ? String(agents) : "", cost: weighed(rows), ...total(rows) }));
+  rows.sort((a, b) => b.cost - a.cost);
   rows.push({ label: "total", agents: "", ...total(since) });
   const fields = [
     ["", (row) => row.label.slice(0, 44)],
@@ -363,20 +414,165 @@ const status = () => {
   } catch {}
 };
 
-const { values: flags } = flagsOf("usage", "[--agent <id>] [--since <YYYY-MM-DD>]", {
-  options: { hook: { type: "boolean" }, status: { type: "boolean" }, agent: { type: "string" }, since: { type: "string" } },
+// the day `days` after `date`'s, at the same local time
+const later = (date, days) => {
+  const day = new Date(date);
+  day.setDate(day.getDate() + days);
+  return day;
+};
+
+const stamp = (date) => new Date(date).toLocaleString("sv").slice(0, 16);
+
+const percent = (part, whole) => (whole ? `${((100 * part) / whole).toFixed(1)}%` : "-");
+
+// the PRs the gh account's user merged in [from, to), in every repo, per
+// repo; or why gh can't say
+const mergedPRs = (from, to) => {
+  const at = (date) => date.toISOString().replace(/\.\d+Z$/, "Z");
+  try {
+    const found = JSON.parse(
+      execFileSync("gh", ["search", "prs", "--author=@me", "--merged-at", `${at(from)}..${at(new Date(to - 1000))}`, "--limit", "1000", "--json", "repository"], {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+        timeout: 60_000,
+      }),
+    );
+    const repos = new Map();
+    for (const { repository } of found) repos.set(repository.nameWithOwner, (repos.get(repository.nameWithOwner) ?? 0) + 1);
+    return { count: found.length, repos };
+  } catch (error) {
+    return { why: `gh couldn't say: ${(error.stderr || error.message || "").trim().split("\n")[0]}` };
+  }
+};
+
+// The weekly review's measures (the header says which are estimates): the
+// 7 days from `day` beside the 7 before, then this week's merged PRs per
+// repo, its costliest workstreams, its cost per agent type, and the
+// plan's seven_day windows that overlap it, each with the ledger's
+// weighted tokens per 1% of it.
+const week = (day) => {
+  const book = ledger();
+  const { agents, messages, compactions, forks, errors } = book;
+  const from = new Date(`${day}T00:00`);
+  const periods = [
+    { from, to: later(from, 7) },
+    { from: later(from, -7), to: from },
+  ];
+  const within = ({ from, to }) => (row) => new Date(row.at) >= from && new Date(row.at) < to;
+  const measured = periods.map((period) => {
+    const rows = messages.filter(within(period));
+    const main = rows.filter((row) => !row.agent);
+    const days = new Set(rows.map((row) => new Date(row.at).toLocaleDateString("sv"))).size;
+    const context = main.map((row) => row.cacheRead + row.cacheWrite + row.input).sort((a, b) => a - b);
+    const auto = compactions.filter(within(period)).filter((row) => row.trigger === "auto");
+    const compacted = auto.map((row) => row.preTokens).filter(Number.isFinite).sort((a, b) => a - b);
+    const all = weighed(rows);
+    const prs = mergedPRs(period.from, period.to);
+    const cells = [
+      ["weighted tokens", short(all)],
+      ["  per active day", days ? short(all / days) : "-"],
+      ["active days", String(days)],
+      ["main sessions' share", percent(weighed(main), all)],
+      ["main context per turn: mean", context.length ? short(context.reduce((sum, n) => sum + n, 0) / context.length) : "-"],
+      ["  p95 / max", context.length ? `${short(context[Math.floor(0.95 * context.length)])} / ${short(context.at(-1))}` : "-"],
+      ["agents per active day", days ? (new Set(rows.filter((row) => row.agent).map((row) => row.agent)).size / days).toFixed(1) : "-"],
+      ["auto-compactions (in agents)", `${auto.length} (${auto.filter((row) => row.agent).length})`],
+      ["  context compacted, median", compacted.length ? short(compacted[Math.floor(compacted.length / 2)]) : "-"],
+      ["merged PRs", prs.why ? "-" : String(prs.count)],
+      ["weighted per merged PR", prs.count ? short(all / prs.count) : "-"],
+      ["progress summaries not counted", String(forks.filter(within(period)).length)],
+    ];
+    return { rows, all, prs, cells };
+  });
+  const [now] = measured;
+  const head = ({ from, to }) => `${stamp(from).slice(0, 10)}..${stamp(later(to, -1)).slice(0, 10)}`;
+  const first = messages.map((row) => row.at).sort()[0];
+  const ranked = (groups) => groups.map((group) => ({ ...group, cost: weighed(group.rows) })).sort((a, b) => b.cost - a.cost);
+  const types = new Map();
+  for (const row of now.rows) {
+    const type = row.agent ? (agents.get(row.agent)?.type ?? "unknown") : "main sessions";
+    types.set(type, [...(types.get(type) ?? []), row]);
+  }
+  // each seven_day window that overlaps this week, at its highest reading
+  const windows = new Map();
+  for (const reading of readings().filter((reading) => reading.seven_day)) {
+    const { resetsAt, used } = reading.seven_day;
+    const start = new Date((resetsAt - 7 * 24 * 3600) * 1000);
+    if (start >= periods[0].to || resetsAt * 1000 <= from.getTime()) continue;
+    const best = windows.get(resetsAt);
+    if (!best || used >= best.used) windows.set(resetsAt, { start, used, at: new Date(reading.at) });
+  }
+  const readLines = [...windows].map(([resetsAt, { start, used, at }]) => {
+    const spent = weighed(messages.filter(within({ from: start, to: at })));
+    return (
+      `  to ${stamp(resetsAt * 1000)}: ${used}% at ${stamp(at)}; ${short(spent)} weighted by then, ${used ? `about ${short(spent / used)}` : "-"} per 1%` +
+      (first && new Date(first) > start ? " (began before the ledger: reads low)" : "")
+    );
+  });
+  return [
+    `Week of ${head(periods[0])} beside the week before (${LEDGER}; weighted numbers are estimates, see usage.mjs's header):`,
+    ...columns([["", head(periods[0]), head(periods[1])], ...now.cells.map(([name], i) => [name, ...measured.map(({ cells }) => cells[i][1])])]),
+    first && new Date(first) > periods[1].from && `The ledger's first row is ${stamp(first)}: the weeks before it read low.`,
+    errors && `${plural(errors, "recording")} failed: the ledger's "error" rows say why.`,
+    "",
+    now.prs.why ? `Merged PRs: ${now.prs.why}` : `Merged PRs: ${[...now.prs.repos].map(([repo, n]) => `${repo} ${n}`).join(", ") || "none"}`,
+    "",
+    "Costliest workstreams this week (weighted, share):",
+    ...columns(
+      ranked(workstreams(now.rows, book))
+        .slice(0, 5)
+        .map(({ label, agents, cost }) => [`  ${label.slice(0, 60)}${agents ? ` (${plural(agents, "agent")})` : ""}`, short(cost), percent(cost, now.all)]),
+    ),
+    "",
+    "Cost by agent type this week (weighted, share, agents):",
+    ...columns(
+      ranked([...types].map(([type, rows]) => ({ type, rows }))).map(({ type, rows, cost }) => [
+        `  ${type}`,
+        short(cost),
+        percent(cost, now.all),
+        type === "main sessions" ? "" : String(new Set(rows.map((row) => row.agent)).size),
+      ]),
+    ),
+    "",
+    "The plan's week (seven_day) as read, with the ledger's weighted tokens from its start to that reading:",
+    ...(readLines.length ? readLines : ["  no reading"]),
+  ]
+    .filter((line) => typeof line === "string")
+    .join("\n");
+};
+
+// At a main session's startup, a line for Claude when the weekly review is
+// due (the header says when), and the time it said so
+const reviewDue = (input) => {
+  if (input.source !== "startup" || input.agent_id || input.agent_type) return;
+  const entries = [...readFileSync(LOG, "utf8").matchAll(/^### (\d{4}-\d{2}-\d{2})/gm)].map(([, day]) => day).sort();
+  const offered = existsSync(OFFERED) ? Date.parse(readFileSync(OFFERED, "utf8")) || 0 : 0;
+  const last = entries.at(-1);
+  if (Date.now() - Math.max(offered, last ? new Date(`${last}T00:00`).getTime() : 0) < 7 * DAY) return;
+  mkdirSync(USAGE, { recursive: true });
+  writeFileSync(OFFERED, new Date().toISOString());
+  return context(
+    "SessionStart",
+    `The weekly token review is due: ${last ? `the last entry in ${LOG} is from ${last}` : `${LOG} has no entry yet`}. ` +
+      `In your first reply, offer the user to run it; on their yes, one agent runs it as that file's "Running a review" says. This is said once a week.`,
+  );
+};
+
+const { values: flags } = flagsOf("usage", "[--agent <id>] [--week] [--since <YYYY-MM-DD>]", {
+  options: { hook: { type: "boolean" }, status: { type: "boolean" }, agent: { type: "string" }, week: { type: "boolean" }, since: { type: "string" } },
 });
 
-if (flags.hook) hook(record);
+if (flags.hook) hook((input) => (input.hook_event_name === "SessionStart" ? reviewDue(input) : record(input)));
 else if (flags.status) status();
 else if (flags.agent) {
   const line = tokensLine(flags.agent);
   console.log(line ?? `No usage recorded for agent ${flags.agent}.`);
   if (!line) process.exitCode = 1;
 } else {
-  const day = flags.since ?? new Date().toLocaleDateString("sv");
+  // the week defaults to the 7 days before today, the table to today
+  const day = flags.since ?? later(new Date(), flags.week ? -7 : 0).toLocaleDateString("sv");
   if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || Number.isNaN(new Date(`${day}T00:00`).getTime())) {
     console.error(`usage: --since takes a day, YYYY-MM-DD, not ${day}`);
     process.exitCode = 1;
-  } else console.log(table(day));
+  } else console.log(flags.week ? week(day) : table(day));
 }

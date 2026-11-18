@@ -8,7 +8,8 @@
 // change, a prototype branch, lib's cwdFor and
 // substitutions, how copy.mjs and sync.mjs register a repo's copy, the
 // scripts' flags, prune-merged (the SessionStart hook that removes merged
-// work) and usage (the ledger of tokens spent). Run from
+// work) and usage (the ledger of tokens spent, its reports, and the
+// SessionStart check that the weekly review is due). Run from
 // the repo root:
 //
 //   node --test 'home/.claude/hooks/*.test.mjs'
@@ -31,6 +32,7 @@ import assert from "node:assert/strict";
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import {
   appendFileSync,
+  copyFileSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -1180,7 +1182,7 @@ describe("usage", () => {
     const run = (args, input, options) => runHook("usage", input, { args, env: { ...process.env, HOME: home }, ...options });
     const ledger = () => lines(readFileSync(join(home, ".claude/usage/ledger.jsonl"), "utf8")).map((line) => JSON.parse(line));
     // an agent's transcript and meta.json, and its stop
-    const agent = (id, entries, meta) => {
+    const agent = (id, entries, meta, type = "general-purpose") => {
       const transcript = join(project, `s1/subagents/agent-${id}.jsonl`);
       appendFileSync(transcript, typeof entries === "string" ? entries : jsonl(entries));
       if (meta) writeFileSync(transcript.replace(/\.jsonl$/, ".meta.json"), JSON.stringify(meta));
@@ -1189,7 +1191,7 @@ describe("usage", () => {
         session_id: "s1",
         cwd: "/w/repo",
         agent_id: id,
-        agent_type: "general-purpose",
+        agent_type: type,
         agent_transcript_path: transcript,
         effort: { level: "high" },
         last_assistant_message: "a reply the ledger never keeps",
@@ -1211,7 +1213,15 @@ describe("usage", () => {
       const file = join(home, ".claude/usage/windows.jsonl");
       return existsSync(file) ? lines(readFileSync(file, "utf8")).map((line) => JSON.parse(line)) : [];
     };
-    return { home, run, ledger, agent, session, windows, readings };
+    // gh on PATH, as a script: `body` is its shell, and each run's
+    // arguments are kept, one line each
+    const gh = (body) => {
+      const bin = join(home, "bin");
+      mkdirSync(bin, { recursive: true });
+      writeFileSync(join(bin, "gh"), `#!/bin/sh\necho "$*" >> "${join(home, "gh-args")}"\n${body}\n`, { mode: 0o755 });
+      return (args) => run(args, undefined, { env: { ...process.env, HOME: home, PATH: `${bin}:${process.env.PATH}` } });
+    };
+    return { home, run, ledger, agent, session, windows, readings, gh };
   };
 
   test("--hook: a row per message once, only what's new at each stop, and the agent's place", () => {
@@ -1397,11 +1407,123 @@ describe("usage", () => {
     assert.match(report, /^1 recording failed: the ledger's "error" rows say why\.$/m);
   });
 
+
+  // a message with its cache write split between the 5-minute and 1-hour caches
+  const wrote = (id, { cacheRead = 0, fiveMinute = 0, oneHour = 0 }) => ({
+    type: "assistant",
+    timestamp: now,
+    message: {
+      id,
+      model: "claude-opus-5-5",
+      usage: {
+        input_tokens: 0,
+        output_tokens: 0,
+        cache_read_input_tokens: cacheRead,
+        cache_creation_input_tokens: fiveMinute + oneHour,
+        cache_creation: { ephemeral_5m_input_tokens: fiveMinute, ephemeral_1h_input_tokens: oneHour },
+      },
+    },
+  });
+  const compacted = (uuid, trigger, preTokens) => ({ type: "system", subtype: "compact_boundary", uuid, timestamp: now, compactMetadata: { trigger, preTokens } });
+  const day = (days) => {
+    const date = new Date();
+    date.setDate(date.getDate() + days);
+    return date.toLocaleDateString("sv");
+  };
+
+  test("--hook: a message's 1-hour cache write, and a row per compaction", () => {
+    const { ledger, session } = scratch();
+    session("s1", [wrote("m1", { fiveMinute: 3, oneHour: 7 }), compacted("c1", "auto", 268_000), ...said("m2", 5)]);
+    const rows = ledger().filter((row) => row.kind !== "session");
+    assert.deepEqual(
+      rows.map((row) => [row.kind, row.id, row.cacheWrite, row.cacheWrite1h, row.trigger, row.preTokens]),
+      [
+        ["message", "m1", 10, 7, undefined, undefined],
+        ["compact", "c1", undefined, undefined, "auto", 268_000],
+        ["message", "m2", 10, undefined, undefined, undefined],
+      ],
+    );
+  });
+
+  test("--week: the week's measures beside the week before's, each message weighed by its cache", () => {
+    const { agent, session, windows, gh, home } = scratch();
+    // main: 1M cache read and 100k 1-hour writes, 300k weighted; a1 225k with 5-minute writes; b1's row
+    // has no split (recorded before it), so as an agent's its writes are 5-minute: 125k
+    session("s1", [wrote("m1", { cacheRead: 1_000_000, oneHour: 100_000 }), compacted("c1", "manual", 100_000)]);
+    session("s2", [compacted("c1", "manual", 100_000)]);
+    agent("a1", [wrote("m2", { cacheRead: 1_000_000, fiveMinute: 100_000 }), compacted("c2", "auto", 268_000)], { description: "Round 1 review", spawnDepth: 1 }, "change-reviewer");
+    agent("b1", [{ ...said("m3", 0)[0], message: { id: "m3", model: "claude-opus-5-5", usage: { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 100_000 } } }, compacted("c3", "auto", 270_000)], { description: "Fix issue 1", spawnDepth: 1 });
+    windows([50, 100]);
+    const week = gh(`echo '[{"repository":{"nameWithOwner":"o/a"}},{"repository":{"nameWithOwner":"o/a"}},{"repository":{"nameWithOwner":"o/b"}}]'`);
+    const ran = week(["--week", "--since", day(-6)]);
+    assert.equal(ran.status, 0, ran.stderr);
+    const cells = Object.fromEntries(ran.stdout.split("\n").map((line) => line.trim().split(/\s{2,}/)).filter((cells) => cells.length === 3).map(([name, ...rest]) => [name, rest]));
+    assert.deepEqual(cells["weighted tokens"], ["650k", "0"]);
+    assert.deepEqual(cells["main sessions' share"], ["46.2%", "-"]);
+    assert.deepEqual(cells["main context per turn: mean"], ["1.1M", "-"]);
+    assert.deepEqual(cells["agents per active day"], ["2.0", "-"]);
+    assert.deepEqual(cells["auto-compactions (in agents)"], ["2 (2)", "0 (0)"]);
+    assert.deepEqual(cells["context compacted, median"], ["270k", "-"]);
+    assert.deepEqual(cells["merged PRs"], ["3", "3"]);
+    assert.deepEqual(cells["weighted per merged PR"], ["217k", "0"]);
+    assert.match(ran.stdout, /^Merged PRs: o\/a 2, o\/b 1$/m);
+    assert.match(ran.stdout, /^ {2}main s1 repo {2,}300k {2,}46\.2%$/m);
+    assert.match(ran.stdout, /^ {2}change-reviewer {2,}225k {2,}34\.6% {2,}1$/m);
+    assert.match(ran.stdout, /^ {2}to .*: 50% at .*; 650k weighted by then, about 13k per 1% \(began before the ledger: reads low\)$/m);
+    // gh asked for the account's PRs merged in each week, to the second before it ends
+    const from = new Date(`${day(-6)}T00:00`);
+    const at = (date) => date.toISOString().replace(/\.\d+Z$/, "Z");
+    const asked = lines(readFileSync(join(home, "gh-args"), "utf8"));
+    assert.equal(asked[0], `search prs --author=@me --merged-at ${at(from)}..${at(new Date(from.getTime() + 7 * 24 * 3600 * 1000 - 1000))} --limit 1000 --json repository`);
+    // gh failing says why, and the rest still prints
+    const failing = gh("echo 'not logged in' >&2; exit 1")(["--week", "--since", day(-6)]);
+    assert.equal(failing.status, 0, failing.stderr);
+    assert.match(failing.stdout, /^Merged PRs: gh couldn't say: not logged in$/m);
+    assert.match(failing.stdout, /^weighted per merged PR {2,}- {2,}-$/m);
+  });
+
+  // usage.mjs, lib.mjs and copy.mjs in a dotfiles-shaped tree, whose
+  // docs/token-review.md is the log the hook reads
+  test("--hook at SessionStart: says once a week, at a main session's startup, that the review is due", () => {
+    const home = scratchDir();
+    const tree = scratchDir();
+    mkdirSync(join(tree, "home/.claude/hooks"), { recursive: true });
+    mkdirSync(join(tree, "docs"));
+    for (const name of ["usage", "lib", "copy"]) copyFileSync(join(HOOKS, `${name}.mjs`), join(tree, `home/.claude/hooks/${name}.mjs`));
+    const log = join(tree, "docs/token-review.md");
+    const offered = join(home, ".claude/usage/review-offered");
+    const start = (input = {}) =>
+      spawnSync(process.execPath, [join(tree, "home/.claude/hooks/usage.mjs"), "--hook"], {
+        input: JSON.stringify({ hook_event_name: "SessionStart", session_id: "s", cwd: tree, source: "startup", ...input }),
+        encoding: "utf8",
+        env: { ...process.env, HOME: home },
+      });
+    const said = (ran) => (ran.stdout ? JSON.parse(ran.stdout).hookSpecificOutput.additionalContext : "");
+    writeFileSync(log, `# Token review\n\n### ${day(-3)}: a week\n\n### ${day(-10)}: the week before\n`);
+    assert.equal(said(start()), "");
+    assert.equal(existsSync(offered), false);
+    writeFileSync(log, `# Token review\n\n### ${day(-8)}: a week\n\n### ${day(-15)}: the week before\n`);
+    for (const source of ["resume", "clear", "compact"]) assert.equal(said(start({ source })), "", source);
+    assert.equal(said(start({ agent_id: "a1", agent_type: "general-purpose" })), "");
+    assert.equal(said(start({ agent_type: "reviewer" })), "");
+    assert.equal(
+      said(start()),
+      `The weekly token review is due: the last entry in ${log} is from ${day(-8)}. In your first reply, offer the user to run it; on their yes, one agent runs it as that file's "Running a review" says. This is said once a week.`,
+    );
+    // once: not again until a week after it said so
+    assert.equal(said(start()), "");
+    writeFileSync(offered, new Date(Date.now() - 8 * 24 * 3600 * 1000).toISOString());
+    assert.match(said(start()), /is from /);
+    rmSync(offered);
+    writeFileSync(log, "# Token review\n");
+    assert.match(said(start()), /^The weekly token review is due: .*token-review\.md has no entry yet\./);
+  });
+
   test("a flag it doesn't know runs nothing", () => {
     const { run } = scratch();
     const typo = run(["--sinse", "2026-11-10"]);
     assert.equal(typo.status, 1);
-    assert.match(typo.stderr, /^usage: .*'--sinse'.*\nUsage: node ~\/\.claude\/hooks\/usage\.mjs \[--agent <id>\] \[--since <YYYY-MM-DD>\]$/m);
+    assert.match(typo.stderr, /^usage: .*'--sinse'.*\nUsage: node ~\/\.claude\/hooks\/usage\.mjs \[--agent <id>\] \[--week\] \[--since <YYYY-MM-DD>\]$/m);
     assert.equal(run(["--since", "11/10"]).status, 1);
   });
 });
