@@ -69,7 +69,7 @@ Where the decisions were silent, step 1 took the simplest option. Each is the us
 - **The curator writes the log's entries into its output** (under `~/.claude/process/curator/`, where reviewer-gate holds it), and the agent applying the batch commits them as the batch's first commit: the log is committed in the dotfiles, where every change rides a PR.
 - **Each signal has an `id`** (8 hex), which proposals and log entries cite.
 - **The lessons file is capture's output:** `capture.mjs --source lessons` adds each cost's line to it, so the PR gate reads one record, not a hand copy of the inbox.
-- **Cloud sessions** write their signals to one issue on CristianCrane/.dotfiles, which the curator reads (D24).
+- **Cloud sessions** write their costs to one issue on CristianCrane/.dotfiles, which the curator reads (D24), in the agent's own words with no quote and no name of a client or person: that repo is public, and D13 keeps raw signals local.
 
 ## Consequences
 

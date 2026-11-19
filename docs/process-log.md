@@ -1,6 +1,6 @@
 # Process log
 
-The process layer's decisions ([process.md](process.md)): each proposal the curator made, the user's verdict on it, and what landed. The inbox (`~/.claude/process/inbox.jsonl`, local) holds the raw signals; this log holds no quotes that could name a client. Entries are newest first. A batch's PR adds its entries in its first commit, and each change after it names its entry (`L<n>`) in its commit message (D27); review-gate reads both before the agent may merge it.
+The process layer's decisions ([process.md](process.md)): each proposal the curator made, the user's verdict on it, and what landed. The inbox (`~/.claude/process/inbox.jsonl`, local) holds the raw signals; this log holds no quotes that could name a client. Entries are newest first. How a batch's PR carries its entries: [process.md](process.md), Landing.
 
 ## Format
 

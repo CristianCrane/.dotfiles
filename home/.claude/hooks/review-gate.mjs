@@ -333,14 +333,17 @@ const PROCESS_LOG = "docs/process-log.md";
 // why a process batch's PR can't merge without the user, if it can't: its
 // review isn't clean, or its commits aren't the verdicts its log adds (the
 // first commit adds them and nothing else; every later one names one, and
-// only ones the user said yes to or edited)
+// only ones the user said yes to or edited). The log commit alone merges:
+// a repo's batch has its entries here and its changes there, and a branch
+// reads approvals only from its own first commit, so it approves nothing
+// later
 const batchUnapproved = (cwd, input) => {
   const work = workOf(cwd, input);
   const found = review(cwd, work, input);
   if (!found.ok) return `its review isn't ready (${found.reason})`;
   if (found.open !== 0) return found.open ? `its review leaves ${found.open} change finding(s) open` : "it has no review of its own";
   const commits = lines(git(cwd, "rev-list", "--reverse", "--no-merges", `${base(cwd)}..HEAD`));
-  if (commits.length < 2) return "it has no change after its log commit";
+  if (!commits.length) return "it has no commits";
   const [first, ...changes] = commits;
   const logged = lines(git(cwd, "diff-tree", "--no-commit-id", "--name-only", "-r", first));
   if (logged.join() !== PROCESS_LOG) return `its first commit (${first.slice(0, 7)}) must add the run's entries to ${PROCESS_LOG} and nothing else`;

@@ -789,16 +789,19 @@ test("capture: one signal to the inbox, and nothing for a bad call", () => {
   const home = scratchDir();
   const { repo } = scratchRepo();
   const inbox = join(home, ".claude/process/inbox.jsonl");
-  const capture = (...args) => runHook("capture", undefined, { args, cwd: repo, env: { ...process.env, HOME: home, CLAUDE_CODE_SESSION_ID: "s1" } });
-  const ran = capture("--kind", "correction", "--said", "no, global", "--proposed", "a repo rule");
+  const capture = (text, ...args) => runHook("capture", undefined, { args, input: text, cwd: repo, env: { ...process.env, HOME: home, CLAUDE_CODE_SESSION_ID: "s1" } });
+  // the user's words as written: a backtick span and a $ the shell would
+  // have run and expanded in a double-quoted flag, an apostrophe, two lines
+  const said = "no, run `date +%Y` first and keep $HOME out\nit's global";
+  const ran = capture(`said: ${said}\nproposed: a repo rule\n`, "--kind", "correction");
   assert.equal(ran.status, 0, ran.stderr);
   const [signal, ...more] = readFileSync(inbox, "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line));
   assert.equal(more.length, 0);
   assert.match(signal.id, /^[0-9a-f]{8}$/);
   assert.match(ran.stdout, new RegExp(`^captured correction signal ${signal.id} in `));
-  assert.deepEqual({ ...signal, id: 0, at: 0 }, { id: 0, at: 0, session: "s1", project: basename(repo), source: "capture", kind: "correction", said: "no, global", proposed: "a repo rule", note: "" });
-  for (const args of [["--kind", "gripe", "--said", "x"], ["--kind", "important"], ["--kind", "cost", "--source", "pass", "--note", "x"]]) {
-    const bad = capture(...args);
+  assert.deepEqual({ ...signal, id: 0, at: 0 }, { id: 0, at: 0, session: "s1", project: basename(repo), source: "capture", kind: "correction", said, proposed: "a repo rule", note: "" });
+  for (const [text, ...args] of [["said: x", "--kind", "gripe"], ["proposed: x", "--kind", "important"], ["", "--kind", "important"], ["note: x", "--kind", "cost", "--source", "pass"], ["said: x", "--kind", "cost", "--said", "x"]]) {
+    const bad = capture(text, ...args);
     assert.equal(bad.status, 1, args.join(" "));
     assert.match(bad.stderr, /^capture: /);
   }
@@ -811,8 +814,8 @@ test("capture: one signal to the inbox, and nothing for a bad call", () => {
 test("capture: a lessons signal adds its line to the branch's lessons file", () => {
   const home = scratchDir();
   const { repo } = scratchRepo({ review: true });
-  const capture = (...args) => runHook("capture", undefined, { args: ["--source", "lessons", "--kind", "cost", ...args], cwd: repo, env: { ...process.env, HOME: home } });
-  for (const note of ["F1 a missed copy", "CI red: a lint"]) assert.equal(capture("--note", note).status, 0);
+  const capture = (text) => runHook("capture", undefined, { args: ["--source", "lessons", "--kind", "cost"], input: text, cwd: repo, env: { ...process.env, HOME: home } });
+  for (const note of ["F1 a missed copy", "CI red:\n a lint"]) assert.equal(capture(`note: ${note}\n`).status, 0);
   const ids = readFileSync(join(home, ".claude/process/inbox.jsonl"), "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line).id);
   assert.equal(readFileSync(stateFile(repo, "lessons", BRANCH), "utf8"), `Signals for ${BRANCH}:\n- F1 a missed copy → inbox ${ids[0]}\n- CI red: a lint → inbox ${ids[1]}\n`);
   const ran = runHook("review-gate", { tool_input: { command: "gh pr ready" }, cwd: repo, session_id: "s" });
@@ -1005,7 +1008,8 @@ test("review-gate: a process batch merges by the agent once its log approves eve
   assert.equal(merge(batch({ changes: ["Change: one, L1", "Cleanup: its stale line, L1"] })), null);
   assert.match(merge(batch({ changes: ["Change: the hook, L2"] })) ?? "", NOT_APPROVED("commit [0-9a-f]{7} names L2, which the log doesn't add with a yes or edit"));
   assert.match(merge(batch({ changes: ["Change: something else"] })) ?? "", NOT_APPROVED(String.raw`commit [0-9a-f]{7} names no log entry \(L<n>\)`));
-  assert.match(merge(batch({ changes: [] })) ?? "", NOT_APPROVED("it has no change after its log commit"));
+  // the log commit alone: a repo's batch, whose changes are in the repo
+  assert.equal(merge(batch({ changes: [] })), null);
   assert.match(merge(batch({ header: "round 1, 2 open change findings" })) ?? "", NOT_APPROVED("its review isn't ready"));
   assert.match(merge(batch({ header: "round 5, 1 open change findings" })) ?? "", NOT_APPROVED(String.raw`its review leaves 1 change finding\(s\) open`));
   // a first commit that does more than add the log's entries

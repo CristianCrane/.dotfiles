@@ -20,12 +20,18 @@ Done when every review finding, every red run, every turn-down and every correct
 One signal per cost, from the PR's checkout, with the user's words when there are some:
 
 ```
-node ~/.claude/hooks/capture.mjs --source lessons --kind <correction|retraction|cost> --note "<the cost, and what it took>" [--said "<the user's words>"] [--proposed "<what you had done>"]
+node ~/.claude/hooks/capture.mjs --source lessons --kind <correction|retraction|cost> <<'EOF'
+note: <the cost, and what it took>
+said: <the user's words, if any>
+proposed: <what you had done, if it matters>
+EOF
 ```
+
+The quoted heredoc keeps the words as written: in double quotes the shell would run a backtick span and expand a `$`.
 
 Each run also adds the cost's line to the branch's lessons file (`- <cost> → inbox <id>`), the record the PR gate reads. Wide net: a small cost goes in too; the curator drops noise.
 
-With no `~/.claude/hooks/capture.mjs` (a cloud session), open one issue on CristianCrane/.dotfiles, "Signals from <repo>: <branch>", listing the costs, and write the lessons file by hand, a line per cost: `- <cost> → <the issue's URL>`.
+With no `~/.claude/hooks/capture.mjs` (a cloud session), open one issue on CristianCrane/.dotfiles, "Signals from <repo>: <branch>", listing the costs in your own words, with no quote of the user's and no name of a client or person: the repo is public, and raw signals stay local (D13). Then write the lessons file by hand, a line per cost: `- <cost> → <the issue's URL>`.
 
 Done when every cost on the list has its line in the lessons file.
 
