@@ -64,7 +64,7 @@ const summary = ({ repo, base, prs, workflows }) => {
     ...workflows.map((ran) => `${base}'s latest ${ran.workflowName} run failed (${ran.url})`),
   ].filter(Boolean);
   return parts.length
-    ? `Red in ${repo}: ${parts.join("; ")}. "No red tests" (the global CLAUDE.md): before starting new work here, say which, why, and what unblocks it.`
+    ? `Red in ${repo}: ${parts.join("; ")}. "No red tests" (the global CLAUDE.md, Working with me) applies.`
     : null;
 };
 

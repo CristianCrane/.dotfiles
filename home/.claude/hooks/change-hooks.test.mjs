@@ -1499,7 +1499,7 @@ describe("red-checks", () => {
     assert.equal(ran.status, 0, ran.stderr);
     assert.deepEqual(JSON.parse(ran.stdout), {
       systemMessage:
-        'Red in o/r: open PR #3, #5 failed checks; main\'s latest Nightly run failed (https://github.com/o/r/actions/runs/Nightly-timed_out). "No red tests" (the global CLAUDE.md): before starting new work here, say which, why, and what unblocks it.',
+        'Red in o/r: open PR #3, #5 failed checks; main\'s latest Nightly run failed (https://github.com/o/r/actions/runs/Nightly-timed_out). "No red tests" (the global CLAUDE.md, Working with me) applies.',
     });
     // the default branch's finished runs, from the repo origin names
     assert.match(readFileSync(gh.log, "utf8"), /^run list -R o\/r --branch main --status completed --limit 100 --json workflowName,conclusion,url$/m);
