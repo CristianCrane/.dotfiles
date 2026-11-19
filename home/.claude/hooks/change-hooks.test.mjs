@@ -3,7 +3,7 @@
 // reviewer-gate), each fed to the hook as Claude Code runs it (`node
 // <hook>.mjs`, the tool call's JSON on stdin, with the input fields
 // MORE_INPUT adds, in a scratch repo), and below them plain tests of
-// scratch-gate at a subagent's start, reviewer-gate's other callers, the
+// scratch-gate at a subagent's start, reviewer-gate's other callers and the curator, capture (the process layer's inbox), the
 // survey gate on main (branch first where origin is on GitHub),
 // review-gate's merge rule, a dictated settings change, a prototype branch, lib's cwdFor and
 // substitutions, how copy.mjs and sync.mjs register a repo's copy, the
@@ -49,7 +49,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { after, describe, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { repoCopy, repoHooks } from "./copy.mjs";
@@ -145,7 +145,7 @@ const scratchRepo = ({ review = false, header = "round 1, 0 open change findings
   return { repo, body: body === undefined ? undefined : write(repo, "pr-body", body) };
 };
 
-const ROUTED = "- A lesson → home/.claude/CLAUDE.md\n";
+const ROUTED = "Signals for feature:\n- A cost → inbox 1a2b3c4d\n";
 // a PR body in the change skill's shape, its permalinks at `head`, with
 // `change` as its Change section's lines; `parts` replaces a part's text,
 // or leaves it out (null)
@@ -169,13 +169,14 @@ const STATES = {
   lessonNoArrow: ["review-gate", () => scratchRepo({ review: true, lessons: "- A lesson\n" })],
   lessonsEmpty: ["review-gate", () => scratchRepo({ review: true, lessons: "" })],
   lessonsNone: ["review-gate", () => scratchRepo({ review: true, lessons: "None: a one-line fix\n" })],
-  // the costs ruled out after the lessons (the lessons skill's step 5)
+  // `Ruled out`, the older skill's spelling of None:, which repos' copies
+  // write until their sync
   lessonsRuledOut: ["review-gate", () => scratchRepo({ review: true, lessons: `${ROUTED}\nRuled out:\n- F1 a cost: one quick fix\n` })],
   lessonsOnlyRuledOut: ["review-gate", () => scratchRepo({ review: true, lessons: "Ruled out (none of the costs is a lesson):\n- F1 a cost: one quick fix\n" })],
   lessonsRuledOutEmpty: ["review-gate", () => scratchRepo({ review: true, lessons: "Ruled out:\n" })],
   // a lesson with no → before None: (None: once let the whole file through)
   lessonUnroutedNone: ["review-gate", () => scratchRepo({ review: true, lessons: "- A lesson\nNone: the rest\n" })],
-  // a lessons commit after the review, with no recheck of it
+  // a commit after the review, with no recheck of it
   staleReview: [
     "review-gate",
     () => {
@@ -354,7 +355,7 @@ const REDIRECTS = ["2>&1", ">&2", "&>/dev/null", "<&0"];
 
 const CASES = [
   ["noLessons", "gh pr ready", NO_LESSONS],
-  ["lessonNoArrow", "gh pr ready", /1 lesson\(s\) that don't say where they went/],
+  ["lessonNoArrow", "gh pr ready", /1 cost\(s\) that don't say where they went/],
   ["lessonsEmpty", "gh pr ready", /lists none/],
   ["ready", "gh pr ready", THROUGH],
   ["lessonsNone", "gh pr ready", THROUGH],
@@ -363,7 +364,7 @@ const CASES = [
   ["lessonsRuledOut", "gh pr ready 12", NAMED],
   ["lessonsOnlyRuledOut", "gh pr ready 12", NAMED],
   ["lessonsRuledOutEmpty", "gh pr ready", /lists none/],
-  ["lessonUnroutedNone", "gh pr ready", /1 lesson\(s\) that don't say where they went/],
+  ["lessonUnroutedNone", "gh pr ready", /1 cost\(s\) that don't say where they went/],
   ["lessonsNone", "gh pr ready 12", NAMED],
   ["noLessons", "gh pr ready --undo", THROUGH],
   ["staleReview", "gh pr ready", /it reviewed [0-9a-f]+, and the commits since change more than comment lines/],
@@ -765,6 +766,62 @@ test("reviewer-gate: other callers' calls through", () => {
   }
 });
 
+// reviewer-gate holds the curator as it holds the change-reviewer: it
+// writes only under ~/.claude/process/curator, and runs only readers (the
+// old gate let every curator call through: red on it)
+test("reviewer-gate: the curator writes only its output, and runs only readers", () => {
+  const home = scratchDir();
+  const run = (tool_input) => {
+    const ran = runHook("reviewer-gate", { cwd: home, agent_id: AGENT, agent_type: "curator", tool_input }, { env: { ...process.env, HOME: home } });
+    return ran.stdout.trim() ? JSON.parse(ran.stdout).hookSpecificOutput.permissionDecisionReason : "";
+  };
+  assert.equal(run({ file_path: join(home, ".claude/process/curator/history-2026-11-19.md"), content: "x" }), "");
+  for (const path of [".claude/process/inbox.jsonl", ".claude/process/curator-x.md", ".dotfiles/docs/process-log.md", ".claude/CLAUDE.md"])
+    assert.match(run({ file_path: join(home, path), content: "x" }), /^The curator writes only its output: the path you were given, under .*\.claude\/process\/curator\. /, path);
+  assert.equal(run({ command: "git log --oneline -5" }), "");
+  assert.match(run({ command: "pnpm test" }), /^The curator runs only commands that read: /);
+});
+
+// capture.mjs writes one raw signal to ~/.claude/process/inbox.jsonl, with
+// its id, the session Claude Code sets, and the checkout's folder; a kind
+// it doesn't know, or nothing said, writes nothing
+test("capture: one signal to the inbox, and nothing for a bad call", () => {
+  const home = scratchDir();
+  const { repo } = scratchRepo();
+  const inbox = join(home, ".claude/process/inbox.jsonl");
+  const capture = (text, ...args) => runHook("capture", undefined, { args, input: text, cwd: repo, env: { ...process.env, HOME: home, CLAUDE_CODE_SESSION_ID: "s1" } });
+  // the user's words as written: a backtick span and a $ the shell would
+  // have run and expanded in a double-quoted flag, an apostrophe, two lines
+  const said = "no, run `date +%Y` first and keep $HOME out\nit's global";
+  const ran = capture(`said: ${said}\nproposed: a repo rule\n`, "--kind", "correction");
+  assert.equal(ran.status, 0, ran.stderr);
+  const [signal, ...more] = readFileSync(inbox, "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line));
+  assert.equal(more.length, 0);
+  assert.match(signal.id, /^[0-9a-f]{8}$/);
+  assert.match(ran.stdout, new RegExp(`^captured correction signal ${signal.id} in `));
+  assert.deepEqual({ ...signal, id: 0, at: 0 }, { id: 0, at: 0, session: "s1", project: basename(repo), source: "capture", kind: "correction", said, proposed: "a repo rule", note: "" });
+  for (const [text, ...args] of [["said: x", "--kind", "gripe"], ["proposed: x", "--kind", "important"], ["", "--kind", "important"], ["note: x", "--kind", "cost", "--source", "pass"], ["said: x", "--kind", "cost", "--said", "x"]]) {
+    const bad = capture(text, ...args);
+    assert.equal(bad.status, 1, args.join(" "));
+    assert.match(bad.stderr, /^capture: /);
+  }
+  assert.equal(readFileSync(inbox, "utf8").split("\n").filter(Boolean).length, 1);
+});
+
+// from the lessons skill, capture also writes the cost's line to the
+// branch's lessons file, the record review-gate reads, so the file is the
+// command's output rather than a hand copy of the inbox
+test("capture: a lessons signal adds its line to the branch's lessons file", () => {
+  const home = scratchDir();
+  const { repo } = scratchRepo({ review: true });
+  const capture = (text) => runHook("capture", undefined, { args: ["--source", "lessons", "--kind", "cost"], input: text, cwd: repo, env: { ...process.env, HOME: home } });
+  for (const note of ["F1 a missed copy", "CI red:\n a lint"]) assert.equal(capture(`note: ${note}\n`).status, 0);
+  const ids = readFileSync(join(home, ".claude/process/inbox.jsonl"), "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line).id);
+  assert.equal(readFileSync(stateFile(repo, "lessons", BRANCH), "utf8"), `Signals for ${BRANCH}:\n- F1 a missed copy → inbox ${ids[0]}\n- CI red: a lint → inbox ${ids[1]}\n`);
+  const ran = runHook("review-gate", { tool_input: { command: "gh pr ready" }, cwd: repo, session_id: "s" });
+  assert.equal(ran.stdout.trim(), "", "the gate takes capture's file");
+});
+
 // on main, a checkout whose origin is on GitHub takes no edits: a change
 // there reaches main by PR, so the gate says to branch first, whatever
 // survey there is (the old gate let a surveyed change through on main:
@@ -912,6 +969,72 @@ test("review-gate: a dotfiles PR merges only when the user asked to merge that n
   // a message that names the number but asks no merge
   said(human("12 looks fine"));
   assert.match(merge(dotfiles, "gh pr merge 12") ?? "", NOT_ASKED(12));
+});
+
+// a process batch's PR (the dotfiles' docs/process.md, Landing) merges by
+// the agent, bare from its own checkout, when its log is the approval: the
+// first commit adds the verdicts, every later one names a yes or an edit,
+// and the review leaves nothing open. Its name alone isn't the key (the
+// old gate turned every bare merge down: red on it)
+test("review-gate: a process batch merges by the agent once its log approves every change", () => {
+  const BATCH = "process-batch-2026-11-19-history";
+  const transcript = join(scratchDir(), "t.jsonl");
+  writeFileSync(transcript, "");
+  const batch = ({ log = "- L1 yes · rule line → global CLAUDE.md · global · recommended yes\n- L2 no · hook → dotfiles · global · recommended yes\n", changes = ["Change: the vendor-guide line, L1"], header = "round 1, 0 open change findings" } = {}) => {
+    const repo = scratchDir();
+    git(repo, "init", "-qb", "main");
+    git(repo, "remote", "add", "origin", "git@github.com:CristianCrane/.dotfiles.git");
+    commit(repo, "a.txt", "a\n");
+    git(repo, "switch", "-qc", BATCH);
+    mkdirSync(join(repo, "docs"));
+    commit(repo, "docs/process-log.md", log);
+    changes.forEach((message, at) => {
+      writeFileSync(join(repo, `c${at}.txt`), message);
+      git(repo, "add", ".");
+      git(repo, "commit", "-qm", message);
+    });
+    const head = git(repo, "rev-parse", "--short", "HEAD");
+    writeFileSync(stateFile(repo, "review", BATCH), `# Change review: ${BATCH} @ ${head}, ${header}\n`);
+    return repo;
+  };
+  const merge = (cwd, command = "gh pr merge --squash --delete-branch") => {
+    const ran = runHook("review-gate", { tool_input: { command }, cwd, session_id: "s", transcript_path: transcript });
+    assert.equal(ran.status, 0, ran.stderr);
+    return ran.stdout.trim() ? JSON.parse(ran.stdout).hookSpecificOutput.permissionDecisionReason : null;
+  };
+  const NOT_APPROVED = (why) => new RegExp(String.raw`^A process batch merges by the agent only when the user's verdicts in its log approve every change .*: ${why}`);
+
+  assert.equal(merge(batch()), null);
+  assert.equal(merge(batch({ changes: ["Change: one, L1", "Cleanup: its stale line, L1"] })), null);
+  assert.match(merge(batch({ changes: ["Change: the hook, L2"] })) ?? "", NOT_APPROVED("commit [0-9a-f]{7} names L2, which the log doesn't add with a yes or edit"));
+  assert.match(merge(batch({ changes: ["Change: something else"] })) ?? "", NOT_APPROVED(String.raw`commit [0-9a-f]{7} names no log entry \(L<n>\)`));
+  // the log commit alone: a repo's batch, whose changes are in the repo
+  assert.equal(merge(batch({ changes: [] })), null);
+  assert.match(merge(batch({ header: "round 1, 2 open change findings" })) ?? "", NOT_APPROVED("its review isn't ready"));
+  assert.match(merge(batch({ header: "round 5, 1 open change findings" })) ?? "", NOT_APPROVED(String.raw`its review leaves 1 change finding\(s\) open`));
+  // a first commit that does more than add the log's entries
+  const mixed = batch();
+  git(mixed, "reset", "-q", "--soft", "HEAD~2");
+  writeFileSync(join(mixed, "x.txt"), "x");
+  git(mixed, "add", ".");
+  git(mixed, "commit", "-qm", "log and a change, L1");
+  commit(mixed, "y.txt", "Change: L1");
+  writeFileSync(stateFile(mixed, "review", BATCH), `# Change review: ${BATCH} @ ${git(mixed, "rev-parse", "--short", "HEAD")}, round 1, 0 open change findings\n`);
+  assert.match(merge(mixed) ?? "", NOT_APPROVED("its first commit .* must add the run's entries to docs/process-log.md and nothing else"));
+  // a first commit that rewrites a past verdict, no to yes: only adds count
+  const rewrite = batch();
+  git(rewrite, "switch", "-q", "main");
+  git(rewrite, "branch", "-qD", BATCH);
+  mkdirSync(join(rewrite, "docs"), { recursive: true });
+  commit(rewrite, "docs/process-log.md", "- L3 no · hook → dotfiles · global · recommended yes\n");
+  git(rewrite, "switch", "-qc", BATCH);
+  commit(rewrite, "docs/process-log.md", "- L3 yes · hook → dotfiles · global · recommended yes\n");
+  commit(rewrite, "c.txt", "Change: the hook, L3");
+  writeFileSync(stateFile(rewrite, "review", BATCH), `# Change review: ${BATCH} @ ${git(rewrite, "rev-parse", "--short", "HEAD")}, round 1, 0 open change findings\n`);
+  assert.match(merge(rewrite) ?? "", NOT_APPROVED("its first commit .* must add the run's entries to docs/process-log.md and nothing else"));
+  // named any other way, it's the user's merge as before
+  for (const command of ["gh pr merge 12", "gh pr merge -R CristianCrane/.dotfiles", `gh pr merge ${BATCH}`])
+    assert.match(merge(batch(), command) ?? "", /^(?:Only the user merges|Run `gh pr merge <number>`)/, command);
 });
 
 // a Monitor runs a shell command as Bash does, so review-gate's rules hold
