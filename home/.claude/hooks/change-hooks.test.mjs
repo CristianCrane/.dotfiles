@@ -8,7 +8,8 @@
 // review-gate's merge rule, a dictated settings change, a prototype branch, lib's cwdFor and
 // substitutions, how copy.mjs and sync.mjs register a repo's copy, the
 // scripts' flags, prune-merged (the SessionStart hook that removes merged
-// work), usage (the ledger of tokens spent, its reports, and the
+// work), catch-up (the SessionStart hook that fast-forwards ~/.dotfiles),
+// usage (the ledger of tokens spent, its reports, and the
 // SessionStart check that the weekly review is due), main-session (the
 // main session's SessionStart message), settings-format, and the repo's
 // .githooks (pre-commit, which runs settings-format, and post-commit). Run
@@ -1228,6 +1229,192 @@ describe("prune-merged", () => {
     assert.deepEqual(readdirSync(trash), []);
     assert.match(ran.stdout, /^ {2}\.\.\/base \(detached\): locked$/m);
     assert.equal(git(base, "status", "--porcelain"), "");
+  });
+});
+
+// catch-up.mjs at a session's start, in a scratch HOME whose .dotfiles
+// links to a clone of a bare origin (as ~/.dotfiles links to the main
+// checkout), never the real one; a second clone pushes, standing for a PR
+// merged on GitHub
+describe("catch-up", () => {
+  // the live clone, its HOME, and `merged(file, text)`, which lands a
+  // commit on origin's main from elsewhere; with `dotfiles` false, HOME
+  // has no .dotfiles
+  const live = ({ dotfiles = true } = {}) => {
+    const dir = scratchDir();
+    const origin = join(dir, "origin.git");
+    git(dir, "init", "-q", "--bare", "-b", "main", origin);
+    const repo = join(dir, "live");
+    git(dir, "clone", "-q", origin, repo);
+    commit(repo, "a.txt", "a\n");
+    commit(repo, "b.txt", "b\n");
+    git(repo, "push", "-q", "origin", "main");
+    const other = join(dir, "other");
+    git(dir, "clone", "-q", origin, other);
+    const home = join(dir, "home");
+    mkdirSync(home);
+    if (dotfiles) symlinkSync(repo, join(home, ".dotfiles"));
+    const merged = (file, text) => {
+      if (text === null) git(other, "rm", "-q", file);
+      else writeFileSync(join(other, file), text);
+      git(other, "add", "-A");
+      git(other, "commit", "-qm", file);
+      git(other, "push", "-q", "origin", "main");
+      return git(other, "rev-parse", "HEAD");
+    };
+    return { dir, origin, repo, home, merged };
+  };
+  // the hook's run from a session in another folder; what it said (its
+  // systemMessage, or "")
+  const start = ({ home }) => {
+    const ran = runHook("catch-up", { hook_event_name: "SessionStart", session_id: "s", cwd: scratchDir(), source: "startup" }, {
+      env: { ...process.env, HOME: home },
+    });
+    assert.equal(ran.status, 0, ran.stderr);
+    return ran.stdout.trim() ? JSON.parse(ran.stdout).systemMessage : "";
+  };
+  const head = (repo) => git(repo, "rev-parse", "HEAD");
+  const status = (repo) => git(repo, "status", "--porcelain");
+  const read = (repo, file) => readFileSync(join(repo, file), "utf8");
+  const LEFT = (n) => new RegExp(String.raw`^~/\.dotfiles is ${n} commits? behind origin/main and was left as it is: `);
+
+  test("behind: fast-forwards, and says so in one line; nothing to do: silent", () => {
+    const state = live();
+    const was = head(state.repo);
+    state.merged("b.txt", "b2\n");
+    const tip = state.merged("c.txt", "c\n");
+    assert.equal(start(state), `~/.dotfiles caught up with origin/main: 2 commits, ${was.slice(0, 7)}..${tip.slice(0, 7)}.`);
+    assert.equal(head(state.repo), tip);
+    assert.equal(read(state.repo, "c.txt"), "c\n");
+    assert.equal(status(state.repo), "");
+    assert.equal(start(state), "", "nothing more to do");
+  });
+
+  // the user's own save (/model) that a PR then landed: git refuses a
+  // fast-forward over a dirty file even when it equals the incoming one
+  test("a dirty file equal to origin's, an untracked one origin adds, and one origin deletes: staged, then fast-forwarded", () => {
+    const state = live();
+    state.merged("b.txt", "b2\n");
+    state.merged("new.txt", "new\n");
+    const tip = state.merged("a.txt", null);
+    writeFileSync(join(state.repo, "b.txt"), "b2\n");
+    writeFileSync(join(state.repo, "new.txt"), "new\n");
+    rmSync(join(state.repo, "a.txt"));
+    writeFileSync(join(state.repo, "mine.txt"), "mine\n"); // the user's, which origin knows nothing of
+    assert.match(start(state), /^~\/\.dotfiles caught up with origin\/main: 3 commits, \w{7}\.\.\w{7} \(3 uncommitted files there already matched it\)\.$/);
+    assert.equal(head(state.repo), tip);
+    assert.equal(status(state.repo), "?? mine.txt");
+  });
+
+  // one file in the way leaves all of it: nothing staged, nothing moved
+  test("a dirty file that differs from origin's: everything left as it was, and named", () => {
+    const state = live();
+    state.merged("a.txt", "a2\n");
+    state.merged("b.txt", "b2\n");
+    const was = head(state.repo);
+    writeFileSync(join(state.repo, "a.txt"), "a2\n"); // equal
+    writeFileSync(join(state.repo, "b.txt"), "mine\n"); // differs
+    assert.match(start(state), new RegExp(LEFT(2).source + "b\\.txt changed here and on origin/main differently"));
+    assert.equal(head(state.repo), was);
+    assert.equal(read(state.repo, "b.txt"), "mine\n");
+    assert.equal(git(state.repo, "diff", "--cached", "--name-only"), "", "nothing staged");
+    assert.equal(git(state.repo, "diff", "--name-only"), "a.txt\nb.txt");
+  });
+
+  // staging the working file would lose a third version, staged on purpose
+  test("a staged version that's neither HEAD's nor origin's: left as it was, and named", () => {
+    const state = live();
+    state.merged("b.txt", "b2\n");
+    writeFileSync(join(state.repo, "b.txt"), "staged\n");
+    git(state.repo, "add", "b.txt");
+    writeFileSync(join(state.repo, "b.txt"), "b2\n");
+    assert.match(start(state), new RegExp(LEFT(1).source + "b\\.txt changed here"));
+    assert.equal(git(state.repo, "show", ":b.txt"), "staged");
+    // staged, its working copy then put back as HEAD has it
+    writeFileSync(join(state.repo, "b.txt"), "b\n");
+    assert.match(start(state), new RegExp(LEFT(1).source + "b\\.txt changed here"));
+    assert.equal(git(state.repo, "show", ":b.txt"), "staged");
+  });
+
+  test("off main, or diverged: left as it is, and named", () => {
+    const off = live();
+    git(off.repo, "switch", "-qc", "other");
+    const was = head(off.repo);
+    off.merged("c.txt", "c\n");
+    assert.match(start(off), new RegExp(LEFT(1).source + "it's on other, not main"));
+    assert.equal(head(off.repo), was);
+    git(off.repo, "switch", "-q", "--detach");
+    assert.match(start(off), /it's on a detached HEAD, not main/);
+
+    const diverged = live();
+    commit(diverged.repo, "d.txt", "d\n");
+    const mine = head(diverged.repo);
+    diverged.merged("c.txt", "c\n");
+    assert.match(start(diverged), new RegExp(LEFT(1).source + "it has 1 commit origin/main lacks"));
+    assert.equal(head(diverged.repo), mine);
+  });
+
+  test("no ~/.dotfiles: silent", () => {
+    const state = live({ dotfiles: false });
+    state.merged("c.txt", "c\n");
+    assert.equal(start(state), "");
+  });
+
+  // offline (or a fetch beside prune-merged's): it catches up to what an
+  // earlier fetch brought, as far as that goes
+  test("a fetch that fails: catches up to what was fetched before", () => {
+    const state = live();
+    const tip = state.merged("c.txt", "c\n");
+    git(state.repo, "fetch", "-q", "origin");
+    renameSync(state.origin, `${state.origin}-gone`);
+    assert.match(start(state), /^~\/\.dotfiles caught up with origin\/main: 1 commit, /);
+    assert.equal(head(state.repo), tip);
+  });
+
+  // two session starts at once: the second leaves it to the first; a dead
+  // run's lock is taken over
+  test("one run at a time: a live run's lock holds, a dead run's is taken over", () => {
+    const state = live();
+    const was = head(state.repo);
+    state.merged("c.txt", "c\n");
+    const held = join(state.repo, ".git/claude/catch-up.lock");
+    mkdirSync(held, { recursive: true });
+    writeFileSync(join(held, "pid"), String(process.pid));
+    assert.equal(start(state), "");
+    assert.equal(head(state.repo), was);
+    writeFileSync(join(held, "pid"), String(spawnSync("true").pid));
+    assert.match(start(state), /caught up/);
+    assert.ok(!existsSync(held));
+  });
+
+  // what a merge killed partway leaves (Claude Code kills an async hook at
+  // its timeout): git's index.lock and a tree half new, or (killed after
+  // the index was written, before the ref moved) the new tree and index
+  // with HEAD unmoved. The first is named and left; once the lock is gone,
+  // and in the second, the next run finishes the fast-forward
+  test("a merge cut short: a stale index.lock is named and left; the next run finishes it", () => {
+    const locked = live();
+    const was = head(locked.repo);
+    const tip = locked.merged("b.txt", "b2\n");
+    git(locked.repo, "fetch", "-q", "origin");
+    writeFileSync(join(locked.repo, "b.txt"), "b2\n"); // written before the kill
+    const lockFile = join(locked.repo, ".git/index.lock");
+    writeFileSync(lockFile, "");
+    assert.match(start(locked), new RegExp(LEFT(1).source + `${lockFile.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} is there`));
+    assert.ok(existsSync(lockFile));
+    assert.equal(head(locked.repo), was);
+    rmSync(lockFile);
+    assert.match(start(locked), /caught up/);
+    assert.equal(head(locked.repo), tip);
+    assert.equal(status(locked.repo), "");
+
+    const indexed = live();
+    const tip2 = indexed.merged("c.txt", "c\n");
+    git(indexed.repo, "fetch", "-q", "origin");
+    git(indexed.repo, "read-tree", "-m", "-u", "HEAD", "origin/main");
+    assert.match(start(indexed), /caught up/);
+    assert.equal(head(indexed.repo), tip2);
+    assert.equal(status(indexed.repo), "");
   });
 });
 

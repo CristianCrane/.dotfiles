@@ -129,6 +129,12 @@
           },
           {
             "type": "command",
+            "command": "node \"$HOME/.claude/hooks/catch-up.mjs\"",
+            "timeout": 120,
+            "async": true
+          },
+          {
+            "type": "command",
             "command": "node \"$HOME/.claude/hooks/usage.mjs\" --hook",
             "timeout": 10
           },
