@@ -8,8 +8,9 @@
 // change, a prototype branch, lib's cwdFor and
 // substitutions, how copy.mjs and sync.mjs register a repo's copy, the
 // scripts' flags, prune-merged (the SessionStart hook that removes merged
-// work) and usage (the ledger of tokens spent, its reports, and the
-// SessionStart check that the weekly review is due). Run from
+// work), usage (the ledger of tokens spent, its reports, and the
+// SessionStart check that the weekly review is due), and settings-format
+// with the repo's .githooks/pre-commit that runs it. Run from
 // the repo root:
 //
 //   node --test 'home/.claude/hooks/*.test.mjs'
@@ -50,6 +51,7 @@ import { after, describe, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { repoCopy, repoHooks } from "./copy.mjs";
 import { cwdFor, lines, stateFile, substitutions, workOf } from "./lib.mjs";
+import { formatSettings } from "./settings-format.mjs";
 
 const HOOKS = dirname(fileURLToPath(import.meta.url));
 const BRANCH = "feature";
@@ -1525,5 +1527,166 @@ describe("usage", () => {
     assert.equal(typo.status, 1);
     assert.match(typo.stderr, /^usage: .*'--sinse'.*\nUsage: node ~\/\.claude\/hooks\/usage\.mjs \[--agent <id>\] \[--week\] \[--since <YYYY-MM-DD>\]$/m);
     assert.equal(run(["--since", "11/10"]).status, 1);
+  });
+});
+
+// settings-format.mjs and .githooks/pre-commit, which runs it on a staged
+// home/.claude/settings.json, each against the real `claude` on PATH
+// (about 1 s a format), in throwaway dirs and repos
+describe("settings-format", () => {
+  const committed = readFileSync(join(HOOKS, "../settings.json"), "utf8");
+  // the same values in a hand-edited form: top-level keys reversed, indented by 4
+  const reorder = (settings) => JSON.stringify(Object.fromEntries(Object.entries(settings).reverse()), null, 4);
+  const reordered = reorder(JSON.parse(committed));
+
+  // runs `body` with the formatter's temp dirs in an empty dir of their own,
+  // and asserts none is left there, whether `body` throws or not
+  const leavesNoTemp = (body) => {
+    const temp = scratchDir();
+    const before = process.env.TMPDIR;
+    process.env.TMPDIR = temp;
+    try {
+      return body(temp);
+    } finally {
+      if (before === undefined) delete process.env.TMPDIR;
+      else process.env.TMPDIR = before;
+      assert.deepEqual(readdirSync(temp), [], "a temp dir was left behind");
+    }
+  };
+  const format = (text, options) => leavesNoTemp(() => formatSettings(text, options));
+
+  test("the committed settings.json is in Claude Code's form already: formatting it changes no byte", () => {
+    assert.equal(format(committed), committed);
+  });
+
+  test("a hand-reordered file comes back as Claude Code writes it", () => {
+    assert.equal(format(reordered), committed);
+  });
+
+  // the entry it flips goes back to its own value: a false one goes enable,
+  // then disable
+  test("a false enabledPlugins entry is flipped and comes back false", () => {
+    const settings = JSON.parse(committed);
+    const [first] = Object.keys(settings.enabledPlugins);
+    settings.enabledPlugins[first] = false;
+    const expected = committed.replace(`"${first}": true`, `"${first}": false`);
+    assert.notEqual(expected, committed);
+    assert.equal(format(reorder(settings)), expected);
+  });
+
+  test("it refuses, and throws, on invalid JSON, no entry to flip, or changed values", () => {
+    assert.throws(() => format(committed.slice(0, -10)), /^Error: not valid JSON/);
+    assert.throws(() => format('{"model": "opus"}'), /^Error: no enabledPlugins entry to flip/);
+    assert.throws(() => format('{"enabledPlugins": {"a@b": "yes"}}'), /^Error: no enabledPlugins entry to flip/);
+    // with no migration recorded, Claude Code rewrites "opus" to
+    // "opus[1m]" on load; the same text with the migration recorded passes
+    const opus = '{"model": "opus", "enabledPlugins": {"a@b": true}}';
+    assert.throws(() => format(opus, { claudeJson: {} }), /^Error: Claude Code changed values, not only the form/);
+    assert.equal(JSON.parse(format(opus)).model, "opus");
+  });
+
+  test("the CLI formats a file in place, and leaves a file it refuses as it was", () => {
+    const dir = scratchDir();
+    const file = join(dir, "settings.json");
+    const run = () => leavesNoTemp((temp) => runHook("settings-format", undefined, { args: [file], env: { ...process.env, TMPDIR: temp } }));
+    writeFileSync(file, reordered);
+    assert.equal(run().status, 0);
+    assert.equal(readFileSync(file, "utf8"), committed);
+    const broken = committed.slice(0, -10);
+    writeFileSync(file, broken);
+    const refused = run();
+    assert.equal(refused.status, 1);
+    assert.match(refused.stderr, /^settings-format: .*settings\.json: not valid JSON/);
+    assert.equal(readFileSync(file, "utf8"), broken);
+    assert.match(runHook("settings-format", undefined, { args: [] }).stderr, /Usage: node ~\/\.claude\/hooks\/settings-format\.mjs <file>/);
+  });
+
+  describe("pre-commit", () => {
+    const SETTINGS = "home/.claude/settings.json";
+    // a repo with this branch's hook and formatter, core.hooksPath set as
+    // home.nix sets it, and settings.json committed in Claude Code's form
+    const hookedRepo = () => {
+      const repo = scratchDir();
+      git(repo, "init", "-qb", "main");
+      git(repo, "config", "core.hooksPath", ".githooks");
+      mkdirSync(join(repo, ".githooks"));
+      mkdirSync(join(repo, "home/.claude/hooks"), { recursive: true });
+      copyFileSync(join(HOOKS, "../../../.githooks/pre-commit"), join(repo, ".githooks/pre-commit"));
+      for (const name of ["settings-format", "lib"])
+        copyFileSync(join(HOOKS, `${name}.mjs`), join(repo, `home/.claude/hooks/${name}.mjs`));
+      writeFileSync(join(repo, SETTINGS), committed);
+      git(repo, "add", "-A");
+      git(repo, "commit", "-qm", "start");
+      return repo;
+    };
+    // `git commit` in `cwd`, with the formatter's temp dirs in one checked
+    // empty after; its spawnSync result
+    const commitIn = (cwd, message = "c") =>
+      leavesNoTemp((temp) =>
+        spawnSync("git", ["commit", "-qm", message], { cwd, encoding: "utf8", env: { ...process.env, TMPDIR: temp } }),
+      );
+    const stage = (repo, text) => {
+      writeFileSync(join(repo, SETTINGS), text);
+      git(repo, "add", SETTINGS);
+    };
+
+    test("does nothing when settings.json isn't staged", () => {
+      const repo = hookedRepo();
+      writeFileSync(join(repo, SETTINGS), reordered);
+      writeFileSync(join(repo, "a.txt"), "a\n");
+      git(repo, "add", "a.txt");
+      assert.equal(commitIn(repo).status, 0);
+      assert.equal(git(repo, "show", "HEAD:a.txt"), "a");
+      assert.equal(readFileSync(join(repo, SETTINGS), "utf8"), reordered);
+      assert.equal(git(repo, "diff", "--name-only", "HEAD~", "HEAD"), "a.txt");
+    });
+
+    test("formats a staged hand-reordered settings.json and commits Claude Code's form", () => {
+      const repo = hookedRepo();
+      const settings = JSON.parse(committed);
+      settings.model = "sonnet";
+      stage(repo, reorder(settings));
+      const ran = commitIn(repo);
+      assert.equal(ran.status, 0, ran.stderr);
+      const expected = committed.replace(/"model": "[^"]*"/, '"model": "sonnet"');
+      assert.notEqual(expected, committed);
+      assert.equal(execFileSync("git", ["show", `HEAD:${SETTINGS}`], { cwd: repo, encoding: "utf8" }), expected);
+      assert.equal(readFileSync(join(repo, SETTINGS), "utf8"), expected);
+      assert.equal(git(repo, "status", "--porcelain"), "");
+    });
+
+    test("refuses when settings.json has unstaged changes besides the staged ones", () => {
+      const repo = hookedRepo();
+      stage(repo, reordered);
+      writeFileSync(join(repo, SETTINGS), reordered + "\n");
+      const ran = commitIn(repo);
+      assert.equal(ran.status, 1);
+      assert.match(ran.stderr, /^pre-commit: home\/\.claude\/settings\.json has unstaged changes besides the staged ones; stage them/m);
+      assert.equal(git(repo, "rev-list", "--count", "HEAD"), "1");
+      assert.equal(readFileSync(join(repo, SETTINGS), "utf8"), reordered + "\n");
+      assert.equal(execFileSync("git", ["show", `:${SETTINGS}`], { cwd: repo, encoding: "utf8" }), reordered);
+    });
+
+    // a relative core.hooksPath resolves in each linked worktree, to its own hook
+    test("works in a linked worktree", () => {
+      const repo = hookedRepo();
+      const tree = join(scratchDir(), "wt");
+      git(repo, "worktree", "add", "-qb", "wt", tree);
+      stage(tree, reordered);
+      const ran = commitIn(tree);
+      assert.equal(ran.status, 0, ran.stderr);
+      assert.equal(execFileSync("git", ["show", `HEAD:${SETTINGS}`], { cwd: tree, encoding: "utf8" }), committed);
+      assert.equal(git(tree, "status", "--porcelain"), "");
+    });
+
+    test("stops the commit, saying why, when the formatter refuses", () => {
+      const repo = hookedRepo();
+      stage(repo, committed.slice(0, -10));
+      const ran = commitIn(repo);
+      assert.equal(ran.status, 1);
+      assert.match(ran.stderr, /^settings-format: home\/\.claude\/settings\.json: not valid JSON/m);
+      assert.match(ran.stderr, /^pre-commit: .* so nothing was committed$/m);
+      assert.equal(git(repo, "rev-list", "--count", "HEAD"), "1");
+    });
   });
 });

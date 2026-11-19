@@ -1,0 +1,33 @@
+#!/bin/sh
+# Edited in github.com/CristianCrane/.dotfiles; this repo's own git hook,
+# wired by home.nix (core.hooksPath .githooks, relative, so each linked
+# worktree runs its own copy).
+#
+# Keeps every commit of home/.claude/settings.json in the exact bytes
+# Claude Code writes: when the file is staged, formats it with
+# home/.claude/hooks/settings-format.mjs and stages the result. Without
+# this, an agent's hand edit commits a form Claude Code rewrites on its next
+# save, an uncommitted change that blocks a fast-forward pull. Git's own
+# hook, not a Claude Code gate, so commits from the terminal or an editor
+# hold to it too.
+#
+# After `git commit -- <paths>` (git's --only mode, which commits from a
+# temporary index) the commit and the working file are formatted, but the
+# index keeps the form that was staged: `git add` the file to match.
+set -u
+file=home/.claude/settings.json
+
+# not staged, or staged as deleted: nothing to format
+git diff --cached --quiet --diff-filter=d -- "$file" && exit 0
+
+# formatting the working file and staging it would commit these too
+if ! git diff --quiet -- "$file"; then
+  echo "pre-commit: $file has unstaged changes besides the staged ones; stage them (git add $file) or stash them, then commit again" >&2
+  exit 1
+fi
+
+if ! node home/.claude/hooks/settings-format.mjs "$file"; then
+  echo "pre-commit: $file can't be put in the form Claude Code writes (why: the line above), so nothing was committed" >&2
+  exit 1
+fi
+git add -- "$file"
