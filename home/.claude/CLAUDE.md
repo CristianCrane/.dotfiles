@@ -8,20 +8,20 @@ A cause is a claim until evidence shows it, and so is what you say about how cod
 
 # Working with me
 
-- **No red tests.** Never leave a test failing, even one already failing on main: find why and fix it before calling the work done. While any open PR in the repo is red, start nothing new there: say which, why, and what unblocks it (`hooks/red-checks.mjs` names them at session start).
-- **Quality over quick fixes.** When fixes differ, recommend the one that fixes the cause for good (one rule over a second copy, a fix at its source over a workaround), giving the quick one only as the alternative; where the pick is yours, build that one.
-- **A long wait** (CI with `gh pr checks --watch`, a build, a test run) runs with `run_in_background` and ends in its notification, never a check each turn.
+- **No red tests.** Never leave a test failing, even one already failing on main: find why and fix it before calling the work done. While any open PR in the repo is red, start nothing new there: say which, why, and what unblocks it (`hooks/red-checks.mjs` names them at session start; 2026-10-27, 2026-11-07).
+- **Quality over quick fixes.** When fixes differ, recommend the one that fixes the cause for good (one rule over a second copy, a fix at its source over a workaround), giving the quick one only as the alternative; where the pick is yours, build that one (2026-11-09).
+- **A long wait** (CI with `gh pr checks --watch`, a build, a test run) runs with `run_in_background` and ends in its notification, never a check each turn (2026-11-10).
 - **My own repos (CristianCrane/*):** comment on their issues and PRs without asking. If auto mode blocks a routine `gh` write there (a comment, `gh issue create`), say it was blocked, save any body to a file, and give me the `! gh …` command to run or allow; others' repos still wait for my word.
-- **Anything sent as me** is casual, like texting family: short sentences, no office speak, no formal sign-offs.
+- **Anything sent as me** is casual, like texting family: short sentences, no office speak, no formal sign-offs (2026-10-31).
 
 # This machine
 
 NixOS on WSL2 with Home Manager; the system is a flake at `~/.dotfiles` (`~/github/CristianCrane/dotfiles`). Leave my uncommitted changes there alone.
 
 - **Claude Code's own config** (this file, `settings.json`, hooks, agents, skills) lives in `~/.dotfiles/home/.claude`, linked to its working tree: a hook saved there runs in every session at once. Before changing any of it, read `~/.dotfiles/CLAUDE.md`.
-- **Installing:** no Homebrew or apt, and (until .dotfiles#5) no `python3`, `psql` or `bc`. Give the nixpkgs package; try it with `nix --extra-experimental-features 'nix-command flakes' shell nixpkgs#<pkg>`, keep it in `home.nix`'s `home.packages`, which I apply with `rebuild`.
+- **Installing:** no Homebrew or apt, and (until .dotfiles#5) no `python3`, `psql` or `bc`. Give the nixpkgs package; try it with `nix --extra-experimental-features 'nix-command flakes' shell nixpkgs#<pkg>`, keep it in `home.nix`'s `home.packages`, which I apply with `rebuild` (2026-10-25).
 - **One-off scripts:** Node, as a heredoc (`node - <<'EOF'` … `EOF`), not `node -e` with nested quotes; arithmetic in `$(( ))` or Node.
 - **The shell is zsh** (until .dotfiles#5): quote globs in flags (`--include='*.ts'`, else "no matches found"); no word splitting; a loop over commands held in a variable runs nothing (rc 127). `grep` is ugrep, which rejects long `.{0,N}` patterns: shorten or use `rg`. `ls` is eza and can hang with no terminal: `command ls`. Drop these lines once .dotfiles#5 lands.
 - **Opening a URL** (until .dotfiles#5): `(cd /mnt/c && powershell.exe -NoProfile -Command "Start-Process '<url>'")`; `explorer.exe` opens nothing, and there's no `wslview` or `xdg-open`. Several URLs: one PowerShell loop, ~1.2 s apart. A `/wizard` script's `open_url` tries `explorer.exe` first, which opens File Explorer: redefine `open_url` in its stages section with the PowerShell line (never the library above).
-- **No GUI:** WSLg is off (`guiApplications=false` in `C:\Users\Cris\.wslconfig`), so no headed browsers; headless Chromium configs that delete `DISPLAY`/`WAYLAND_DISPLAY` keep it off my screen: never revert that. Serve trace viewers and UI modes over HTTP.
+- **No GUI:** WSLg is off (`guiApplications=false` in `C:\Users\Cris\.wslconfig`), so no headed browsers; headless Chromium configs that delete `DISPLAY`/`WAYLAND_DISPLAY` keep it off my screen: never revert that. Serve trace viewers and UI modes over HTTP (2026-11-04: focus stolen by test browsers).
 - **Merged work goes by itself:** a SessionStart hook removes worktrees and branches whose PR merged; `node ~/.claude/hooks/prune-merged.mjs --dry-run` says what it keeps and why, and `git worktree lock` keeps one for good. Another fast-forwards `~/.dotfiles` to `origin/main` at every session start, so a merged dotfiles PR's `home/.claude` is live from the next session; its Nix config changes need `rebuild`, which that hook's line names.
