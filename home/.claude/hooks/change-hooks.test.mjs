@@ -1057,6 +1057,17 @@ describe("prune-merged", () => {
     assert.deepEqual([worktreeNames(main), branches(main, "refs/heads/"), remote(main)], before);
   });
 
+  // by hand, a repo whose origin is off GitHub: it names the origin it read
+  test("by hand, an origin off GitHub: says so, naming it, and removes nothing", () => {
+    const { repo } = scratchRepo();
+    const elsewhere = join(scratchDir(), "elsewhere.git");
+    git(repo, "remote", "add", "origin", elsewhere);
+    const ran = runHook("prune-merged", undefined, { cwd: repo });
+    assert.equal(ran.status, 1);
+    assert.equal(ran.stderr, `prune-merged: origin isn't on GitHub (${elsewhere})\n`);
+    assert.equal(git(repo, "branch", "--show-current"), BRANCH);
+  });
+
   test("--hook in the main checkout: one line on what went and what merged stayed", () => {
     const { dir, main, bin } = scratch();
     // a process in a worktree used just now: an agent at work

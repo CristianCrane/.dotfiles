@@ -28,37 +28,13 @@
 // A branch with no PR, a PR closed unmerged, commits its merged PR lacks,
 // or (on origin) another author's PR is listed and kept: the user decides.
 import { spawnSync } from "node:child_process";
-import {
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  readlinkSync,
-  renameSync,
-  rmSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
-import { basename, dirname, join, relative } from "node:path";
-import { flagsOf, git, hook, lines, topOf } from "./lib.mjs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, readlinkSync, renameSync, rmSync, statSync } from "node:fs";
+import { basename, join, relative } from "node:path";
+import { flagsOf, git, githubRepo, hook, lines, lock, run, topOf } from "./lib.mjs";
 
 // how long a worktree stays after its last use: empire-cleaning's live ones
 // had been used 0–6 minutes before, its stale ones 11–20 hours (2026-11-09)
 const RECENT = 6 * 60 * 60 * 1000;
-
-// a command that may reach the network (fetch, push, gh), or whose refusal
-// the report quotes: its output, or a throw with its first error line; never
-// a prompt, and at most 30 s
-const run = (cwd, command, ...args) => {
-  const ran = spawnSync(command, args, {
-    cwd,
-    encoding: "utf8",
-    timeout: 30_000,
-    env: { ...process.env, GIT_TERMINAL_PROMPT: "0", GH_PROMPT_DISABLED: "1" },
-  });
-  if (ran.status === 0) return ran.stdout.trim();
-  throw new Error(lines(ran.stderr ?? "")[0] ?? ran.error?.message ?? `${command} failed`);
-};
 
 // whether `commit` holds `tip` (is it, or comes after it)
 const holds = (cwd, commit, tip) => {
@@ -158,39 +134,6 @@ const entryOf = (tree) => {
   }
 };
 
-// One run per repo at a time, so none deletes a tree another has just moved
-// aside and not yet checked: a lock folder (made atomically) holding its
-// pid. A dead run's lock is taken over; one with no pid yet counts as live
-// for a minute.
-const lock = (dir) => {
-  mkdirSync(dirname(dir), { recursive: true });
-  for (let tries = 0; tries < 2; tries++) {
-    try {
-      mkdirSync(dir);
-      writeFileSync(join(dir, "pid"), String(process.pid));
-      return true;
-    } catch (error) {
-      if (error.code !== "EEXIST") throw error;
-    }
-    let pid;
-    try {
-      pid = Number(readFileSync(join(dir, "pid"), "utf8"));
-    } catch {
-      if (Date.now() - statSync(dir).mtimeMs < 60_000) return false;
-    }
-    if (pid) {
-      try {
-        process.kill(pid, 0);
-        return false;
-      } catch (error) {
-        if (error.code === "EPERM") return false;
-      }
-    }
-    rmSync(dir, { recursive: true, force: true });
-  }
-  return false;
-};
-
 // Removes a worktree in steps a kill can't leave half done: its folder
 // moves into `trash` (a rename) and is checked for changes once more there
 // (moved back if it has any, or into `held` if it can't go back), then its
@@ -265,7 +208,7 @@ const prune = (cwd, dry) => {
   const main = all[0].path;
   // as written, before any insteadOf
   const url = git(main, "config", "--get", "remote.origin.url");
-  const [, owner, name] = url.match(/github\.com[:/]([^/]+)\/([^/]+?)(?:\.git)?\/?$/) ?? [];
+  const { owner, name } = githubRepo(url) ?? {};
   if (!owner) throw new Error(`origin isn't on GitHub (${url})`);
   const gh = (...args) => JSON.parse(run(main, "gh", ...args));
   const { viewer, repository } = gh(
@@ -297,6 +240,8 @@ const prune = (cwd, dry) => {
   const claude = join(git(main, "rev-parse", "--path-format=absolute", "--git-common-dir"), "claude");
   const [trash, held, locked] = ["pruned", "pruned-kept", "prune-merged.lock"].map((name) => join(claude, name));
   if (dry) return judge(main, base, viewer, prs, true);
+  // one run per repo at a time, so none deletes a tree another has just
+  // moved aside and not yet checked
   if (!lock(locked)) return null;
   try {
     const stuck = sweep(trash, held);

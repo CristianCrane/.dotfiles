@@ -9,8 +9,8 @@
 // spelling the tool accepts (-R…, GH_REPO, flags before `pr`) kept missing
 // routes, round after round (47b0a6c, 3b948a6, then 6442db7 took this
 // shape; the cases: change-hooks.test.mjs).
-import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, realpathSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -32,6 +32,59 @@ export const git = (cwd, ...args) =>
   }).trim();
 
 export const lines = (text) => text.split("\n").filter(Boolean);
+
+// a command that may reach the network (fetch, push, gh), or whose refusal
+// the report quotes: its output, or a throw with its first error line; never
+// a prompt, and at most 30 s
+export const run = (cwd, command, ...args) => {
+  const ran = spawnSync(command, args, {
+    cwd,
+    encoding: "utf8",
+    timeout: 30_000,
+    env: { ...process.env, GIT_TERMINAL_PROMPT: "0", GH_PROMPT_DISABLED: "1" },
+  });
+  if (ran.status === 0) return ran.stdout.trim();
+  throw new Error(lines(ran.stderr ?? "")[0] ?? ran.error?.message ?? `${command} failed`);
+};
+
+// takes the lock folder `dir` for one run of a script at a time: made
+// atomically, holding its pid; false while another run holds it. A dead
+// run's lock is taken over; one with no pid yet counts as live for a minute.
+// The caller removes it when done
+export const lock = (dir) => {
+  mkdirSync(dirname(dir), { recursive: true });
+  for (let tries = 0; tries < 2; tries++) {
+    try {
+      mkdirSync(dir);
+      writeFileSync(join(dir, "pid"), String(process.pid));
+      return true;
+    } catch (error) {
+      if (error.code !== "EEXIST") throw error;
+    }
+    let pid;
+    try {
+      pid = Number(readFileSync(join(dir, "pid"), "utf8"));
+    } catch {
+      if (Date.now() - statSync(dir).mtimeMs < 60_000) return false;
+    }
+    if (pid) {
+      try {
+        process.kill(pid, 0);
+        return false;
+      } catch (error) {
+        if (error.code === "EPERM") return false;
+      }
+    }
+    rmSync(dir, { recursive: true, force: true });
+  }
+  return false;
+};
+
+// the GitHub repo a remote's URL names, as { owner, name }; null off GitHub
+export const githubRepo = (url) => {
+  const [, owner, name] = url.match(/github\.com[:/]([^/]+)\/([^/]+?)(?:\.git)?\/?$/) ?? [];
+  return owner ? { owner, name } : null;
+};
 
 // the flags a script run by hand was given (node's parseArgs, strict): a
 // flag it doesn't know prints how it runs and exits 1, so a typo never runs
