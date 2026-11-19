@@ -3,7 +3,7 @@
 // reviewer-gate), each fed to the hook as Claude Code runs it (`node
 // <hook>.mjs`, the tool call's JSON on stdin, with the input fields
 // MORE_INPUT adds, in a scratch repo), and below them plain tests of
-// scratch-gate at a subagent's start, reviewer-gate's other callers, the
+// scratch-gate at a subagent's start, reviewer-gate's other callers and the curator, capture (the process layer's inbox), the
 // survey gate on main (branch first where origin is on GitHub),
 // review-gate's merge rule, a dictated settings change, a prototype branch, lib's cwdFor and
 // substitutions, how copy.mjs and sync.mjs register a repo's copy, the
@@ -49,7 +49,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { after, describe, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { repoCopy, repoHooks } from "./copy.mjs";
@@ -763,6 +763,45 @@ test("reviewer-gate: other callers' calls through", () => {
     assert.equal(run({ tool_input }), "");
     assert.equal(run({ tool_input, agent_id: AGENT, agent_type: "general-purpose" }), "");
   }
+});
+
+// reviewer-gate holds the curator as it holds the change-reviewer: it
+// writes only under ~/.claude/process/curator, and runs only readers (the
+// old gate let every curator call through: red on it)
+test("reviewer-gate: the curator writes only its output, and runs only readers", () => {
+  const home = scratchDir();
+  const run = (tool_input) => {
+    const ran = runHook("reviewer-gate", { cwd: home, agent_id: AGENT, agent_type: "curator", tool_input }, { env: { ...process.env, HOME: home } });
+    return ran.stdout.trim() ? JSON.parse(ran.stdout).hookSpecificOutput.permissionDecisionReason : "";
+  };
+  assert.equal(run({ file_path: join(home, ".claude/process/curator/history-2026-11-19.md"), content: "x" }), "");
+  for (const path of [".claude/process/inbox.jsonl", ".claude/process/curator-x.md", ".dotfiles/docs/process-log.md", ".claude/CLAUDE.md"])
+    assert.match(run({ file_path: join(home, path), content: "x" }), /^The curator writes only its output: the path you were given, under .*\.claude\/process\/curator\. /, path);
+  assert.equal(run({ command: "git log --oneline -5" }), "");
+  assert.match(run({ command: "pnpm test" }), /^The curator runs only commands that read: /);
+});
+
+// capture.mjs writes one raw signal to ~/.claude/process/inbox.jsonl, with
+// its id, the session Claude Code sets, and the checkout's folder; a kind
+// it doesn't know, or nothing said, writes nothing
+test("capture: one signal to the inbox, and nothing for a bad call", () => {
+  const home = scratchDir();
+  const { repo } = scratchRepo();
+  const inbox = join(home, ".claude/process/inbox.jsonl");
+  const capture = (...args) => runHook("capture", undefined, { args, cwd: repo, env: { ...process.env, HOME: home, CLAUDE_CODE_SESSION_ID: "s1" } });
+  const ran = capture("--kind", "correction", "--said", "no, global", "--proposed", "a repo rule");
+  assert.equal(ran.status, 0, ran.stderr);
+  const [signal, ...more] = readFileSync(inbox, "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line));
+  assert.equal(more.length, 0);
+  assert.match(signal.id, /^[0-9a-f]{8}$/);
+  assert.match(ran.stdout, new RegExp(`^captured correction signal ${signal.id} in `));
+  assert.deepEqual({ ...signal, id: 0, at: 0 }, { id: 0, at: 0, session: "s1", project: basename(repo), source: "capture", kind: "correction", said: "no, global", proposed: "a repo rule", note: "" });
+  for (const args of [["--kind", "gripe", "--said", "x"], ["--kind", "important"], ["--kind", "cost", "--source", "pass", "--note", "x"]]) {
+    const bad = capture(...args);
+    assert.equal(bad.status, 1, args.join(" "));
+    assert.match(bad.stderr, /^capture: /);
+  }
+  assert.equal(readFileSync(inbox, "utf8").split("\n").filter(Boolean).length, 1);
 });
 
 // on main, a checkout whose origin is on GitHub takes no edits: a change

@@ -1,6 +1,7 @@
 // The change rules: edited in github.com/CristianCrane/.dotfiles (home/.claude); repos carry copies made by hooks/sync.mjs.
 //
-// The change-reviewer reads, and writes its review: nothing else. In
+// The change-reviewer reads, and writes its review: nothing else (and the
+// curator, which writes only its output: HELD). In
 // empire-cleaning#374 it ran vitest in the author's checkout while the
 // author's quick tests ran there, and 36 of theirs failed; its file's "use
 // Bash for reading only" didn't hold it (CristianCrane/.dotfiles#17). Its
@@ -21,7 +22,8 @@
 // `${X::=}`) and gawk's abbreviated long options aren't read (round 3's
 // F15 lists each). Closing the first would turn down `git diff $mb`.
 import { existsSync } from "node:fs";
-import { basename, dirname, join, resolve } from "node:path";
+import { homedir } from "node:os";
+import { basename, dirname, join, relative, resolve } from "node:path";
 import { BOUNDARY, deny, has, HEREDOC, hook, inGitDir, masked, positional, REDIRECT, substitutions, unquote, WORD } from "./lib.mjs";
 
 
@@ -288,6 +290,16 @@ const ownReview = (path) => {
   }
 };
 
+// where the curator writes its proposals and log entries (the dotfiles'
+// docs/process.md, The curator)
+const CURATOR = join(homedir(), ".claude/process/curator");
+
+// a file under the curator's folder
+const ownOutput = (path) => {
+  const from = relative(CURATOR, resolve(path));
+  return Boolean(from) && !from.startsWith("..") && !from.startsWith("/");
+};
+
 // the agent types held to reading, each with the files it may write
 // (owns) and what its turn-down says those are
 const HELD = {
@@ -295,6 +307,7 @@ const HELD = {
     owns: ownReview,
     writes: "its review: the output path you were given, a plan-review or review file beside the survey in the git dir",
   },
+  curator: { owns: ownOutput, writes: `its output: the path you were given, under ${CURATOR}` },
 };
 
 // what the turn-downs say to do instead
