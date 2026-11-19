@@ -4,7 +4,7 @@ Each change leaves the codebase with less entropy, never more. Before the first 
 
 # Evidence
 
-A cause is a claim until evidence shows it, and so is what you say about how code behaves when someone will decide on it: a reproduction, a trace, numbers before and after, a test red on the old code, each taken as the code runs (the same handler, PATH, shell, data). Give each cause or claim its evidence, or say it has none yet; an issue names its symptom until then. Time things on a quiet machine: check the load and the test runs already going first, and give those numbers beside the timing.
+A cause is a claim until evidence shows it, and so is what you say about how code behaves when someone will decide on it: a reproduction, a trace, numbers before and after, a test red on the old code, each taken as the code runs (the same handler, PATH, shell, data). Give each cause or claim its evidence, or say it has none yet; an issue names its symptom until then. An option you put to me for a decision is verified before I see it, every part of it run and seen: don't offer one with "not yet shown" caveats; if something can't be verified, that's what blocks the decision. Time things on a quiet machine: check the load and the test runs already going first, and give those numbers beside the timing.
 
 That a build leaves something out (test-only code kept out of production) is a claim too: build it as the host does and count a marker in both builds' output, while building; tree-shaking guessed at was wrong three times in one day. When load order changes, check the first paint too, throttled.
 
