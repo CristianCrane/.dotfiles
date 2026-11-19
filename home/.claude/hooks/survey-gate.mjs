@@ -4,9 +4,9 @@
 // the reviewer's read of it: the edit is turned down until the survey
 // names a path that exists and the plan review is written, or the survey
 // is a dictated one that holds with this edit made (lib's dictatedHolds).
-// On main in a checkout whose origin is on GitHub, every edit is turned
-// down: a change there reaches main by PR, so it starts on a branch
-// (lib's beforeEdit). Edits outside a checkout, inside the git dir (where
+// On main in a checkout whose origin is on GitHub, every edit of a file
+// git doesn't ignore is turned down: a change there reaches main by PR, so
+// it starts on a branch (lib's beforeEdit). Edits outside a checkout, inside the git dir (where
 // those files live) and on a detached HEAD or a prototype branch (lib's
 // prototypeBranch) go through.
 import { existsSync, readFileSync } from "node:fs";

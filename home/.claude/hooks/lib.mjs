@@ -279,6 +279,17 @@ export const workOf = (cwd, input) => {
   return { branch, key: `${branch}-${input.session_id}` };
 };
 
+// whether git ignores `path` in `cwd`'s checkout (a path outside it, or
+// any other error, counts as not ignored)
+const ignored = (cwd, path) => {
+  try {
+    git(cwd, "check-ignore", "--quiet", "--", path);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 // the GitHub repo origin's URL names, as written (before any insteadOf), as
 // { owner, name }; null with no origin, one off GitHub, or no checkout
 export const githubOrigin = (cwd) => {
@@ -456,9 +467,11 @@ export const dictatedHolds = (cwd, work, input, pending) => {
 // change is dictated and holds); `missing` says the first one not done yet.
 // On main in a checkout whose origin is on GitHub no survey is enough: a
 // change there reaches main by PR (`branchFirst`), and edits made on main
-// would leave the checkout diverged from it
+// would leave the checkout diverged from it. A file git ignores there
+// (`.claude/settings.local.json`) reaches no commit or PR, so its edit keeps
+// the session's survey, or a dictated one
 export const beforeEdit = (cwd, work, input = {}, pending = null) => {
-  const github = DEFAULT_BRANCHES.includes(work.branch) && githubOrigin(cwd);
+  const github = DEFAULT_BRANCHES.includes(work.branch) && !(pending && ignored(cwd, pending.path)) && githubOrigin(cwd);
   if (github)
     return {
       survey: { ok: false },

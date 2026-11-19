@@ -789,6 +789,38 @@ test("survey-gate on main: branch first where origin is on GitHub; elsewhere the
   assert.equal(edit(elsewhere), null, "an origin off GitHub: the same");
 });
 
+// a git-ignored file on main reaches no commit or PR (a checkout's own
+// .claude/settings.local.json configures only that checkout's sessions),
+// so branch-first leaves it the flow it had: the session's survey, or a
+// dictated one (review round 1 F7: branch-first turned it down, red on
+// it); a tracked file there, or a new one nothing ignores, still branches
+// first
+test("survey-gate on main: a git-ignored file keeps the session's flow; a tracked one still branches first", () => {
+  const SAID = "add a deny rule for Bash(rm *) here";
+  const repo = scratchDir();
+  git(repo, "init", "-qb", "main");
+  commit(repo, ".gitignore", ".claude/settings.local.json\n");
+  commit(repo, "b.txt", "b\n");
+  withOrigin(repo);
+  mkdirSync(join(repo, ".claude"));
+  const local = join(repo, ".claude/settings.local.json");
+  writeFileSync(local, "{}\n");
+  const transcript = join(scratchDir(), "t.jsonl");
+  writeFileSync(transcript, `${JSON.stringify({ type: "user", origin: { kind: "human" }, message: { role: "user", content: SAID } })}\n`);
+  const edit = (file_path, content) => {
+    const ran = runHook("survey-gate", { tool_input: { file_path, content }, cwd: repo, session_id: "s", transcript_path: transcript });
+    assert.equal(ran.status, 0, ran.stderr);
+    return ran.stdout.trim() ? JSON.parse(ran.stdout).hookSpecificOutput.permissionDecisionReason : null;
+  };
+  const denied = `${JSON.stringify({ permissions: { deny: ["Bash(rm *)"] } }, null, 2)}\n`;
+  const BRANCH_FIRST = /^This edit is turned down: branch first: /;
+  assert.match(edit(local, denied) ?? "", /^Before this edit, there is no survey for main: /, "no survey: the usual turn-down");
+  writeFileSync(stateFile(repo, "survey", "main-s"), `dictated: "${SAID}" .claude/settings.local.json\n`);
+  assert.equal(edit(local, denied), null, "a dictated edit of the ignored file");
+  assert.match(edit(join(repo, "b.txt"), "x\n") ?? "", BRANCH_FIRST, "a tracked file");
+  assert.match(edit(join(repo, "c.txt"), "x\n") ?? "", BRANCH_FIRST, "a new file nothing ignores");
+});
+
 // review-gate's merge rule: in a checkout of CristianCrane/.dotfiles, `gh
 // pr merge` goes through only naming the PR by its number alone, and only
 // when a message the user typed in this session asks to merge that number
