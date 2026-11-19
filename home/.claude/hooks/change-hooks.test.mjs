@@ -10,7 +10,8 @@
 // scripts' flags, prune-merged (the SessionStart hook that removes merged
 // work), usage (the ledger of tokens spent, its reports, and the
 // SessionStart check that the weekly review is due), main-session (the
-// main session's SessionStart message), settings-format, and the repo's
+// main session's SessionStart message), pr-conflict (the note that a PR
+// conflicting with its base runs no CI), settings-format, and the repo's
 // .githooks (pre-commit, which runs settings-format, post-commit and
 // pre-push). Run from the repo root:
 //
@@ -1543,6 +1544,103 @@ test("main-session: prints main-session.md at session start, whatever the source
     const ran = runHook("main-session", { hook_event_name: "SessionStart", session_id: "s", cwd: HOOKS, source });
     assert.deepEqual(JSON.parse(ran.stdout).hookSpecificOutput, { hookEventName: "SessionStart", additionalContext: text }, source);
   }
+});
+
+// pr-conflict.mjs, fed a Bash call as Claude Code runs it, with a fake gh
+// first on PATH that answers each `pr view` in turn from `answers` (the
+// last again after them; null fails as gh does offline) and logs the
+// folder it ran in too
+describe("pr-conflict", () => {
+  const PR = { number: 12, state: "OPEN", mergeable: "CONFLICTING", mergeStateStatus: "DIRTY", baseRefName: "main", headRefName: "feature" };
+  const ASKED = "--json number,state,mergeable,mergeStateStatus,baseRefName,headRefName";
+
+  // runs the hook on `command` in a scratch folder: what it told the agent
+  // (undefined: nothing), each gh run's arguments, and the folders they ran in
+  const conflict = (command, answers = [PR], cwd = scratchDir()) => {
+    const bin = scratchDir();
+    answers.forEach((answer, at) => writeFileSync(join(bin, `answer-${at + 1}`), answer ? JSON.stringify(answer) : ""));
+    copyFileSync(join(bin, `answer-${answers.length}`), join(bin, "answer-last"));
+    const { log } = fakeGh(
+      [
+        `pwd >> "${join(bin, "gh-cwd")}"`,
+        `f="${bin}/answer-$(wc -l < "${join(bin, "gh-args")}" | tr -d ' ')"`,
+        `[ -f "$f" ] || f="${bin}/answer-last"`,
+        `[ -s "$f" ] || { echo "error connecting to api.github.com" >&2; exit 1; }`,
+        `cat "$f"`,
+      ].join("\n"),
+      bin,
+    );
+    const ran = runHook(
+      "pr-conflict",
+      { hook_event_name: "PreToolUse", tool_name: "Bash", session_id: "s", cwd, tool_input: { command } },
+      { env: { ...process.env, PATH: `${bin}:${process.env.PATH}` } },
+    );
+    const read = (file) => (existsSync(file) ? lines(readFileSync(file, "utf8")) : []);
+    return { told: ran.stdout ? JSON.parse(ran.stdout).hookSpecificOutput : undefined, asked: read(log), dirs: read(join(bin, "gh-cwd")) };
+  };
+
+  test("a conflicting open PR: says no pull_request CI runs and to merge the base in, before each of the four", () => {
+    for (const command of ["gh pr checks 12 --watch", "gh pr view 12", "gh pr ready 12", "gh pr merge 12 --squash"]) {
+      const { told, asked } = conflict(command);
+      assert.equal(told?.hookEventName, "PreToolUse", command);
+      assert.match(told.additionalContext, /^PR #12 \(feature into main\) conflicts with main .*no `pull_request` CI.*Merge origin\/main into feature/, command);
+      assert.deepEqual(asked, [`pr view 12 ${ASKED}`], command);
+    }
+  });
+
+  test("asks about the PR the command names, in the folder it runs in", () => {
+    const cases = [
+      ["gh pr checks --watch", `pr view ${ASKED}`],
+      ["gh pr view 7 -R o/r --json title -q .title", `pr view 7 --repo o/r ${ASKED}`],
+      ["gh pr view --repo=o/r feature", `pr view feature --repo o/r ${ASKED}`],
+      ["gh pr checks -Ro/r", `pr view --repo o/r ${ASKED}`],
+      ['gh pr merge 5 --subject "a 9 b" -b c 2>&1', `pr view 5 ${ASKED}`],
+      ["git fetch && GIT_PAGER=cat gh pr checks https://github.com/o/r/pull/3 | tail -3", `pr view https://github.com/o/r/pull/3 ${ASKED}`],
+    ];
+    for (const [command, expected] of cases) assert.deepEqual(conflict(command).asked, [expected], command);
+    const cwd = scratchDir();
+    const sub = join(cwd, "sub");
+    mkdirSync(sub);
+    assert.deepEqual(conflict("cd sub && gh pr checks 8", [PR], cwd).dirs, [sub]);
+  });
+
+  test("a PR it can't pin down: asks nothing, rather than note another PR", () => {
+    for (const command of ["gh pr checks --interval 30 470", "gh pr view --json mergeable 470", "GH_REPO=o/x gh pr checks 5", "GH_HOST=h gh pr view 5", "gh -R o/r pr view 5"]) {
+      const { told, asked } = conflict(command);
+      assert.equal(told, undefined, command);
+      assert.deepEqual(asked, [], command);
+    }
+  });
+
+  test("says it once for a PR the command steps on twice", () => {
+    const { told, asked } = conflict("gh pr view 12; gh pr checks 12 --watch");
+    assert.equal(asked.length, 2);
+    assert.equal(lines(told.additionalContext).length, 1);
+  });
+
+  test("not worked out yet: asks again 2 s later, and says what GitHub knows then", () => {
+    const unknown = { ...PR, mergeable: "UNKNOWN", mergeStateStatus: "UNKNOWN" };
+    const later = conflict("gh pr checks 12 --watch", [unknown, PR]);
+    assert.equal(later.asked.length, 2);
+    assert.match(later.told.additionalContext, /^PR #12 .* conflicts with main/);
+    const still = conflict("gh pr checks 12 --watch", [unknown]);
+    assert.equal(still.asked.length, 2);
+    assert.match(still.told.additionalContext, /hasn't yet worked out whether PR #12 .*gh pr view 12 --json mergeable/);
+    assert.equal(conflict("gh pr checks 12", [unknown, { ...PR, mergeable: "MERGEABLE", mergeStateStatus: "CLEAN" }]).told, undefined);
+  });
+
+  test("quiet: a PR that merges or is closed, gh failing, any other command", () => {
+    for (const answer of [{ ...PR, mergeable: "MERGEABLE", mergeStateStatus: "CLEAN" }, { ...PR, state: "CLOSED" }, { ...PR, state: "MERGED" }, null]) {
+      const { told, asked } = conflict("gh pr checks 12", [answer]);
+      assert.equal(told, undefined, JSON.stringify(answer));
+      assert.equal(asked.length, 1);
+    }
+    for (const command of ["git status", 'echo "gh pr checks 12"', "gh pr create --draft", "gh pr list", "gh issue view 12"]) {
+      const { told, asked } = conflict(command);
+      assert.equal(told, undefined, command);
+      assert.deepEqual(asked, [], command);
+    }
+  });
 });
 
 // for settings-format's tests and the git hooks' below: the committed
