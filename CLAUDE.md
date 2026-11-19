@@ -1,0 +1,11 @@
+# Dotfiles
+
+The NixOS-on-WSL2 system (a flake, applied with `rebuild`) and Claude Code's own config, `home/.claude`, which `home.nix` (`claudeSettings`) links into `~/.claude`.
+
+- **Changes go straight to `main`** once the change skill's reviews are clean (a dictated settings change has none), no PR. Leave the user's uncommitted changes in `~/.dotfiles` alone.
+- **Claude Code's config** (the global CLAUDE.md, `settings.json` with its `enabledPlugins`, hooks, agents, skills) is changed here and committed, not through installers that write around it.
+- **The links point at the working tree,** so a hook edited on a branch in `~/.dotfiles` runs in every session the moment it's saved. Try a hook change first in a `git worktree` of this repo, and live in one session by registering the worktree's copy in a project's `.claude/settings.local.json` (wait a few seconds before starting agents; remove it after), then bring it into `~/.dotfiles`.
+- **Hook tests:** every hook but stale-copy has cases in `home/.claude/hooks/change-hooks.test.mjs`; a change to one (or to lib.mjs, copy.mjs, sync.mjs) adds its cases there and runs them (`node --test 'home/.claude/hooks/*.test.mjs'`). stale-copy is fed its hook inputs by hand.
+- **A hook or script that deletes things** plans, before its first review, for being killed partway and for two runs at once (Claude Code kills an async hook at its timeout; SessionStart fires on startup, resume, clear, compact and fork): a lock, touching only what this run judged, and every cut-short step safe for the next run.
+- **A hook that prints at session start** is tried on a real, busy repo before it lands. What only the main session needs goes in `home/.claude/hooks/main-session.md`, which `main-session.mjs` prints at session start: agents never get SessionStart output.
+- **Before naming a new skill, agent or command,** search the installed plugins (`~/.claude/plugins/cache`) for the name.

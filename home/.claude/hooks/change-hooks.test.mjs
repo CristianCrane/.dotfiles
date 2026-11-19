@@ -9,7 +9,8 @@
 // substitutions, how copy.mjs and sync.mjs register a repo's copy, the
 // scripts' flags, prune-merged (the SessionStart hook that removes merged
 // work), usage (the ledger of tokens spent, its reports, and the
-// SessionStart check that the weekly review is due), and settings-format
+// SessionStart check that the weekly review is due), main-session (the
+// main session's SessionStart message), and settings-format
 // with the repo's .githooks/pre-commit that runs it. Run from
 // the repo root:
 //
@@ -1528,6 +1529,14 @@ describe("usage", () => {
     assert.match(typo.stderr, /^usage: .*'--sinse'.*\nUsage: node ~\/\.claude\/hooks\/usage\.mjs \[--agent <id>\] \[--week\] \[--since <YYYY-MM-DD>\]$/m);
     assert.equal(run(["--since", "11/10"]).status, 1);
   });
+});
+
+test("main-session: prints main-session.md at session start, whatever the source", () => {
+  const text = readFileSync(join(HOOKS, "main-session.md"), "utf8");
+  for (const source of ["startup", "resume", "clear", "compact"]) {
+    const ran = runHook("main-session", { hook_event_name: "SessionStart", session_id: "s", cwd: HOOKS, source });
+    assert.deepEqual(JSON.parse(ran.stdout).hookSpecificOutput, { hookEventName: "SessionStart", additionalContext: text }, source);
+  }
 });
 
 // settings-format.mjs, and the repo's .githooks: pre-commit runs it on a
