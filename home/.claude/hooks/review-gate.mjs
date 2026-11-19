@@ -19,6 +19,10 @@
 // this session asks to merge that number. Another repo's merges go
 // through. What it can't hold: a message that negates the ask ("don't
 // merge #12"), and a merge by any other route (`gh api`, the web).
+//
+// It reads Bash and Monitor commands alike (settings.json registers it on
+// `Bash|Monitor`): a Monitor runs its command in a shell too, so a
+// `gh pr merge`, create or ready there is gated as in Bash.
 import { existsSync, readFileSync } from "node:fs";
 import {
   argsOf,

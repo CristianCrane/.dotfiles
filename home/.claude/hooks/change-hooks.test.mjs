@@ -721,7 +721,7 @@ test("repoCopy: current after a sync, stale once a registered hook differs", () 
   assert.equal(repoCopy(repo), "current");
   const file = join(repo, ".claude/settings.json");
   const settings = JSON.parse(readFileSync(file, "utf8"));
-  settings.hooks.PreToolUse.find((group) => group.matcher === "Bash").matcher = "Read";
+  settings.hooks.PreToolUse.find((group) => group.hooks.some((hook) => hook.command?.includes("/review-gate.mjs"))).matcher = "Read";
   writeFileSync(file, JSON.stringify(settings));
   assert.equal(repoCopy(repo), "stale");
 });
@@ -912,6 +912,25 @@ test("review-gate: a dotfiles PR merges only when the user asked to merge that n
   // a message that names the number but asks no merge
   said(human("12 looks fine"));
   assert.match(merge(dotfiles, "gh pr merge 12") ?? "", NOT_ASKED(12));
+});
+
+// a Monitor runs a shell command as Bash does, so review-gate's rules hold
+// there too: settings.json registers it on a matcher that matches both,
+// and the gate reads a Monitor's command (review round 4 F11: it was
+// registered for Bash alone, so `gh pr merge` in a Monitor skipped it)
+test("review-gate: a Monitor's gh pr merge is gated as Bash's is", () => {
+  const settings = JSON.parse(readFileSync(join(HOOKS, "../settings.json"), "utf8"));
+  const groups = settings.hooks.PreToolUse.filter((group) => group.hooks.some((hook) => /\/review-gate\.mjs\b/.test(hook.command ?? "")));
+  assert.equal(groups.length, 1, "review-gate is registered once");
+  const matches = (tool) => new RegExp(`^(?:${groups[0].matcher})$`).test(tool);
+  assert.ok(matches("Bash") && matches("Monitor"), `review-gate's matcher ${groups[0].matcher} matches Bash and Monitor`);
+  const { repo } = scratchRepo();
+  git(repo, "remote", "add", "origin", "git@github.com:CristianCrane/.dotfiles.git");
+  const transcript = join(scratchDir(), "t.jsonl");
+  writeFileSync(transcript, `${JSON.stringify({ type: "user", origin: { kind: "human" }, message: { role: "user", content: "hi" } })}\n`);
+  const ran = runHook("review-gate", { tool_name: "Monitor", tool_input: { command: "gh pr merge 13", description: "merge" }, cwd: repo, session_id: "s", transcript_path: transcript });
+  assert.equal(ran.status, 0, ran.stderr);
+  assert.match(JSON.parse(ran.stdout || "{}").hookSpecificOutput?.permissionDecisionReason ?? "", /^Only the user merges a CristianCrane\/\.dotfiles PR: no message the user typed in this session asks to merge #13/);
 });
 
 // a dictated settings change (the change skill's rule): its one-line
