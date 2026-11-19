@@ -154,6 +154,17 @@
             "timeout": 10
           }
         ]
+      },
+      {
+        "matcher": "startup|resume|clear",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.claude/hooks/red-checks.mjs\" --hook",
+            "timeout": 120,
+            "async": true
+          }
+        ]
       }
     ]
   },
@@ -187,7 +198,7 @@
       "**CI/CD deploy targets**: None configured",
       "**Network posture**: None configured",
       "**Host containment**: None configured — assume Claude Code runs on an ordinary developer machine or CI runner with open internet",
-      "**Source control**: The trusted repo (CristianCrane/.dotfiles on github.com) and its origin remote only",
+      "**Source control**: The user's own repos on github.com, every one under CristianCrane/* (CristianCrane/.dotfiles, CristianCrane/empire-cleaning and any other), and their origin remotes: commenting on their issues and PRs, opening issues and PRs there is routine",
       "**Trusted internal domains**: None configured",
       "**Trusted cloud buckets**: None configured",
       "**Key internal services**: None configured",

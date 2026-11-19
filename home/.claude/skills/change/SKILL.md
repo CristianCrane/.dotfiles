@@ -14,6 +14,7 @@ A **pattern** is any shape the change follows or adds: a helper, a table, a laye
 ## Rules
 
 - **Ratchet.** A change may leave the code no simpler, but it never adds a third copy of a pattern, never bends a pattern that fights the change, and never edits one idea in many places (shotgun surgery: fold the idea into one place first).
+- **A removal leaves nothing behind.** A change that removes a feature, or the last caller of something, finds what only it used (props, states, words, stories, route guards, endpoints, its tests) and deletes them in the same change: empire-cleaning#404's review found two such leftovers, a round each (F22, F26).
 - **The simplest shape is the plan.** When the survey finds a simpler shape than extending, build that. Extending instead takes a written reason, which goes in Change.
 - **One kind of work per commit**: a refactor, a change, or a cleanup. A PR carries them in that order: refactor commits, then the change, then cleanups. That order holds up to round 1; fixes and later scope go on top, never before a refactor commit.
 - **Refactor first.** A refactor that changes no behaviour goes in the PR's first commits, and the change is built on top of it.
