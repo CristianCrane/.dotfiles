@@ -398,6 +398,18 @@ const CASES = [
     `${prefix} gh pr ready`,
     NO_LESSONS,
   ]),
+  // a shell keyword or `timeout <duration>` before gh runs it too (round 1's F7)
+  ...[
+    "if gh pr ready; then echo ok; fi",
+    "if false; then :; elif gh pr ready; then :; fi",
+    "if false; then :; else gh pr ready; fi",
+    "until gh pr ready; do sleep 1; done",
+    "while ! gh pr ready; do sleep 1; done",
+    "! gh pr ready",
+    "{ gh pr ready; }",
+    "timeout 60 gh pr ready",
+  ].map((command) => ["noLessons", command, NO_LESSONS]),
+  ["noReview", "if gh pr create --draft --body-file <body>; then echo ok; fi", /change review for feature isn't ready \(missing\)/],
   ["noLessons", "echo env gh pr ready", THROUGH],
   ["noLessons", `git commit -m "then gh pr ready"`, THROUGH],
   // lib's one command boundary: a redirect's & starts no command, a paren does
@@ -1556,7 +1568,7 @@ describe("pr-conflict", () => {
 
   // runs the hook on `command` in a scratch folder: what it told the agent
   // (undefined: nothing), each gh run's arguments, and the folders they ran in
-  const conflict = (command, answers = [PR], cwd = scratchDir()) => {
+  const conflict = (command, answers = [PR], cwd = scratchDir(), tool = "Bash") => {
     const bin = scratchDir();
     answers.forEach((answer, at) => writeFileSync(join(bin, `answer-${at + 1}`), answer ? JSON.stringify(answer) : ""));
     copyFileSync(join(bin, `answer-${answers.length}`), join(bin, "answer-last"));
@@ -1572,7 +1584,7 @@ describe("pr-conflict", () => {
     );
     const ran = runHook(
       "pr-conflict",
-      { hook_event_name: "PreToolUse", tool_name: "Bash", session_id: "s", cwd, tool_input: { command } },
+      { hook_event_name: "PreToolUse", tool_name: tool, session_id: "s", cwd, tool_input: { command } },
       { env: { ...process.env, PATH: `${bin}:${process.env.PATH}` } },
     );
     const read = (file) => (existsSync(file) ? lines(readFileSync(file, "utf8")) : []);
@@ -1598,6 +1610,12 @@ describe("pr-conflict", () => {
       ["git fetch && GIT_PAGER=cat gh pr checks https://github.com/o/r/pull/3 | tail -3", `pr view https://github.com/o/r/pull/3 ${ASKED}`],
     ];
     for (const [command, expected] of cases) assert.deepEqual(conflict(command).asked, [expected], command);
+    // the ways a wait on checks is written, in Bash or a Monitor (round 1's F7)
+    for (const command of ["until gh pr checks 12; do sleep 30; done", "while ! gh pr checks 12 --required; do sleep 20; done", "timeout 600 gh pr checks 12 --watch", "{ gh pr checks 12; }", "if ! gh pr checks 12; then echo red; fi"])
+      assert.deepEqual(conflict(command).asked, [`pr view 12 ${ASKED}`], command);
+    const watched = conflict("until gh pr checks 12; do sleep 30; done", [PR], scratchDir(), "Monitor");
+    assert.deepEqual(watched.asked, [`pr view 12 ${ASKED}`]);
+    assert.match(watched.told.additionalContext, /^PR #12 /);
     const cwd = scratchDir();
     const sub = join(cwd, "sub");
     mkdirSync(sub);

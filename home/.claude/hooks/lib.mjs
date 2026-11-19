@@ -173,15 +173,30 @@ export const argsOf = (hidden, end) => {
 };
 
 // where a `gh … pr <verb>` command starts (not inside a message that
-// mentions it), after any VAR=value prefixes, with any gh flags before
-// `pr`; group 1 is the verb. Read in the masked text. (A VAR=value
-// prefix's value may be quoted: in the masked text its quotes hold blanks;
-// a wrapper such as env, command or time runs gh all the same)
+// mentions it), after any VAR=value prefixes, wrappers and shell keywords,
+// with any gh flags before `pr`; group 1 is the verb. Read in the masked
+// text. (A VAR=value prefix's value may be quoted: in the masked text its
+// quotes hold blanks. A wrapper such as env, command, time or `timeout
+// <duration>` runs gh all the same, and so does a keyword: `until gh pr
+// checks …; do`, `if gh pr create …; then`, `! gh …`, `{ gh …; }`)
 export const prStep = (...verbs) =>
   new RegExp(
-    String.raw`(?:^|${BOUNDARY})\s*(?:(?:\w+=(?:"[^"]*"|'[^']*'|[^\s"'])*|env|command|time|nohup|exec)\s+)*gh\s+(?:-\S+(?:\s+[^-\s]\S*)?\s+)*pr\s+(${verbs.join("|")})\b`,
+    String.raw`(?:^|${BOUNDARY})\s*(?:(?:\w+=(?:"[^"]*"|'[^']*'|[^\s"'])*|env|command|time|nohup|exec|timeout\s+\S+|if|elif|then|else|do|while|until|!|\{)\s+)*gh\s+(?:-\S+(?:\s+[^-\s]\S*)?\s+)*pr\s+(${verbs.join("|")})\b`,
     "g",
   );
+
+// a prStep match's own arguments, with its redirects blanked (each
+// character kept in its place, so a word found there reads its text from
+// the original at the same place), and whether the command may name the PR
+// where they can't show it: GH_REPO or GH_HOST anywhere in it, or gh flags
+// before `pr`. A hook that must know which PR stands aside, or turns the
+// command down, when `elsewhere`
+export const prArgs = (command, hidden, step) => {
+  const end = step.index + step[0].length;
+  const args = argsOf(hidden, end).replace(new RegExp(REDIRECT, "g"), (redirect) => " ".repeat(redirect.length));
+  const elsewhere = /\bGH_(?:REPO|HOST)\b/.test(command) || /gh\s+-/.test(hidden.slice(step.index, end));
+  return { end, args, elsewhere };
+};
 
 // the folder a command runs in at `at`: the last `cd` before it, if any, found in the
 // masked command with its substitutions blanked too (so a `cd` in a

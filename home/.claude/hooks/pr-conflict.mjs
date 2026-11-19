@@ -6,14 +6,16 @@
 // that conflicts, so its short list of checks (only CodeQL's) says
 // nothing, passing or not. A note, never a turn-down. It runs before the
 // command, so the note reaches the agent whether the command passes or
-// fails (`gh pr checks` exits 8 while checks are pending and 1 when one
-// failed, and PostToolUse runs only on success). GitHub works the answer
-// out after a push and says UNKNOWN until then, just when checks are
-// watched: it asks again 2 s later, and if it still doesn't know, says
-// so. Quiet for any other command, a PR that merges cleanly or is closed,
-// a PR it can't pin down (see selectorOf), and when gh fails.
+// fails (`gh pr checks` exits 8 while checks are pending, and PostToolUse
+// runs only on success; tried live on 2026-11-19, a scratch PR's note came
+// with a passing `gh pr view` and with `gh pr checks` exiting 8). Just
+// after a push GitHub hasn't worked the answer out (UNKNOWN on that PR at
+// once, CONFLICTING 1.7 s later), so it asks again 2 s later, and if it
+// still doesn't know, says so. Read in Bash and Monitor commands. Quiet
+// for any other command, a PR that merges cleanly or is closed, a PR it
+// can't pin down (see selectorOf), and when gh fails.
 import { execFileSync } from "node:child_process";
-import { argsOf, context, dirOf, hook, masked, positional, prStep, REDIRECT, unquote, WORD } from "./lib.mjs";
+import { context, dirOf, hook, masked, positional, prArgs, prStep, unquote, WORD } from "./lib.mjs";
 
 const STEP = prStep("checks", "view", "ready", "merge");
 
@@ -33,9 +35,8 @@ const BUDGET = 9000;
 // `--interval 30 470`). Words are read in the masked text with redirects
 // blanked, and each word's text from the original
 const selectorOf = (command, hidden, step) => {
-  const end = step.index + step[0].length;
-  if (/\bGH_(?:REPO|HOST)\b/.test(hidden) || /\bgh\s+-/.test(hidden.slice(step.index, end))) return null;
-  const args = argsOf(hidden, end).replace(new RegExp(REDIRECT, "g"), (redirect) => " ".repeat(redirect.length));
+  const { end, args, elsewhere } = prArgs(command, hidden, step);
+  if (elsewhere) return null;
   const words = [...args.matchAll(WORD)].map((word) => unquote(command.slice(end + word.index, end + word.index + word[0].length)));
   const repo = [];
   const rest = [];

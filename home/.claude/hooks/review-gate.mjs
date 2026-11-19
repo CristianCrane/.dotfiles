@@ -13,7 +13,7 @@
 // A prototype branch's PR (lib's prototypeBranch) is turned down either
 // way: it skipped the reviews because it never merges.
 import { existsSync, readFileSync } from "node:fs";
-import { argsOf, branchOf, deny, dirOf, hook, lines, masked, onBranch, prototypeBranch, prStep, REDIRECT, review, stateFile, unquote, workOf } from "./lib.mjs";
+import { argsOf, branchOf, deny, dirOf, hook, lines, masked, onBranch, prArgs, prototypeBranch, prStep, review, stateFile, unquote, workOf } from "./lib.mjs";
 
 const PR_STEP = prStep("create", "ready");
 
@@ -196,8 +196,7 @@ const createGate = (command, hidden, match, input) => {
 // last commit, and its lessons. --undo puts a PR back in draft, which waits
 // for nothing
 const readyGate = (command, hidden, match, input) => {
-  const end = match.index + match[0].length;
-  const args = argsOf(hidden, end);
+  const { args, elsewhere } = prArgs(command, hidden, match);
   if (/(?:^|\s)--undo(?=\s|$)/.test(args)) return;
   const cwd = dirOf(command, hidden, match.index, input.cwd);
   const branch = branchOf(cwd);
@@ -205,13 +204,9 @@ const readyGate = (command, hidden, match, input) => {
   // The gate reads the lessons and review of the branch checked out where
   // it runs, which is the PR a bare `gh pr ready` readies. A PR named any
   // other way (a number, URL or branch; -R or --repo, before `pr` or after
-  // `ready`; GH_REPO or GH_HOST anywhere in the command) could be another
-  // branch's, so it's turned down. Redirects are no argument
-  const named = args
-    .replace(new RegExp(REDIRECT, "g"), " ")
-    .trim();
-  const ghFlags = /gh\s+-/.test(hidden.slice(match.index, end));
-  if (named || ghFlags || /\bGH_(?:REPO|HOST)\b/.test(command))
+  // `ready`; GH_REPO or GH_HOST anywhere in the command: lib's prArgs)
+  // could be another branch's, so it's turned down. Redirects are no argument
+  if (args.trim() || elsewhere)
     return turnDown(
       `Run \`gh pr ready\` bare, as its own command, from the PR's own checkout (for ${branch}'s, in ${cwd}): the gate checks the lessons and review of the branch checked out where it runs, so it can't vouch for a PR named another way (a number, -R, --repo, GH_REPO).`,
       "ready",
