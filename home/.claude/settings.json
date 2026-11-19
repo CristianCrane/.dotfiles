@@ -28,6 +28,16 @@
         ]
       },
       {
+        "matcher": "Bash|Monitor",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.claude/hooks/pr-conflict.mjs\"",
+            "timeout": 10
+          }
+        ]
+      },
+      {
         "matcher": "Agent",
         "hooks": [
           {

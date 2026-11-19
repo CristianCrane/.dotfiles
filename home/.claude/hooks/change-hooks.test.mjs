@@ -10,7 +10,8 @@
 // scripts' flags, prune-merged (the SessionStart hook that removes merged
 // work), usage (the ledger of tokens spent, its reports, and the
 // SessionStart check that the weekly review is due), main-session (the
-// main session's SessionStart message), settings-format, and the repo's
+// main session's SessionStart message), pr-conflict (the note that a PR
+// conflicting with its base runs no CI), settings-format, and the repo's
 // .githooks (pre-commit, which runs settings-format, post-commit and
 // pre-push). Run from the repo root:
 //
@@ -86,6 +87,16 @@ const runHook = (name, input, { args = [], ...options } = {}) =>
     encoding: "utf8",
     ...options,
   });
+
+// a fake gh, for a folder (`bin`, its own unless given) put first on
+// PATH: an sh script that logs each run's arguments, a line each, to
+// gh-args beside it, then runs `body`; that folder and log
+const fakeGh = (body, bin = scratchDir()) => {
+  mkdirSync(bin, { recursive: true });
+  const log = join(bin, "gh-args");
+  writeFileSync(join(bin, "gh"), `#!/bin/sh\necho "$*" >> "${log}"\n${body}\n`, { mode: 0o755 });
+  return { bin, log };
+};
 
 // a bare origin for `repo`, on main, reached by a github.com URL (as gh
 // and prune-merged see one), with main pushed; its path
@@ -387,6 +398,18 @@ const CASES = [
     `${prefix} gh pr ready`,
     NO_LESSONS,
   ]),
+  // a shell keyword or `timeout <duration>` before gh runs it too (round 1's F7)
+  ...[
+    "if gh pr ready; then echo ok; fi",
+    "if false; then :; elif gh pr ready; then :; fi",
+    "if false; then :; else gh pr ready; fi",
+    "until gh pr ready; do sleep 1; done",
+    "while ! gh pr ready; do sleep 1; done",
+    "! gh pr ready",
+    "{ gh pr ready; }",
+    "timeout 60 gh pr ready",
+  ].map((command) => ["noLessons", command, NO_LESSONS]),
+  ["noReview", "if gh pr create --draft --body-file <body>; then echo ok; fi", /change review for feature isn't ready \(missing\)/],
   ["noLessons", "echo env gh pr ready", THROUGH],
   ["noLessons", `git commit -m "then gh pr ready"`, THROUGH],
   // lib's one command boundary: a redirect's & starts no command, a paren does
@@ -926,18 +949,16 @@ describe("prune-merged", () => {
   const sleepers = [];
   after(() => sleepers.forEach((sleeper) => sleeper.kill()));
 
-  // a fake gh in a folder of its own: the repo and its PRs, or, `down`, the
-  // error gh gives offline
-  const fakeGh = (prs, down = false) => {
+  // a fake gh's folder: it answers with the repo and its PRs, or, `down`,
+  // the error gh gives offline
+  const prsGh = (prs, down = false) => {
     const bin = scratchDir();
     writeFileSync(join(bin, "prs.json"), JSON.stringify(prs));
-    const answer = down
-      ? `console.error("error connecting to api.github.com"); process.exit(1);`
-      : `console.log(process.argv[2] === "api"
-           ? JSON.stringify({ data: { viewer: { login: "me" }, repository: { defaultBranchRef: { name: "main" } } } })
-           : require("fs").readFileSync(__dirname + "/prs.json", "utf8"));`;
-    writeFileSync(join(bin, "gh"), `#!/usr/bin/env node\n${answer}\n`, { mode: 0o755 });
-    return bin;
+    const repo = JSON.stringify({ data: { viewer: { login: "me" }, repository: { defaultBranchRef: { name: "main" } } } });
+    return fakeGh(
+      down ? `echo "error connecting to api.github.com" >&2; exit 1` : `if [ "$1" = api ]; then echo '${repo}'; else cat "${join(bin, "prs.json")}"; fi`,
+      bin,
+    ).bin;
   };
 
   // a main checkout and its origin, with a branch for each way a worktree
@@ -988,7 +1009,7 @@ describe("prune-merged", () => {
     }
     age(main);
     branch("fresh", "MERGED");
-    return { dir, main, bin: fakeGh(prs) };
+    return { dir, main, bin: prsGh(prs) };
   };
 
   // every worktree there is last used 7 hours ago
@@ -1079,7 +1100,7 @@ describe("prune-merged", () => {
     const fromWorktree = prune(bin, join(dir, "live"), "--hook");
     assert.equal(fromWorktree.status, 0);
     assert.equal(fromWorktree.stdout, "");
-    const offline = fakeGh([], true);
+    const offline = prsGh([], true);
     const hooked = prune(offline, main, "--hook");
     assert.equal(hooked.status, 0);
     assert.equal(hooked.stdout, "");
@@ -1216,12 +1237,9 @@ describe("usage", () => {
       const file = join(home, ".claude/usage/windows.jsonl");
       return existsSync(file) ? lines(readFileSync(file, "utf8")).map((line) => JSON.parse(line)) : [];
     };
-    // gh on PATH, as a script: `body` is its shell, and each run's
-    // arguments are kept, one line each
+    // gh on PATH (fakeGh, in HOME/bin), then a run of usage
     const gh = (body) => {
-      const bin = join(home, "bin");
-      mkdirSync(bin, { recursive: true });
-      writeFileSync(join(bin, "gh"), `#!/bin/sh\necho "$*" >> "${join(home, "gh-args")}"\n${body}\n`, { mode: 0o755 });
+      const { bin } = fakeGh(body, join(home, "bin"));
       return (args) => run(args, undefined, { env: { ...process.env, HOME: home, PATH: `${bin}:${process.env.PATH}` } });
     };
     return { home, run, ledger, agent, session, windows, readings, gh };
@@ -1477,7 +1495,7 @@ describe("usage", () => {
     // gh asked for the account's PRs merged in each week, to the second before it ends
     const from = new Date(`${day(-6)}T00:00`);
     const at = (date) => date.toISOString().replace(/\.\d+Z$/, "Z");
-    const asked = lines(readFileSync(join(home, "gh-args"), "utf8"));
+    const asked = lines(readFileSync(join(home, "bin", "gh-args"), "utf8"));
     assert.equal(asked[0], `search prs --author=@me --merged-at ${at(from)}..${at(new Date(from.getTime() + 7 * 24 * 3600 * 1000 - 1000))} --limit 1000 --json repository`);
     // gh failing says why, and the rest still prints
     const failing = gh("echo 'not logged in' >&2; exit 1")(["--week", "--since", day(-6)]);
@@ -1538,6 +1556,109 @@ test("main-session: prints main-session.md at session start, whatever the source
     const ran = runHook("main-session", { hook_event_name: "SessionStart", session_id: "s", cwd: HOOKS, source });
     assert.deepEqual(JSON.parse(ran.stdout).hookSpecificOutput, { hookEventName: "SessionStart", additionalContext: text }, source);
   }
+});
+
+// pr-conflict.mjs, fed a Bash call as Claude Code runs it, with a fake gh
+// first on PATH that answers each `pr view` in turn from `answers` (the
+// last again after them; null fails as gh does offline) and logs the
+// folder it ran in too
+describe("pr-conflict", () => {
+  const PR = { number: 12, state: "OPEN", mergeable: "CONFLICTING", mergeStateStatus: "DIRTY", baseRefName: "main", headRefName: "feature" };
+  const ASKED = "--json number,state,mergeable,mergeStateStatus,baseRefName,headRefName";
+
+  // runs the hook on `command` in a scratch folder: what it told the agent
+  // (undefined: nothing), each gh run's arguments, and the folders they ran in
+  const conflict = (command, answers = [PR], cwd = scratchDir(), tool = "Bash") => {
+    const bin = scratchDir();
+    answers.forEach((answer, at) => writeFileSync(join(bin, `answer-${at + 1}`), answer ? JSON.stringify(answer) : ""));
+    copyFileSync(join(bin, `answer-${answers.length}`), join(bin, "answer-last"));
+    const { log } = fakeGh(
+      [
+        `pwd >> "${join(bin, "gh-cwd")}"`,
+        `f="${bin}/answer-$(wc -l < "${join(bin, "gh-args")}" | tr -d ' ')"`,
+        `[ -f "$f" ] || f="${bin}/answer-last"`,
+        `[ -s "$f" ] || { echo "error connecting to api.github.com" >&2; exit 1; }`,
+        `cat "$f"`,
+      ].join("\n"),
+      bin,
+    );
+    const ran = runHook(
+      "pr-conflict",
+      { hook_event_name: "PreToolUse", tool_name: tool, session_id: "s", cwd, tool_input: { command } },
+      { env: { ...process.env, PATH: `${bin}:${process.env.PATH}` } },
+    );
+    const read = (file) => (existsSync(file) ? lines(readFileSync(file, "utf8")) : []);
+    return { told: ran.stdout ? JSON.parse(ran.stdout).hookSpecificOutput : undefined, asked: read(log), dirs: read(join(bin, "gh-cwd")) };
+  };
+
+  test("a conflicting open PR: says no pull_request CI runs and to merge the base in, before each of the four", () => {
+    for (const command of ["gh pr checks 12 --watch", "gh pr view 12", "gh pr ready 12", "gh pr merge 12 --squash"]) {
+      const { told, asked } = conflict(command);
+      assert.equal(told?.hookEventName, "PreToolUse", command);
+      assert.match(told.additionalContext, /^PR #12 \(feature into main\) conflicts with main .*no `pull_request` CI.*Merge origin\/main into feature/, command);
+      assert.deepEqual(asked, [`pr view 12 ${ASKED}`], command);
+    }
+  });
+
+  test("asks about the PR the command names, in the folder it runs in", () => {
+    const cases = [
+      ["gh pr checks --watch", `pr view ${ASKED}`],
+      ["gh pr view 7 -R o/r --json title -q .title", `pr view 7 --repo o/r ${ASKED}`],
+      ["gh pr view --repo=o/r feature", `pr view feature --repo o/r ${ASKED}`],
+      ["gh pr checks -Ro/r", `pr view --repo o/r ${ASKED}`],
+      ['gh pr merge 5 --subject "a 9 b" -b c 2>&1', `pr view 5 ${ASKED}`],
+      ["git fetch && GIT_PAGER=cat gh pr checks https://github.com/o/r/pull/3 | tail -3", `pr view https://github.com/o/r/pull/3 ${ASKED}`],
+    ];
+    for (const [command, expected] of cases) assert.deepEqual(conflict(command).asked, [expected], command);
+    // the ways a wait on checks is written, in Bash or a Monitor (round 1's F7)
+    for (const command of ["until gh pr checks 12; do sleep 30; done", "while ! gh pr checks 12 --required; do sleep 20; done", "timeout 600 gh pr checks 12 --watch", "{ gh pr checks 12; }", "if ! gh pr checks 12; then echo red; fi"])
+      assert.deepEqual(conflict(command).asked, [`pr view 12 ${ASKED}`], command);
+    const watched = conflict("until gh pr checks 12; do sleep 30; done", [PR], scratchDir(), "Monitor");
+    assert.deepEqual(watched.asked, [`pr view 12 ${ASKED}`]);
+    assert.match(watched.told.additionalContext, /^PR #12 /);
+    const cwd = scratchDir();
+    const sub = join(cwd, "sub");
+    mkdirSync(sub);
+    assert.deepEqual(conflict("cd sub && gh pr checks 8", [PR], cwd).dirs, [sub]);
+  });
+
+  test("a PR it can't pin down: asks nothing, rather than note another PR", () => {
+    for (const command of ["gh pr checks --interval 30 470", "gh pr view --json mergeable 470", "GH_REPO=o/x gh pr checks 5", "GH_HOST=h gh pr view 5", "gh -R o/r pr view 5"]) {
+      const { told, asked } = conflict(command);
+      assert.equal(told, undefined, command);
+      assert.deepEqual(asked, [], command);
+    }
+  });
+
+  test("says it once for a PR the command steps on twice", () => {
+    const { told, asked } = conflict("gh pr view 12; gh pr checks 12 --watch");
+    assert.equal(asked.length, 2);
+    assert.equal(lines(told.additionalContext).length, 1);
+  });
+
+  test("not worked out yet: asks again 2 s later, and says what GitHub knows then", () => {
+    const unknown = { ...PR, mergeable: "UNKNOWN", mergeStateStatus: "UNKNOWN" };
+    const later = conflict("gh pr checks 12 --watch", [unknown, PR]);
+    assert.equal(later.asked.length, 2);
+    assert.match(later.told.additionalContext, /^PR #12 .* conflicts with main/);
+    const still = conflict("gh pr checks 12 --watch", [unknown]);
+    assert.equal(still.asked.length, 2);
+    assert.match(still.told.additionalContext, /hasn't yet worked out whether PR #12 .*gh pr view 12 --json mergeable/);
+    assert.equal(conflict("gh pr checks 12", [unknown, { ...PR, mergeable: "MERGEABLE", mergeStateStatus: "CLEAN" }]).told, undefined);
+  });
+
+  test("quiet: a PR that merges or is closed, gh failing, any other command", () => {
+    for (const answer of [{ ...PR, mergeable: "MERGEABLE", mergeStateStatus: "CLEAN" }, { ...PR, state: "CLOSED" }, { ...PR, state: "MERGED" }, null]) {
+      const { told, asked } = conflict("gh pr checks 12", [answer]);
+      assert.equal(told, undefined, JSON.stringify(answer));
+      assert.equal(asked.length, 1);
+    }
+    for (const command of ["git status", 'echo "gh pr checks 12"', "gh pr create --draft", "gh pr list", "gh issue view 12"]) {
+      const { told, asked } = conflict(command);
+      assert.equal(told, undefined, command);
+      assert.deepEqual(asked, [], command);
+    }
+  });
 });
 
 // for settings-format's tests and the git hooks' below: the committed
