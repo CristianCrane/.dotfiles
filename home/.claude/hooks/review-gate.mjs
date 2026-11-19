@@ -31,10 +31,10 @@ import {
   lines,
   masked,
   onBranch,
+  positional,
   prArgs,
   prototypeBranch,
   prStep,
-  REDIRECT,
   review,
   stateFile,
   unquote,
@@ -271,14 +271,14 @@ const mergeGate = (command, hidden, match, input) => {
   const origin = githubOrigin(cwd);
   const here = origin && `${origin.owner}/${origin.name}`.toLowerCase() === DOTFILES.toLowerCase();
   if (!here && !command.toLowerCase().includes(DOTFILES.toLowerCase())) return;
-  const end = match.index + match[0].length;
-  const words = argsOf(hidden, end).replace(new RegExp(REDIRECT, "g"), " ").match(WORD) ?? [];
-  const named = [];
-  for (let at = 0; at < words.length; at++)
-    if (MERGE_VALUES.has(words[at])) at++;
-    else if (!words[at].startsWith("-")) named.push(words[at]);
-  const elsewhere = /gh\s+-/.test(hidden.slice(match.index, end)) || /\bGH_(?:REPO|HOST)\b/.test(command) || has(words, "-R", "--repo=");
-  if (!here || elsewhere || named.length !== 1 || !/^\d+$/.test(named[0]))
+  // GH_REPO, GH_HOST or gh flags before `pr`: lib's prArgs; -R or --repo
+  // after `merge`, which prArgs leaves to the hook (pr-conflict hands them
+  // on to its own gh), are turned down here. A value-taking flag's value
+  // (MERGE_VALUES) is no PR, which lib's positional can't tell
+  const { args, elsewhere } = prArgs(command, hidden, match);
+  const words = args.match(WORD) ?? [];
+  const named = positional(words.filter((_, at) => !MERGE_VALUES.has(words[at - 1])));
+  if (!here || elsewhere || has(words, "-R", "--repo=") || named.length !== 1 || !/^\d+$/.test(named[0]))
     return turnDown(
       `Run \`gh pr merge <number>\` from a checkout of ${DOTFILES}, the PR named by its number alone (no branch, URL, -R, --repo or GH_REPO): only the user merges its PRs, and the gate checks that they asked to merge that number.`,
       "merge",

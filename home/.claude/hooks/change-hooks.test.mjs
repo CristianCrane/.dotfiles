@@ -880,9 +880,13 @@ test("review-gate: a dotfiles PR merges only when the user asked to merge that n
   said(human("hi"), human("looks right, merge #12 please"), { type: "user", origin: { kind: "peer", from: "a1" }, isMeta: true, message: { content: "merge 13" } });
   assert.equal(merge(dotfiles, "gh pr merge 12 --squash --delete-branch"), null);
   assert.equal(merge(dotfiles, 'gh pr merge --squash -t "fix 13" 12'), null, "a number in the subject isn't the PR's");
+  assert.equal(merge(dotfiles, "gh pr merge > /dev/null 2>&1 12"), null, "a redirect's target isn't the PR");
   assert.match(merge(dotfiles, "gh pr merge 13") ?? "", NOT_ASKED(13), "an agent's relay asked for 13");
   assert.match(merge(dotfiles, "gh pr merge 1") ?? "", NOT_ASKED(1), "1 isn't 12");
   assert.match(merge(dotfiles, "gh pr merge 2") ?? "", NOT_ASKED(2), "nor is 2");
+  // after a wrapper or a shell keyword (lib's prStep, from #27)
+  for (const command of ["if gh pr merge 13; then :; fi", "timeout 60 gh pr merge 13", "until gh pr merge 13; do sleep 5; done"])
+    assert.match(merge(dotfiles, command) ?? "", NOT_ASKED(13), command);
   for (const command of [
     "gh pr merge",
     "gh pr merge pr-flow",
@@ -892,6 +896,7 @@ test("review-gate: a dotfiles PR merges only when the user asked to merge that n
     "gh pr merge 12 -Ro/r",
     "gh -R CristianCrane/.dotfiles pr merge 12",
     "GH_REPO=CristianCrane/.dotfiles gh pr merge 12",
+    "GH_HOST=github.com gh pr merge 12",
     "gh pr merge 12 13",
   ])
     assert.match(merge(dotfiles, command) ?? "", ONE_WAY, command);
