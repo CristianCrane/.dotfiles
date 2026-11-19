@@ -145,7 +145,7 @@ const scratchRepo = ({ review = false, header = "round 1, 0 open change findings
   return { repo, body: body === undefined ? undefined : write(repo, "pr-body", body) };
 };
 
-const ROUTED = "- A lesson → home/.claude/CLAUDE.md\n";
+const ROUTED = "Signals for feature:\n- A cost → inbox 1a2b3c4d\n";
 // a PR body in the change skill's shape, its permalinks at `head`, with
 // `change` as its Change section's lines; `parts` replaces a part's text,
 // or leaves it out (null)
@@ -169,13 +169,14 @@ const STATES = {
   lessonNoArrow: ["review-gate", () => scratchRepo({ review: true, lessons: "- A lesson\n" })],
   lessonsEmpty: ["review-gate", () => scratchRepo({ review: true, lessons: "" })],
   lessonsNone: ["review-gate", () => scratchRepo({ review: true, lessons: "None: a one-line fix\n" })],
-  // the costs ruled out after the lessons (the lessons skill's step 5)
+  // `Ruled out`, the older skill's spelling of None:, which repos' copies
+  // write until their sync
   lessonsRuledOut: ["review-gate", () => scratchRepo({ review: true, lessons: `${ROUTED}\nRuled out:\n- F1 a cost: one quick fix\n` })],
   lessonsOnlyRuledOut: ["review-gate", () => scratchRepo({ review: true, lessons: "Ruled out (none of the costs is a lesson):\n- F1 a cost: one quick fix\n" })],
   lessonsRuledOutEmpty: ["review-gate", () => scratchRepo({ review: true, lessons: "Ruled out:\n" })],
   // a lesson with no → before None: (None: once let the whole file through)
   lessonUnroutedNone: ["review-gate", () => scratchRepo({ review: true, lessons: "- A lesson\nNone: the rest\n" })],
-  // a lessons commit after the review, with no recheck of it
+  // a commit after the review, with no recheck of it
   staleReview: [
     "review-gate",
     () => {
@@ -354,7 +355,7 @@ const REDIRECTS = ["2>&1", ">&2", "&>/dev/null", "<&0"];
 
 const CASES = [
   ["noLessons", "gh pr ready", NO_LESSONS],
-  ["lessonNoArrow", "gh pr ready", /1 lesson\(s\) that don't say where they went/],
+  ["lessonNoArrow", "gh pr ready", /1 cost\(s\) that don't say where they went/],
   ["lessonsEmpty", "gh pr ready", /lists none/],
   ["ready", "gh pr ready", THROUGH],
   ["lessonsNone", "gh pr ready", THROUGH],
@@ -363,7 +364,7 @@ const CASES = [
   ["lessonsRuledOut", "gh pr ready 12", NAMED],
   ["lessonsOnlyRuledOut", "gh pr ready 12", NAMED],
   ["lessonsRuledOutEmpty", "gh pr ready", /lists none/],
-  ["lessonUnroutedNone", "gh pr ready", /1 lesson\(s\) that don't say where they went/],
+  ["lessonUnroutedNone", "gh pr ready", /1 cost\(s\) that don't say where they went/],
   ["lessonsNone", "gh pr ready 12", NAMED],
   ["noLessons", "gh pr ready --undo", THROUGH],
   ["staleReview", "gh pr ready", /it reviewed [0-9a-f]+, and the commits since change more than comment lines/],
@@ -802,6 +803,20 @@ test("capture: one signal to the inbox, and nothing for a bad call", () => {
     assert.match(bad.stderr, /^capture: /);
   }
   assert.equal(readFileSync(inbox, "utf8").split("\n").filter(Boolean).length, 1);
+});
+
+// from the lessons skill, capture also writes the cost's line to the
+// branch's lessons file, the record review-gate reads, so the file is the
+// command's output rather than a hand copy of the inbox
+test("capture: a lessons signal adds its line to the branch's lessons file", () => {
+  const home = scratchDir();
+  const { repo } = scratchRepo({ review: true });
+  const capture = (...args) => runHook("capture", undefined, { args: ["--source", "lessons", "--kind", "cost", ...args], cwd: repo, env: { ...process.env, HOME: home } });
+  for (const note of ["F1 a missed copy", "CI red: a lint"]) assert.equal(capture("--note", note).status, 0);
+  const ids = readFileSync(join(home, ".claude/process/inbox.jsonl"), "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line).id);
+  assert.equal(readFileSync(stateFile(repo, "lessons", BRANCH), "utf8"), `Signals for ${BRANCH}:\n- F1 a missed copy → inbox ${ids[0]}\n- CI red: a lint → inbox ${ids[1]}\n`);
+  const ran = runHook("review-gate", { tool_input: { command: "gh pr ready" }, cwd: repo, session_id: "s" });
+  assert.equal(ran.stdout.trim(), "", "the gate takes capture's file");
 });
 
 // on main, a checkout whose origin is on GitHub takes no edits: a change

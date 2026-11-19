@@ -9,7 +9,7 @@
 // permalinks, Change collapsed, nothing else) and answers every finding of
 // that review in its Change section. A PR leaves draft (`gh pr ready`, or `gh pr create` without
 // `--draft`) once the branch's lessons file (the `lessons` skill) says
-// where every lesson went, and the review is still of the last commit.
+// where every cost went, and the review is still of the last commit.
 // A prototype branch's PR (lib's prototypeBranch) is turned down either
 // way: it skipped the reviews because it never merges.
 //
@@ -76,12 +76,13 @@ const prototypeTurnDown = (branch, verb) =>
   );
 
 // why the branch's PR can't leave draft yet, if it can't: its lessons file
-// is missing, lists nothing, or has a lesson that doesn't say where it went.
-// The lessons are the bullets before the first line starting `Ruled out`
-// (or `None:`, its older spelling); the costs ruled out follow, in any form
+// is missing, lists nothing, or has a cost that doesn't say where it went.
+// The costs are the bullets before the first line starting `None:` (or
+// `Ruled out`, the older skill's spelling, which repos' copies write until
+// their sync); its reason follows, in any form
 const lessonsMissing = (cwd, work) => {
   const file = stateFile(cwd, "lessons", work.key);
-  const how = `run the \`lessons\` skill (the \`change\` skill's step 6) and write them to ${file}, each lesson saying where it went (\`→ <where>\`), and the costs that aren't lessons after a \`Ruled out:\` line`;
+  const how = `run the \`lessons\` skill (the \`change\` skill's step 6): its \`capture.mjs --source lessons\` writes each cost to ${file} with where it went (\`→ inbox <id>\`), or write \`None: <why>\` there when the work cost nothing`;
   if (!existsSync(file)) return `${work.branch}'s PR can't leave draft before its lessons: ${how}.`;
   const all = lines(readFileSync(file, "utf8"));
   const split = all.findIndex((line) => /^(?:ruled out|none:)/i.test(line.trim()));
@@ -89,7 +90,7 @@ const lessonsMissing = (cwd, work) => {
   const ruledOut = split >= 0 && /\w/.test(all.slice(split).join(" ").replace(/^\s*(?:ruled out|none)\W*/i, ""));
   const unsaid = items.filter((line) => !/→\s*\S/.test(line));
   if ((items.length === 0 && !ruledOut) || unsaid.length)
-    return `The lessons file for ${work.branch} (${file}) ${items.length ? `has ${unsaid.length} lesson(s) that don't say where they went` : "lists none"}: ${how}.`;
+    return `The lessons file for ${work.branch} (${file}) ${items.length ? `has ${unsaid.length} cost(s) that don't say where they went` : "lists none"}: ${how}.`;
 };
 
 // the PR body's labelled parts (the `change` skill's PR body step), in its
@@ -259,12 +260,12 @@ const readyGate = (command, hidden, match, input) => {
   const work = workOf(cwd, input);
   if (!work) return;
 
-  // the review still holds: of the last commit, so the lessons commit got
+  // the review still holds: of the last commit, so a commit since it got
   // its recheck
   const found = review(cwd, work, input);
   if (!found.ok)
     return turnDown(
-      `The change review for ${work.branch} isn't ready (${found.reason}), with output ${found.path}: finish it as the \`change\` skill's Review step says (after a lessons commit, that's the recheck of it), then mark the PR ready.`,
+      `The change review for ${work.branch} isn't ready (${found.reason}), with output ${found.path}: finish it as the \`change\` skill's Review step says (after a commit since the review, that's its recheck), then mark the PR ready.`,
       "ready",
     );
 

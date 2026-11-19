@@ -18,11 +18,15 @@
 // signal gets an id, which the curator's proposals and the log cite. It
 // writes whatever docs/process.json says: the off switch stops the curator
 // and the background pass, and the inbox keeps what comes in meanwhile.
-import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
+//
+// From the `lessons` skill (--source lessons) it also adds the cost's line,
+// `- <cost> → inbox <id>`, to the branch's lessons file (lib's stateFile),
+// the record review-gate reads before a PR leaves draft.
+import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
-import { flagsOf, git } from "./lib.mjs";
+import { flagsOf, git, stateFile, workOf } from "./lib.mjs";
 
 const KINDS = ["correction", "important", "decision", "retraction", "repeat", "frustration", "cost"];
 const SOURCES = ["capture", "lessons"];
@@ -78,3 +82,20 @@ const signal = {
 appendFileSync(inbox, JSON.stringify(signal) + "\n");
 const count = readFileSync(inbox, "utf8").split("\n").filter(Boolean).length;
 console.log(`captured ${values.kind} signal ${signal.id} in ${inbox} (${count} there now)`);
+
+if (values.source === "lessons") {
+  // the branch's lessons file; outside a checkout, or on a detached HEAD,
+  // there's none, and the signal stands alone
+  let file;
+  try {
+    const work = workOf(process.cwd(), { session_id: signal.session });
+    if (work) file = stateFile(process.cwd(), "lessons", work.key);
+    if (file && !existsSync(file)) appendFileSync(file, `Signals for ${work.branch}:\n`);
+  } catch {
+    file = undefined;
+  }
+  if (file) {
+    appendFileSync(file, `- ${(values.note || values.said).trim().replace(/\s+/g, " ")} → inbox ${signal.id}\n`);
+    console.log(`and its line in ${file}`);
+  }
+}
