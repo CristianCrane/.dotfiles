@@ -16,6 +16,6 @@
 # unstaged. After an ordinary or -a commit the index equals HEAD already,
 # so the add changes nothing.
 file=home/.claude/settings.json
-git diff-tree --quiet --root HEAD -- "$file" && exit 0
+git diff-tree --quiet --no-commit-id --root HEAD -- "$file" && exit 0
 git diff --quiet HEAD -- "$file" || exit 0
 git add -- "$file"

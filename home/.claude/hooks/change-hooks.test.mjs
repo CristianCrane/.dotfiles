@@ -4,16 +4,17 @@
 // <hook>.mjs`, the tool call's JSON on stdin, with the input fields
 // MORE_INPUT adds, in a scratch repo), and below them plain tests of
 // scratch-gate at a subagent's start, reviewer-gate's other callers, the
-// survey gate on main (one survey per change), a dictated settings
-// change, a prototype branch, lib's cwdFor and
+// survey gate on main (branch first where origin is on GitHub),
+// review-gate's merge rule, a dictated settings change, a prototype branch, lib's cwdFor and
 // substitutions, how copy.mjs and sync.mjs register a repo's copy, the
 // scripts' flags, prune-merged (the SessionStart hook that removes merged
-// work), usage (the ledger of tokens spent, its reports, and the
+// work), catch-up (the SessionStart hook that fast-forwards ~/.dotfiles),
+// usage (the ledger of tokens spent, its reports, and the
 // SessionStart check that the weekly review is due), main-session (the
 // main session's SessionStart message), pr-conflict (the note that a PR
 // conflicting with its base runs no CI), settings-format, and the repo's
-// .githooks (pre-commit, which runs settings-format, post-commit and
-// pre-push). Run from the repo root:
+// .githooks (pre-commit, which runs settings-format, and post-commit). Run
+// from the repo root:
 //
 //   node --test 'home/.claude/hooks/*.test.mjs'
 //
@@ -58,7 +59,11 @@ import { formatSettings } from "./settings-format.mjs";
 const HOOKS = dirname(fileURLToPath(import.meta.url));
 const BRANCH = "feature";
 
-// git, here and in the hooks, reads none of the machine's config
+// git, here and in the hooks, reads none of the machine's config but its
+// default excludes file, ~/.config/git/ignore (home.nix's
+// `programs.git.ignores`), which GIT_CONFIG_GLOBAL doesn't replace; the
+// F7 test sets its own core.excludesFile over it. (A GIT_CONFIG_COUNT entry
+// hiding it would outrank that repo config too.)
 Object.assign(process.env, {
   GIT_CONFIG_GLOBAL: "/dev/null",
   GIT_CONFIG_NOSYSTEM: "1",
@@ -716,7 +721,7 @@ test("repoCopy: current after a sync, stale once a registered hook differs", () 
   assert.equal(repoCopy(repo), "current");
   const file = join(repo, ".claude/settings.json");
   const settings = JSON.parse(readFileSync(file, "utf8"));
-  settings.hooks.PreToolUse.find((group) => group.matcher === "Bash").matcher = "Read";
+  settings.hooks.PreToolUse.find((group) => group.hooks.some((hook) => hook.command?.includes("/review-gate.mjs"))).matcher = "Read";
   writeFileSync(file, JSON.stringify(settings));
   assert.equal(repoCopy(repo), "stale");
 });
@@ -760,55 +765,172 @@ test("reviewer-gate: other callers' calls through", () => {
   }
 });
 
-// on main, a survey covers one change: its files are keyed by the session
-// and where HEAD meets origin, so they hold through the change's unpushed
-// commits and a fetch of others' work, and a pushed change's next edit
-// needs a new survey (the old gate let it ride the first one's: red on it).
-// With no origin, the session alone, as before
-test("survey-gate on main: one survey per change, until it's pushed", () => {
-  const edit = (repo) => {
-    const ran = runHook("survey-gate", {
-      tool_input: { file_path: join(repo, "b.txt"), content: "x\n" },
-      cwd: repo,
-      session_id: "s",
-    });
-    return ran.stdout.trim() ? JSON.parse(ran.stdout).hookSpecificOutput.permissionDecisionReason : null;
+// on main, a checkout whose origin is on GitHub takes no edits: a change
+// there reaches main by PR, so the gate says to branch first, whatever
+// survey there is (the old gate let a surveyed change through on main:
+// red on it), and change-check says so too. With no origin, or one off
+// GitHub, main's survey is the session's, as before
+test("survey-gate on main: branch first where origin is on GitHub; elsewhere the session's survey", () => {
+  const run = (hook, repo) => {
+    const ran = runHook(hook, { tool_input: { file_path: join(repo, "b.txt"), content: "x\n" }, cwd: repo, session_id: "s" });
+    assert.equal(ran.status, 0, ran.stderr);
+    return ran.stdout.trim() ? JSON.parse(ran.stdout) : null;
   };
-  // main with a reviewed survey for the change about to start
-  const started = ({ origin = true } = {}) => {
+  const edit = (repo) => run("survey-gate", repo)?.hookSpecificOutput.permissionDecisionReason ?? null;
+  const onMain = () => {
     const repo = scratchDir();
     git(repo, "init", "-qb", "main");
     commit(repo, "b.txt", "b\n");
-    const bare = origin && withOrigin(repo);
+    return repo;
+  };
+  // a reviewed survey for the work checked out
+  const surveyed = (repo) => {
     const { key } = workOf(repo, { session_id: "s" });
     writeFileSync(stateFile(repo, "survey", key), "Change: b.\nFiles: b.txt\n");
-    writeFileSync(stateFile(repo, "plan-review", key), "# Change review: main, plan\n");
-    return { repo, bare };
+    writeFileSync(stateFile(repo, "plan-review", key), "# Change review: plan\n");
   };
+  const BRANCH_FIRST =
+    /^This edit is turned down: branch first: main takes no edits in a checkout whose origin is on GitHub \(o\/r\), where a change reaches main by PR; .*`git worktree add -b <name> <path> origin\/main`/;
 
-  const { repo: unpushed } = started();
-  commit(unpushed, "b.txt", "b2\n");
-  assert.equal(edit(unpushed), null, "a review round's fix, after the change's first commit");
+  const github = onMain();
+  withOrigin(github);
+  assert.match(edit(github) ?? "", BRANCH_FIRST, "no survey");
+  surveyed(github);
+  assert.match(edit(github) ?? "", BRANCH_FIRST, "a surveyed change on main");
+  writeFileSync(join(github, "b.txt"), "x\n");
+  assert.match(run("change-check", github)?.systemMessage ?? "", /^Branch main changes 1 files, but branch first: /);
+  git(github, "switch", "-qc", BRANCH);
+  assert.match(edit(github) ?? "", NO_SURVEY, "a branch takes the usual flow");
+  surveyed(github);
+  assert.equal(edit(github), null);
 
-  const { repo: fetched, bare } = started();
-  const other = join(scratchDir(), "other");
-  git(fetched, "clone", "-q", bare, other);
-  commit(other, "c.txt", "c\n");
-  git(other, "push", "-q", "origin", "main");
-  git(fetched, "fetch", "-q", "origin");
-  assert.equal(edit(fetched), null, "others' work fetched, not merged");
-
-  const { repo: landed } = started();
-  commit(landed, "b.txt", "b2\n");
-  git(landed, "push", "-q", "origin", "main");
-  const reason = edit(landed);
-  assert.notEqual(reason, null, "the next change rode the pushed one's survey");
-  assert.match(reason, new RegExp(`there is no survey for main: .* ${stateFile(landed, "survey", workOf(landed, { session_id: "s" }).key)}`));
-
-  const { repo: local } = started({ origin: false });
-  commit(local, "b.txt", "b2\n");
+  const local = onMain();
   assert.equal(workOf(local, { session_id: "s" }).key, "main-s");
+  assert.match(edit(local) ?? "", /there is no survey for main/);
+  surveyed(local);
   assert.equal(edit(local), null, "no origin: the session's survey, as before");
+
+  const elsewhere = onMain();
+  git(elsewhere, "remote", "add", "origin", join(scratchDir(), "elsewhere.git"));
+  surveyed(elsewhere);
+  assert.equal(edit(elsewhere), null, "an origin off GitHub: the same");
+});
+
+// a git-ignored file on main reaches no commit or PR (a checkout's own
+// .claude/settings.local.json configures only that checkout's sessions),
+// so branch-first leaves it the flow it had: the session's survey, or a
+// dictated one (review round 1 F7: branch-first turned it down, red on
+// it); a tracked file there, or a new one nothing ignores, still branches
+// first. The ignore is the global one, home.nix's `programs.git.ignores`
+// (Home Manager writes it to ~/.config/git/ignore, git's default
+// core.excludesFile), not the checkout's .gitignore, which most of the
+// user's checkouts lack (review round 2 F7): the test reads that list from
+// home.nix and hands it to git as core.excludesFile
+test("survey-gate on main: a git-ignored file keeps the session's flow; a tracked one still branches first", () => {
+  const SAID = "add a deny rule for Bash(rm *) here";
+  const repo = scratchDir();
+  git(repo, "init", "-qb", "main");
+  const ignores = readFileSync(join(HOOKS, "../../../home.nix"), "utf8").match(/^\s*ignores = \[([^\]]*)\];/m)?.[1].match(/"[^"]*"/g)?.map((name) => JSON.parse(name)) ?? [];
+  const excludes = join(scratchDir(), "ignore");
+  writeFileSync(excludes, ignores.map((name) => `${name}\n`).join(""));
+  git(repo, "config", "core.excludesFile", excludes);
+  commit(repo, "b.txt", "b\n");
+  withOrigin(repo);
+  mkdirSync(join(repo, ".claude"));
+  const local = join(repo, ".claude/settings.local.json");
+  writeFileSync(local, "{}\n");
+  const transcript = join(scratchDir(), "t.jsonl");
+  writeFileSync(transcript, `${JSON.stringify({ type: "user", origin: { kind: "human" }, message: { role: "user", content: SAID } })}\n`);
+  const edit = (file_path, content) => {
+    const ran = runHook("survey-gate", { tool_input: { file_path, content }, cwd: repo, session_id: "s", transcript_path: transcript });
+    assert.equal(ran.status, 0, ran.stderr);
+    return ran.stdout.trim() ? JSON.parse(ran.stdout).hookSpecificOutput.permissionDecisionReason : null;
+  };
+  const denied = `${JSON.stringify({ permissions: { deny: ["Bash(rm *)"] } }, null, 2)}\n`;
+  const BRANCH_FIRST = /^This edit is turned down: branch first: /;
+  assert.match(edit(local, denied) ?? "", /^Before this edit, there is no survey for main: /, "no survey: the usual turn-down");
+  writeFileSync(stateFile(repo, "survey", "main-s"), `dictated: "${SAID}" .claude/settings.local.json\n`);
+  assert.equal(edit(local, denied), null, "a dictated edit of the ignored file");
+  assert.match(edit(join(repo, "b.txt"), "x\n") ?? "", BRANCH_FIRST, "a tracked file");
+  assert.match(edit(join(repo, "c.txt"), "x\n") ?? "", BRANCH_FIRST, "a new file nothing ignores");
+});
+
+// review-gate's merge rule: in a checkout of CristianCrane/.dotfiles, `gh
+// pr merge` goes through only naming the PR by its number alone, and only
+// when a message the user typed in this session asks to merge that number
+// (the old gate let every merge through: red on it); another repo's
+// merges aren't its business
+test("review-gate: a dotfiles PR merges only when the user asked to merge that number", () => {
+  const { repo: dotfiles } = scratchRepo();
+  git(dotfiles, "remote", "add", "origin", "git@github.com:CristianCrane/.dotfiles.git");
+  const { repo: other } = scratchRepo();
+  git(other, "remote", "add", "origin", "https://github.com/o/r");
+  const transcript = join(scratchDir(), "t.jsonl");
+  const said = (...entries) => writeFileSync(transcript, entries.map((entry) => JSON.stringify(entry)).join("\n") + "\n");
+  const human = (content) => ({ type: "user", origin: { kind: "human" }, message: { role: "user", content } });
+  const merge = (cwd, command) => {
+    const ran = runHook("review-gate", { tool_input: { command }, cwd, session_id: "s", transcript_path: transcript });
+    assert.equal(ran.status, 0, ran.stderr);
+    return ran.stdout.trim() ? JSON.parse(ran.stdout).hookSpecificOutput.permissionDecisionReason : null;
+  };
+  const NOT_ASKED = (n) =>
+    new RegExp(String.raw`^Only the user merges a CristianCrane/\.dotfiles PR: no message the user typed in this session asks to merge #${n} \(a relay or your own words don't count\)`);
+  const ONE_WAY = /^Run `gh pr merge <number>` from a checkout of CristianCrane\/\.dotfiles, the PR named by its number alone/;
+
+  said(human("hi"), human("looks right, merge #12 please"), { type: "user", origin: { kind: "peer", from: "a1" }, isMeta: true, message: { content: "merge 13" } });
+  assert.equal(merge(dotfiles, "gh pr merge 12 --squash --delete-branch"), null);
+  assert.equal(merge(dotfiles, 'gh pr merge --squash -t "fix 13" 12'), null, "a number in the subject isn't the PR's");
+  assert.equal(merge(dotfiles, "gh pr merge > /dev/null 2>&1 12"), null, "a redirect's target isn't the PR");
+  assert.match(merge(dotfiles, "gh pr merge 13") ?? "", NOT_ASKED(13), "an agent's relay asked for 13");
+  assert.match(merge(dotfiles, "gh pr merge 1") ?? "", NOT_ASKED(1), "1 isn't 12");
+  assert.match(merge(dotfiles, "gh pr merge 2") ?? "", NOT_ASKED(2), "nor is 2");
+  // after a wrapper or a shell keyword (lib's prStep, from #27)
+  for (const command of ["if gh pr merge 13; then :; fi", "timeout 60 gh pr merge 13", "until gh pr merge 13; do sleep 5; done"])
+    assert.match(merge(dotfiles, command) ?? "", NOT_ASKED(13), command);
+  for (const command of [
+    "gh pr merge",
+    "gh pr merge pr-flow",
+    "gh pr merge https://github.com/CristianCrane/.dotfiles/pull/12",
+    "gh pr merge -R CristianCrane/.dotfiles 12",
+    "gh pr merge --repo=CristianCrane/.dotfiles 12",
+    "gh pr merge 12 -Ro/r",
+    "gh -R CristianCrane/.dotfiles pr merge 12",
+    "GH_REPO=CristianCrane/.dotfiles gh pr merge 12",
+    "GH_HOST=github.com gh pr merge 12",
+    "gh pr merge 12 13",
+  ])
+    assert.match(merge(dotfiles, command) ?? "", ONE_WAY, command);
+  // from another checkout: a command naming the dotfiles anywhere (it may be
+  // theirs, by a route the gate doesn't know), or cd-ing into one
+  assert.match(merge(other, "gh pr merge -R cristiancrane/.dotfiles 12") ?? "", ONE_WAY);
+  assert.match(merge(other, "gh pr merge -RCristianCrane/.dotfiles 12") ?? "", ONE_WAY);
+  assert.match(merge(other, 'gh pr merge 12 -t "for CristianCrane/.dotfiles"') ?? "", ONE_WAY);
+  assert.equal(merge(other, `cd ${dotfiles} && gh pr merge 12`), null);
+  assert.match(merge(other, `cd ${dotfiles} && gh pr merge 13`) ?? "", NOT_ASKED(13));
+  // another repo's merges, whatever the transcript
+  for (const command of ["gh pr merge", "gh pr merge 13 --squash", "gh pr merge -R o/r 13"]) assert.equal(merge(other, command), null, command);
+  // a message that names the number but asks no merge
+  said(human("12 looks fine"));
+  assert.match(merge(dotfiles, "gh pr merge 12") ?? "", NOT_ASKED(12));
+});
+
+// a Monitor runs a shell command as Bash does, so review-gate's rules hold
+// there too: settings.json registers it on a matcher that matches both,
+// and the gate reads a Monitor's command (review round 4 F11: it was
+// registered for Bash alone, so `gh pr merge` in a Monitor skipped it)
+test("review-gate: a Monitor's gh pr merge is gated as Bash's is", () => {
+  const settings = JSON.parse(readFileSync(join(HOOKS, "../settings.json"), "utf8"));
+  const groups = settings.hooks.PreToolUse.filter((group) => group.hooks.some((hook) => /\/review-gate\.mjs\b/.test(hook.command ?? "")));
+  assert.equal(groups.length, 1, "review-gate is registered once");
+  const matches = (tool) => new RegExp(`^(?:${groups[0].matcher})$`).test(tool);
+  assert.ok(matches("Bash") && matches("Monitor"), `review-gate's matcher ${groups[0].matcher} matches Bash and Monitor`);
+  const { repo } = scratchRepo();
+  git(repo, "remote", "add", "origin", "git@github.com:CristianCrane/.dotfiles.git");
+  const transcript = join(scratchDir(), "t.jsonl");
+  writeFileSync(transcript, `${JSON.stringify({ type: "user", origin: { kind: "human" }, message: { role: "user", content: "hi" } })}\n`);
+  const ran = runHook("review-gate", { tool_name: "Monitor", tool_input: { command: "gh pr merge 13", description: "merge" }, cwd: repo, session_id: "s", transcript_path: transcript });
+  assert.equal(ran.status, 0, ran.stderr);
+  assert.match(JSON.parse(ran.stdout || "{}").hookSpecificOutput?.permissionDecisionReason ?? "", /^Only the user merges a CristianCrane\/\.dotfiles PR: no message the user typed in this session asks to merge #13/);
 });
 
 // a dictated settings change (the change skill's rule): its one-line
@@ -1078,6 +1200,17 @@ describe("prune-merged", () => {
     assert.deepEqual([worktreeNames(main), branches(main, "refs/heads/"), remote(main)], before);
   });
 
+  // by hand, a repo whose origin is off GitHub: it names the origin it read
+  test("by hand, an origin off GitHub: says so, naming it, and removes nothing", () => {
+    const { repo } = scratchRepo();
+    const elsewhere = join(scratchDir(), "elsewhere.git");
+    git(repo, "remote", "add", "origin", elsewhere);
+    const ran = runHook("prune-merged", undefined, { cwd: repo });
+    assert.equal(ran.status, 1);
+    assert.equal(ran.stderr, `prune-merged: origin isn't on GitHub (${elsewhere})\n`);
+    assert.equal(git(repo, "branch", "--show-current"), BRANCH);
+  });
+
   test("--hook in the main checkout: one line on what went and what merged stayed", () => {
     const { dir, main, bin } = scratch();
     // a process in a worktree used just now: an agent at work
@@ -1110,8 +1243,8 @@ describe("prune-merged", () => {
     assert.equal(byHand.status, 1);
     assert.match(byHand.stderr, /^prune-merged: error connecting to api\.github\.com$/m);
   });
-  // a branch brought into main with no PR (the dotfiles' own way, round 1
-  // F8) goes like a merged one; an unmerged worktree moved by `mv` keeps
+  // a branch brought into main with no PR (a repo whose changes land on
+  // main, round 1 F8) goes like a merged one; an unmerged worktree moved by `mv` keeps
   // its entry, so `git worktree repair` can still find it (round 1 F7)
   test("a branch in main with no PR goes; another worktree's entry stays", () => {
     const { dir, main, bin } = scratch(["live"]);
@@ -1184,6 +1317,209 @@ describe("prune-merged", () => {
     assert.deepEqual(readdirSync(trash), []);
     assert.match(ran.stdout, /^ {2}\.\.\/base \(detached\): locked$/m);
     assert.equal(git(base, "status", "--porcelain"), "");
+  });
+});
+
+// catch-up.mjs at a session's start, in a scratch HOME whose .dotfiles
+// links to a clone of a bare origin (as ~/.dotfiles links to the main
+// checkout), never the real one; a second clone pushes, standing for a PR
+// merged on GitHub
+describe("catch-up", () => {
+  // the live clone, its HOME, and `merged(file, text)`, which lands a
+  // commit on origin's main from elsewhere; with `dotfiles` false, HOME
+  // has no .dotfiles
+  const live = ({ dotfiles = true } = {}) => {
+    const dir = scratchDir();
+    const origin = join(dir, "origin.git");
+    git(dir, "init", "-q", "--bare", "-b", "main", origin);
+    const repo = join(dir, "live");
+    git(dir, "clone", "-q", origin, repo);
+    commit(repo, "a.txt", "a\n");
+    commit(repo, "b.txt", "b\n");
+    git(repo, "push", "-q", "origin", "main");
+    const other = join(dir, "other");
+    git(dir, "clone", "-q", origin, other);
+    const home = join(dir, "home");
+    mkdirSync(home);
+    if (dotfiles) symlinkSync(repo, join(home, ".dotfiles"));
+    const merged = (file, text) => {
+      if (text === null) git(other, "rm", "-q", file);
+      else writeFileSync(join(other, file), text);
+      git(other, "add", "-A");
+      git(other, "commit", "-qm", file);
+      git(other, "push", "-q", "origin", "main");
+      return git(other, "rev-parse", "HEAD");
+    };
+    return { dir, origin, repo, home, merged };
+  };
+  // the hook's run from a session in another folder; what it said (its
+  // systemMessage, or "")
+  const start = ({ home }) => {
+    const ran = runHook("catch-up", { hook_event_name: "SessionStart", session_id: "s", cwd: scratchDir(), source: "startup" }, {
+      env: { ...process.env, HOME: home },
+    });
+    assert.equal(ran.status, 0, ran.stderr);
+    return ran.stdout.trim() ? JSON.parse(ran.stdout).systemMessage : "";
+  };
+  const head = (repo) => git(repo, "rev-parse", "HEAD");
+  const status = (repo) => git(repo, "status", "--porcelain");
+  const read = (repo, file) => readFileSync(join(repo, file), "utf8");
+  const LEFT = (n) => new RegExp(String.raw`^~/\.dotfiles is ${n} commits? behind origin/main and was left as it is: `);
+
+  test("behind: fast-forwards, and says so in one line; nothing to do: silent", () => {
+    const state = live();
+    const was = head(state.repo);
+    state.merged("b.txt", "b2\n");
+    const tip = state.merged("c.txt", "c\n");
+    assert.equal(start(state), `~/.dotfiles caught up with origin/main: 2 commits, ${was.slice(0, 7)}..${tip.slice(0, 7)}.`);
+    assert.equal(head(state.repo), tip);
+    assert.equal(read(state.repo, "c.txt"), "c\n");
+    assert.equal(status(state.repo), "");
+    assert.equal(start(state), "", "nothing more to do");
+  });
+
+  // the catch-up makes home/.claude live, but a change to the Nix config
+  // waits for `rebuild`, which the user may run long after the merge on
+  // GitHub (review round 3 F9): the line names it when the range touches a
+  // .nix file or flake.lock, and not otherwise
+  test("a range touching the Nix config names `rebuild`; one touching only home/.claude doesn't", () => {
+    const nix = live();
+    const was = head(nix.repo);
+    nix.merged("home.nix", "{ }\n");
+    const tip = nix.merged("flake.lock", "{}\n");
+    assert.equal(start(nix), `~/.dotfiles caught up with origin/main: 2 commits, ${was.slice(0, 7)}..${tip.slice(0, 7)}; flake.lock, home.nix changed: run \`rebuild\` to apply them.`);
+    const claude = live();
+    const before = head(claude.repo);
+    mkdirSync(join(claude.dir, "other/home/.claude"), { recursive: true });
+    const after = claude.merged("home/.claude/CLAUDE.md", "rules\n");
+    assert.equal(start(claude), `~/.dotfiles caught up with origin/main: 1 commit, ${before.slice(0, 7)}..${after.slice(0, 7)}.`);
+  });
+
+  // the user's own save (/model) that a PR then landed: git refuses a
+  // fast-forward over a dirty file even when it equals the incoming one
+  test("a dirty file equal to origin's, an untracked one origin adds, and one origin deletes: staged, then fast-forwarded", () => {
+    const state = live();
+    state.merged("b.txt", "b2\n");
+    state.merged("new.txt", "new\n");
+    const tip = state.merged("a.txt", null);
+    writeFileSync(join(state.repo, "b.txt"), "b2\n");
+    writeFileSync(join(state.repo, "new.txt"), "new\n");
+    rmSync(join(state.repo, "a.txt"));
+    writeFileSync(join(state.repo, "mine.txt"), "mine\n"); // the user's, which origin knows nothing of
+    assert.match(start(state), /^~\/\.dotfiles caught up with origin\/main: 3 commits, \w{7}\.\.\w{7} \(3 uncommitted files there already matched it\)\.$/);
+    assert.equal(head(state.repo), tip);
+    assert.equal(status(state.repo), "?? mine.txt");
+  });
+
+  // one file in the way leaves all of it: nothing staged, nothing moved
+  test("a dirty file that differs from origin's: everything left as it was, and named", () => {
+    const state = live();
+    state.merged("a.txt", "a2\n");
+    state.merged("b.txt", "b2\n");
+    const was = head(state.repo);
+    writeFileSync(join(state.repo, "a.txt"), "a2\n"); // equal
+    writeFileSync(join(state.repo, "b.txt"), "mine\n"); // differs
+    assert.match(start(state), new RegExp(LEFT(2).source + "b\\.txt changed here and on origin/main differently"));
+    assert.equal(head(state.repo), was);
+    assert.equal(read(state.repo, "b.txt"), "mine\n");
+    assert.equal(git(state.repo, "diff", "--cached", "--name-only"), "", "nothing staged");
+    assert.equal(git(state.repo, "diff", "--name-only"), "a.txt\nb.txt");
+  });
+
+  // staging the working file would lose a third version, staged on purpose
+  test("a staged version that's neither HEAD's nor origin's: left as it was, and named", () => {
+    const state = live();
+    state.merged("b.txt", "b2\n");
+    writeFileSync(join(state.repo, "b.txt"), "staged\n");
+    git(state.repo, "add", "b.txt");
+    writeFileSync(join(state.repo, "b.txt"), "b2\n");
+    assert.match(start(state), new RegExp(LEFT(1).source + "b\\.txt changed here"));
+    assert.equal(git(state.repo, "show", ":b.txt"), "staged");
+    // staged, its working copy then put back as HEAD has it
+    writeFileSync(join(state.repo, "b.txt"), "b\n");
+    assert.match(start(state), new RegExp(LEFT(1).source + "b\\.txt changed here"));
+    assert.equal(git(state.repo, "show", ":b.txt"), "staged");
+  });
+
+  test("off main, or diverged: left as it is, and named", () => {
+    const off = live();
+    git(off.repo, "switch", "-qc", "other");
+    const was = head(off.repo);
+    off.merged("c.txt", "c\n");
+    assert.match(start(off), new RegExp(LEFT(1).source + "it's on other, not main"));
+    assert.equal(head(off.repo), was);
+    git(off.repo, "switch", "-q", "--detach");
+    assert.match(start(off), /it's on a detached HEAD, not main/);
+
+    const diverged = live();
+    commit(diverged.repo, "d.txt", "d\n");
+    const mine = head(diverged.repo);
+    diverged.merged("c.txt", "c\n");
+    assert.match(start(diverged), new RegExp(LEFT(1).source + "it has 1 commit origin/main lacks"));
+    assert.equal(head(diverged.repo), mine);
+  });
+
+  test("no ~/.dotfiles: silent", () => {
+    const state = live({ dotfiles: false });
+    state.merged("c.txt", "c\n");
+    assert.equal(start(state), "");
+  });
+
+  // offline (or a fetch beside prune-merged's): it catches up to what an
+  // earlier fetch brought, as far as that goes
+  test("a fetch that fails: catches up to what was fetched before", () => {
+    const state = live();
+    const tip = state.merged("c.txt", "c\n");
+    git(state.repo, "fetch", "-q", "origin");
+    renameSync(state.origin, `${state.origin}-gone`);
+    assert.match(start(state), /^~\/\.dotfiles caught up with origin\/main: 1 commit, /);
+    assert.equal(head(state.repo), tip);
+  });
+
+  // two session starts at once: the second leaves it to the first; a dead
+  // run's lock is taken over
+  test("one run at a time: a live run's lock holds, a dead run's is taken over", () => {
+    const state = live();
+    const was = head(state.repo);
+    state.merged("c.txt", "c\n");
+    const held = join(state.repo, ".git/claude/catch-up.lock");
+    mkdirSync(held, { recursive: true });
+    writeFileSync(join(held, "pid"), String(process.pid));
+    assert.equal(start(state), "");
+    assert.equal(head(state.repo), was);
+    writeFileSync(join(held, "pid"), String(spawnSync("true").pid));
+    assert.match(start(state), /caught up/);
+    assert.ok(!existsSync(held));
+  });
+
+  // what a merge killed partway leaves (Claude Code kills an async hook at
+  // its timeout): git's index.lock and a tree half new, or (killed after
+  // the index was written, before the ref moved) the new tree and index
+  // with HEAD unmoved. The first is named and left; once the lock is gone,
+  // and in the second, the next run finishes the fast-forward
+  test("a merge cut short: a stale index.lock is named and left; the next run finishes it", () => {
+    const locked = live();
+    const was = head(locked.repo);
+    const tip = locked.merged("b.txt", "b2\n");
+    git(locked.repo, "fetch", "-q", "origin");
+    writeFileSync(join(locked.repo, "b.txt"), "b2\n"); // written before the kill
+    const lockFile = join(locked.repo, ".git/index.lock");
+    writeFileSync(lockFile, "");
+    assert.match(start(locked), new RegExp(LEFT(1).source + `${lockFile.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} is there`));
+    assert.ok(existsSync(lockFile));
+    assert.equal(head(locked.repo), was);
+    rmSync(lockFile);
+    assert.match(start(locked), /caught up/);
+    assert.equal(head(locked.repo), tip);
+    assert.equal(status(locked.repo), "");
+
+    const indexed = live();
+    const tip2 = indexed.merged("c.txt", "c\n");
+    git(indexed.repo, "fetch", "-q", "origin");
+    git(indexed.repo, "read-tree", "-m", "-u", "HEAD", "origin/main");
+    assert.match(start(indexed), /caught up/);
+    assert.equal(head(indexed.repo), tip2);
+    assert.equal(status(indexed.repo), "");
   });
 });
 
@@ -1736,10 +2072,8 @@ describe("settings-format", () => {
 });
 
 // the repo's .githooks, in throwaway repos: pre-commit runs settings-format
-// on a staged home/.claude/settings.json (against the real `claude`),
-// post-commit re-stages the file after a `git commit -- <paths>`, and
-// pre-push lets a push to main through only when the commit pushed is the
-// one ~/.dotfiles has checked out on main
+// on a staged home/.claude/settings.json (against the real `claude`), and
+// post-commit re-stages the file after a `git commit -- <paths>`
 describe("git hooks", () => {
   const SETTINGS = "home/.claude/settings.json";
   // a repo with this branch's git hooks and formatter, core.hooksPath set
@@ -1898,129 +2232,5 @@ describe("git hooks", () => {
     assert.match(ran.stderr, /^settings-format: home\/\.claude\/settings\.json: not valid JSON/m);
     assert.match(ran.stderr, /^pre-commit: .* so nothing was committed$/m);
     assert.equal(git(repo, "rev-list", "--count", "HEAD"), "1");
-  });
-
-  // against a bare origin and a HOME whose .dotfiles is a symlink to the
-  // repo, as ~/.dotfiles is to the main checkout: never the real one
-  describe("pre-push", () => {
-    // a hooked repo on main, its main pushed to a bare origin, and a HOME
-    // whose .dotfiles links to it (none when `dotfiles` is false);
-    // `push(cwd, ...args)` runs `git push origin <args>` with that HOME
-    // (its spawnSync result), `remote(ref)` is the ref's sha on origin
-    const landing = ({ dotfiles = true } = {}) => {
-      const repo = hookedRepo();
-      const dir = scratchDir();
-      const home = join(dir, "home");
-      mkdirSync(home);
-      if (dotfiles) symlinkSync(repo, join(home, ".dotfiles"));
-      const origin = join(dir, "origin.git");
-      git(dir, "init", "-q", "--bare", "-b", "main", origin);
-      git(repo, "remote", "add", "origin", origin);
-      const env = { ...process.env, HOME: home };
-      const push = (cwd, ...args) => spawnSync("git", ["push", "-q", "origin", ...args], { cwd, encoding: "utf8", env });
-      const first = push(repo, "main");
-      assert.equal(first.status, 0, first.stderr);
-      return { repo, env, push, remote: (ref = "main") => git(origin, "rev-parse", ref) };
-    };
-    // a linked worktree of `repo` on a new branch `name`, one commit past
-    // main, on a detached HEAD there when `detach`; its path and that sha
-    const worktree = (repo, name, { detach = false } = {}) => {
-      const tree = join(scratchDir(), name);
-      git(repo, "worktree", "add", "-qb", name, tree);
-      commit(tree, `${name}.txt`, `${name}\n`);
-      if (detach) git(tree, "switch", "-q", "--detach");
-      return { tree, sha: git(tree, "rev-parse", "HEAD") };
-    };
-    // the refusal's landing command, on a line of its own; group 2 is the sha
-    const LANDING = /^ {2}(git -C ~\/\.dotfiles merge --ff-only (\w+) && git -C ~\/\.dotfiles push origin main)$/m;
-    // refused: pre-push's reason, and origin's main where it was
-    const refused = (ran, before, remote) => {
-      assert.equal(ran.status, 1, ran.stderr);
-      assert.match(ran.stderr, /^pre-push: a push to main goes through only from ~\/\.dotfiles on main/m);
-      assert.equal(remote(), before);
-    };
-
-    test("refuses a worktree's `push origin HEAD:main`, naming the sha and the command that lands it", () => {
-      const { repo, push, remote } = landing();
-      const before = remote();
-      const { tree, sha } = worktree(repo, "wt");
-      const ran = push(tree, "HEAD:main");
-      refused(ran, before, remote);
-      assert.equal(ran.stderr.match(LANDING)?.[2], sha, ran.stderr);
-      assert.equal(git(repo, "rev-parse", "HEAD"), before);
-    });
-
-    test("the refusal's command, run as printed, lands the commit: origin's main and the main checkout both end at it", () => {
-      const { repo, env, push, remote } = landing();
-      const { tree, sha } = worktree(repo, "wt");
-      const [, command] = push(tree, "HEAD:main").stderr.match(LANDING);
-      const ran = spawnSync("sh", ["-c", command], { cwd: tree, encoding: "utf8", env });
-      assert.equal(ran.status, 0, ran.stderr);
-      assert.equal(remote(), sha);
-      assert.equal(git(repo, "symbolic-ref", "--short", "HEAD"), "main");
-      assert.equal(git(repo, "rev-parse", "HEAD"), sha);
-      assert.equal(readFileSync(join(repo, "wt.txt"), "utf8"), "wt\n");
-    });
-
-    test("lets `push origin main` through from the main checkout on main", () => {
-      const { repo, push, remote } = landing();
-      commit(repo, "c.txt", "c\n");
-      const ran = push(repo, "main");
-      assert.equal(ran.status, 0, ran.stderr);
-      assert.equal(remote(), git(repo, "rev-parse", "HEAD"));
-    });
-
-    // main moved to the checked-out commit, so only "on main" can hold these
-    test("from the main checkout on another branch, refuses `push origin main` and `push origin <branch>:main`, saying ~/.dotfiles isn't on main", () => {
-      const { repo, push, remote } = landing();
-      const before = remote();
-      git(repo, "switch", "-qc", "other");
-      commit(repo, "o.txt", "o\n");
-      git(repo, "branch", "-f", "main", "other");
-      for (const spec of ["main", "other:main"]) {
-        const ran = push(repo, spec);
-        refused(ran, before, remote);
-        assert.match(ran.stderr, /~\/\.dotfiles isn't on main \(it's on other\)/, spec);
-        assert.doesNotMatch(ran.stderr, LANDING, spec);
-      }
-    });
-
-    test("refuses a detached HEAD worktree's `push origin HEAD:main`, naming its sha", () => {
-      const { repo, push, remote } = landing();
-      const before = remote();
-      const { tree, sha } = worktree(repo, "wt", { detach: true });
-      const ran = push(tree, "HEAD:main");
-      refused(ran, before, remote);
-      assert.equal(ran.stderr.match(LANDING)?.[2], sha, ran.stderr);
-    });
-
-    test("lets a worktree push its own branch", () => {
-      const { repo, push, remote } = landing();
-      const { tree, sha } = worktree(repo, "wt");
-      const ran = push(tree, "wt");
-      assert.equal(ran.status, 0, ran.stderr);
-      assert.equal(remote("wt"), sha);
-    });
-
-    // another machine, or a cloud session
-    test("lets a worktree's push to main through when HOME has no .dotfiles", () => {
-      const { repo, push, remote } = landing({ dotfiles: false });
-      const { tree, sha } = worktree(repo, "wt");
-      const ran = push(tree, "HEAD:main");
-      assert.equal(ran.status, 0, ran.stderr);
-      assert.equal(remote(), sha);
-    });
-
-    // main's deletion as a dry run: origin refuses to delete its HEAD
-    test("lets deletions through: a branch's, and main's", () => {
-      const { repo, push, remote } = landing();
-      const { tree } = worktree(repo, "wt");
-      assert.equal(push(tree, "wt").status, 0);
-      const ran = push(tree, "--delete", "wt");
-      assert.equal(ran.status, 0, ran.stderr);
-      assert.throws(() => remote("wt"));
-      const main = push(tree, "--dry-run", "--delete", "main");
-      assert.equal(main.status, 0, main.stderr);
-    });
   });
 });

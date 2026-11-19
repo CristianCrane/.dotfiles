@@ -8,7 +8,7 @@ A SessionStart hook (`home/.claude/hooks/usage.mjs`, `--hook`) says when a revie
 
 One agent runs it, started from the main session, and reports back in a few lines.
 
-1. **Work in a `git worktree` of the dotfiles, under the `change` skill**, as the dotfiles' CLAUDE.md says. The entry lands on main with no PR.
+1. **Work in a `git worktree` of the dotfiles, under the `change` skill**, as the dotfiles' CLAUDE.md says. The entry lands by PR, which the user merges.
 2. **Run `node ~/.claude/hooks/usage.mjs --week`.** It prints the 7 days before today beside the 7 before those, measured the same way every week; its header says which numbers are estimates. A week whose readings or PRs need a closer look: `--week --since <day>` for another week, `--since <day>` for each workstream from a day, the transcripts under `~/.claude/projects` (kept 30 days).
 3. **Set the week against the last entry.** For each measure that moved, find where the tokens went: the costliest workstreams, the cost by agent type, a day's table.
 4. **Name what to make more efficient,** each finding with its evidence: a number and where it came from.
