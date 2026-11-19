@@ -57,7 +57,7 @@
 // By hand:
 //
 //   node ~/.claude/hooks/usage.mjs --agent <id>             one workstream's Tokens line: its share of each window
-//   node ~/.claude/hooks/usage.mjs [--since <YYYY-MM-DD>]   each workstream and main session since then, in token counts (default: today)
+//   node ~/.claude/hooks/usage.mjs [--since <YYYY-MM-DD>]   each workstream and main session since then, in token counts and weighted (default: today)
 //   node ~/.claude/hooks/usage.mjs --week [--since <YYYY-MM-DD>]   the weekly review's measures: the 7 days from then beside the 7 before (default: the 7 days before today)
 //
 // A workstream is an agent with every agent it started in turn (its
@@ -358,12 +358,13 @@ const table = (day) => {
   const { agents, sessions, messages, forks, errors } = ledger();
   const from = new Date(`${day}T00:00`);
   const since = messages.filter((row) => new Date(row.at) >= from);
-  const rows = costliest(workstreams(since, { agents, sessions })).map(({ label, agents, rows }) => ({ label, agents: agents ? String(agents) : "", ...total(rows) }));
-  rows.push({ label: "total", agents: "", ...total(since) });
+  const rows = costliest(workstreams(since, { agents, sessions })).map(({ label, agents, rows, cost }) => ({ label, agents: agents ? String(agents) : "", cost, ...total(rows) }));
+  rows.push({ label: "total", agents: "", cost: weighed(since), ...total(since) });
   const fields = [
     ["", (row) => row.label.slice(0, 44)],
     ["turns", (row) => String(row.turns)],
     ...COUNTS.map((count) => [count.replace(/[A-Z]/, (c) => ` ${c.toLowerCase()}`), (row) => short(row[count])]),
+    ["weighted", (row) => short(row.cost)],
     ["agents", (row) => row.agents],
   ];
   const summaries = forks.filter((row) => new Date(row.at) >= from).length;

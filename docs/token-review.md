@@ -1,6 +1,6 @@
 # Token review: weekly measures and findings
 
-Where the plan's tokens went each week, against the week before, and what was done about it. One entry per week, newest first.
+Where the plan's tokens went each week, against the week before, whether 3 of the week's PRs used the `change` skill for real, and what was done about it. One entry per week, newest first.
 
 A SessionStart hook (`home/.claude/hooks/usage.mjs`, `--hook`) says when a review is due: at the first main session started 7 days after the newest entry's date. Claude then offers to run it, and an agent does, on a yes. The hook dates the review by the newest `### YYYY-MM-DD` heading below, so keep that shape.
 
@@ -12,8 +12,9 @@ One agent runs it, started from the main session, and reports back in a few line
 2. **Run `node ~/.claude/hooks/usage.mjs --week`.** It prints the 7 days before today beside the 7 before those, measured the same way every week; its header says which numbers are estimates. A week whose readings or PRs need a closer look: `--week --since <day>` for another week, `--since <day>` for each workstream from a day, the transcripts under `~/.claude/projects` (kept 30 days).
 3. **Set the week against the last entry.** For each measure that moved, find where the tokens went: the costliest workstreams, the cost by agent type, a day's table.
 4. **Name what to make more efficient,** each finding with its evidence: a number and where it came from.
-5. **Write the entry** at the top of the log: a `### <today>: <the week in a few words>` heading, the report's measures as a table (this week, the week before), a line on what changed since last week, and each finding with what was done about it: a dotfiles issue (`gh issue create -R CristianCrane/.dotfiles`), one per finding that needs work; a lesson (the `lessons` skill); or nothing, and why.
-6. **Report** the headline numbers, each finding with its issue link, and the agent's own Tokens line.
+5. **Grade 3 merged PRs' use of the `change` skill.** An earlier plan-first hook was obeyed on paper only (PRs #249 to #254 each said "Extended … nothing harder", and #254 waved a third copy through), so each week checks the skill isn't. Take the week's 3 PRs with the most changed files among those with a Change section, Dependabot's left out (`gh search prs --author=@me --merged-at <from>..<to> --json repository,number`, the search `--week` counts, then `gh pr view <n> --json files,body,commits`). For each, read its body's Change section, its commits, and its survey and reviews (`claude/` in the repo's git dir or in `.git/worktrees/<name>/`; pruned with a merged worktree, the reviewer's writes stay in the transcripts: `rg -l 'Change review: <branch>' ~/.claude/projects`). Ask: did it retire or fold a pattern, or add a copy, and with what reason? Is "Simpler shape considered" a real shape, weighed, or a strawman? Did each finding get a fix or a reason, or a dismissal? Count the rounds (plan review, rounds, rechecks) and the `[change]` and `[text]` findings. Grade it **real** (each answer real), **partly** (one hand-waved) or **filler** (the parts filled in on paper), with one quoted line as the evidence. Its tokens: the `weighted` column of `usage.mjs --since <the day its work began>`, summed over every workstream whose description names it (its build agent, any fix agent). A partly or filler grade, or the same miss in two PRs, is a finding, as in step 4.
+6. **Write the entry** at the top of the log: a `### <today>: <the week in a few words>` heading, the report's measures as a table (this week, the week before), a line on what changed since last week, the PR grades as a table (PR, grade, rounds, findings, weighted tokens, evidence), and each finding with what was done about it: a dotfiles issue (`gh issue create -R CristianCrane/.dotfiles`), one per finding that needs work; a lesson (the `lessons` skill); or nothing, and why.
+7. **Report** the headline numbers, the 3 grades, each finding with its issue link, and the agent's own Tokens line.
 
 ## Log
 
@@ -38,3 +39,17 @@ Measured by the trial review's own scripts from the transcripts, before `--week`
 - **Weighted tokens per merged PR nearly doubled,** 3.4M to 6.3M, confounded by the trial's larger PRs. The next lever is agents' cost per PR, not the window. Done: nothing yet; `--week` now gives the cost by agent type each week, to find it.
 - **Keep both** the 300k window and the "Few turns in the main session" bullet. Done: nothing to change.
 - **The ledger weighed every cache write at the 1-hour rate,** though agents write only the 5-minute cache (every day 11-09 to 11-18), so agents' cost read high beside main sessions'. Done: fixed with `--week` (the ledger keeps each message's split, and weighs a row without one by who wrote it).
+
+**Change skill, 5 PRs (graded 2026-11-19):** the first grading, of empire-cleaning's 5 newest merged PRs (#463 to #467, all 2026-11-17), before step 5 picked 3 by size. Review files from the worktrees left (#464, #467) and the transcripts (the other 3). Tokens from `--since 2026-11-17`, each PR's one build workstream; the look #467's user iterated on in the main session isn't in its number.
+
+| PR | Grade | Rounds | Findings (change / text) | Weighted | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| #467 drag outline | real | plan, 3, 2 rechecks | 5 / 2 | 3.5M | "Retired: two copies of a block's place on the time axis (PickSlot's and the Schedule's `place`), now `onAxis`" |
+| #466 astro bump | real | plan, 1 | 2 / 0 | 1.1M | "Simpler shape considered: a pnpm catalog plus a `vite` override …; dropped in the plan review" |
+| #465 stale save | real | plan, 1, 1 recheck | 4 / 2 | 3.9M | "Retired: two test copies that stripped `version` from what they read" |
+| #464 legal pages | real | plan, 2, 2 rechecks | 6 / 3 | 4.9M | "Retired: four hand-written reading columns, now `Prose.astro`" |
+| #463 prod Blueprint | partly | plan, 1, 1 recheck | 1 / 5 | 1.6M | "Extended: the static sites' security headers, 2 copies → 4, all held equal by the same test" |
+
+**What it showed:** no filler. Every finding, 18 change and 12 text, got a commit or a survey fix; none was waved off. #463's copies have a reason (Render can't share settings across Blueprints, quoted) and a test holding them equal, but nothing was folded and its generator option got one clause. The ratchet works because of the plan review: 14 of the 18 change findings came there, and all 5 plan reviews found copies or a simpler shape the author's survey missed (#465's survey called its pattern new, "0 copies"; #464's counted 1 reading column of 4). Where the reviewer didn't push, the author's own "Simpler shape considered" was thin (#464: "one page with both policies").
+
+**Finding:** the survey misses copies even though the skill says to search for them; the plan review catches each at a paragraph's cost. To tune, if it holds next week: the survey lists what it searched for each pattern, as the reviewer's `## Searched` does, so a missed search shows. Done: put to the user, not acted on yet.

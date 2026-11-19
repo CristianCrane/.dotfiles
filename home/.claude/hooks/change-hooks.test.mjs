@@ -1377,7 +1377,8 @@ describe("usage", () => {
   });
 
   // a resumed session's transcript repeats the earlier one's messages
-  test("--since: each workstream and main session, a message in two transcripts counted once", () => {
+  // a main session's cache write is weighed as 1-hour, an agent's as 5-minute: 116 = 700 × 0.1 + 10 × 2 + 5 × 5 + 1
+  test("--since: each workstream and main session, weighted, a message in two transcripts counted once", () => {
     const { run, agent, session } = scratch();
     session("s1", said("m1", 500));
     session("s2", [...said("m1", 500), ...said("m2", 700)]);
@@ -1386,11 +1387,11 @@ describe("usage", () => {
     const ran = run([]);
     assert.equal(ran.status, 0, ran.stderr);
     const table = ran.stdout.split("\n").map((line) => line.split(/\s{2,}/));
-    assert.deepEqual(table[1], ["", "turns", "cache read", "cache write", "output", "input", "agents"]);
-    assert.deepEqual(table[2], ["main s2 repo", "1", "700", "10", "5", "1", ""]);
-    assert.deepEqual(table[3], ["main s1 repo", "1", "500", "10", "5", "1", ""]);
-    assert.deepEqual(table[4], ["Fix issue 1", "2", "150", "20", "10", "2", "2"]);
-    assert.deepEqual(table[5], ["total", "4", "1k", "40", "20", "4", ""]);
+    assert.deepEqual(table[1], ["", "turns", "cache read", "cache write", "output", "input", "weighted", "agents"]);
+    assert.deepEqual(table[2], ["main s2 repo", "1", "700", "10", "5", "1", "116", ""]);
+    assert.deepEqual(table[3], ["main s1 repo", "1", "500", "10", "5", "1", "96", ""]);
+    assert.deepEqual(table[4], ["Fix issue 1", "2", "150", "20", "10", "2", "92", "2"]);
+    assert.deepEqual(table[5], ["total", "4", "1k", "40", "20", "4", "304", ""]);
     assert.match(run(["--since", "2999-01-01"]).stdout, /^total {2,}0 /m);
   });
 
