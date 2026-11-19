@@ -12,15 +12,45 @@
 // where every lesson went, and the review is still of the last commit.
 // A prototype branch's PR (lib's prototypeBranch) is turned down either
 // way: it skipped the reviews because it never merges.
+//
+// Only the user merges a PR of the dotfiles (DOTFILES; their CLAUDE.md):
+// `gh pr merge` on one goes through only naming the PR by its number
+// alone, from a checkout of it, and only when a message the user typed in
+// this session asks to merge that number. Another repo's merges go
+// through. What it can't hold: a message that negates the ask ("don't
+// merge #12"), and a merge by any other route (`gh api`, the web).
 import { existsSync, readFileSync } from "node:fs";
-import { argsOf, BOUNDARY, branchOf, deny, dirOf, hook, lines, masked, onBranch, prototypeBranch, REDIRECT, review, stateFile, unquote, workOf } from "./lib.mjs";
+import {
+  argsOf,
+  BOUNDARY,
+  branchOf,
+  deny,
+  dirOf,
+  githubOrigin,
+  has,
+  hook,
+  lines,
+  masked,
+  onBranch,
+  prototypeBranch,
+  REDIRECT,
+  review,
+  stateFile,
+  unquote,
+  userMessages,
+  WORD,
+  workOf,
+} from "./lib.mjs";
+
+// the repo whose PRs only the user merges
+const DOTFILES = "CristianCrane/.dotfiles";
 
 // where a command starts (not inside a message that mentions it), after
 // any VAR=value prefixes, with any gh flags before `pr`
 // (a VAR=value prefix's value may be quoted: in the masked text its quotes
 // hold blanks; a wrapper such as env, command or time runs gh all the same)
 const PR_STEP = new RegExp(
-  String.raw`(?:^|${BOUNDARY})\s*(?:(?:\w+=(?:"[^"]*"|'[^']*'|[^\s"'])*|env|command|time|nohup|exec)\s+)*gh\s+(?:-\S+(?:\s+[^-\s]\S*)?\s+)*pr\s+(create|ready)\b`,
+  String.raw`(?:^|${BOUNDARY})\s*(?:(?:\w+=(?:"[^"]*"|'[^']*'|[^\s"'])*|env|command|time|nohup|exec)\s+)*gh\s+(?:-\S+(?:\s+[^-\s]\S*)?\s+)*pr\s+(create|ready|merge)\b`,
   "g",
 );
 
@@ -240,11 +270,50 @@ const readyGate = (command, hidden, match, input) => {
   if (missing) return turnDown(missing, "ready");
 };
 
+// gh pr merge's flags that take a value, so the value is no PR
+const MERGE_VALUES = new Set(["-b", "--body", "-F", "--body-file", "-t", "--subject", "--match-head-commit", "-A", "--author-email"]);
+
+// gh pr merge on a dotfiles PR: one it can tell may be the dotfiles' (run
+// in a checkout of them, or a command naming them anywhere) is named one
+// way, by its number from a checkout of them, and merges only when the
+// user asked for that number in a message of their own
+const mergeGate = (command, hidden, match, input) => {
+  const cwd = dirOf(command, hidden, match.index, input.cwd);
+  const origin = githubOrigin(cwd);
+  const here = origin && `${origin.owner}/${origin.name}`.toLowerCase() === DOTFILES.toLowerCase();
+  if (!here && !command.toLowerCase().includes(DOTFILES.toLowerCase())) return;
+  const end = match.index + match[0].length;
+  const words = argsOf(hidden, end).replace(new RegExp(REDIRECT, "g"), " ").match(WORD) ?? [];
+  const named = [];
+  for (let at = 0; at < words.length; at++)
+    if (MERGE_VALUES.has(words[at])) at++;
+    else if (!words[at].startsWith("-")) named.push(words[at]);
+  const elsewhere = /gh\s+-/.test(hidden.slice(match.index, end)) || /\bGH_(?:REPO|HOST)\b/.test(command) || has(words, "-R", "--repo=");
+  if (!here || elsewhere || named.length !== 1 || !/^\d+$/.test(named[0]))
+    return turnDown(
+      `Run \`gh pr merge <number>\` from a checkout of ${DOTFILES}, the PR named by its number alone (no branch, URL, -R, --repo or GH_REPO): only the user merges its PRs, and the gate checks that they asked to merge that number.`,
+      "merge",
+    );
+  const number = named[0];
+  const asked = new RegExp(String.raw`(?<![\w/.-])#?${number}(?!\.?\w)`);
+  let messages = [];
+  try {
+    messages = userMessages(input.transcript_path);
+  } catch {}
+  if (!messages.some((text) => /\bmerge\b/i.test(text) && asked.test(text)))
+    return turnDown(
+      `Only the user merges a ${DOTFILES} PR: no message the user typed in this session asks to merge #${number} (a relay or your own words don't count). Leave it for them to merge on GitHub, or merge it once they ask for #${number} by its number.`,
+      "merge",
+    );
+};
+
+const GATES = { create: createGate, ready: readyGate, merge: mergeGate };
+
 hook((input) => {
   const command = input.tool_input?.command ?? "";
   const hidden = masked(command);
   for (const step of hidden.matchAll(PR_STEP)) {
-    const gate = step[1] === "create" ? createGate : readyGate;
+    const gate = GATES[step[1]];
     const turned = gate(command, hidden, step, input);
     if (turned) return turned;
   }

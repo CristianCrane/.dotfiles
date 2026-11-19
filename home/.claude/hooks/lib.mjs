@@ -2,7 +2,9 @@
 //
 // What the change hooks share: git, and the survey, plan review and review
 // files the `change` skill writes into the git dir (never committed, kept
-// per worktree): one set per branch, and on main one per change.
+// per worktree): one set per branch. On main, a checkout whose origin is
+// on GitHub takes no edits (a change reaches main by PR); one with none
+// keeps one set per session there.
 //
 // A gate that must know what a command acts on (which PR) has it named one
 // way and turns every other way down, saying how to run it: reading each
@@ -259,28 +261,32 @@ export const branchOf = (cwd) => git(cwd, "rev-parse", "--abbrev-ref", "HEAD");
 // on its own branch with the full flow. So it skips the survey, plan
 // review and review (workOf), and its PR is turned down (review-gate).
 // What it can't hold: a prototype merged into the default branch with no
-// PR, which in a repo whose changes go straight to main (the dotfiles) is
-// the usual route; no gate watches a merge, and the dotfiles' pre-push
-// hook checks that the commit pushed to main is ~/.dotfiles's, not what it
-// holds, so there only the rule's text holds it.
+// PR, the usual route in a repo with no GitHub origin; no gate watches a
+// merge, so there only the rule's text holds it.
 export const prototypeBranch = (branch) => /^prototype-/.test(branch);
 
+// what a default branch is called
+const DEFAULT_BRANCHES = ["main", "master"];
+
 // the branch being worked on, and the name its files go by: the branch,
-// or on main one change's: the session, and the commit where HEAD meets
-// origin (7 characters of it, a length that never grows). That commit
-// holds while the change's commits are unpushed and moves once they land,
-// so the next change's first edit needs a new survey (without it, a
-// session's later changes rode its first one's survey). It moves too when
-// HEAD takes in origin's newer work (a pull, a merge, a rebase): then move
-// the change's files to the path the turn-down names. With no origin,
-// the session alone. null on a detached HEAD (a rebase, a bisect) and on
-// a prototype branch, neither of which is gated
+// or on main the session's (main takes edits only with no GitHub origin:
+// beforeEdit). null on a detached HEAD (a rebase, a bisect) and on a
+// prototype branch, neither of which is gated
 export const workOf = (cwd, input) => {
   const branch = branchOf(cwd);
   if (branch === "HEAD" || prototypeBranch(branch)) return null;
-  if (!["main", "master"].includes(branch) || !input.session_id) return { branch, key: branch };
-  const start = originBase(cwd);
-  return { branch, key: [branch, input.session_id, start?.slice(0, 7)].filter(Boolean).join("-") };
+  if (!DEFAULT_BRANCHES.includes(branch) || !input.session_id) return { branch, key: branch };
+  return { branch, key: `${branch}-${input.session_id}` };
+};
+
+// the GitHub repo origin's URL names, as written (before any insteadOf), as
+// { owner, name }; null with no origin, one off GitHub, or no checkout
+export const githubOrigin = (cwd) => {
+  try {
+    return githubRepo(git(cwd, "config", "--get", "remote.origin.url"));
+  } catch {
+    return null;
+  }
 };
 
 export const stateFile = (cwd, kind, key) => {
@@ -380,21 +386,24 @@ const leaves = (value, path = "", into = {}) => {
   return into;
 };
 
-// whether the user typed `quote` in this session
-const userTyped = (transcript, quote) => {
-  const wanted = flat(quote);
-  return lines(readFileSync(transcript, "utf8")).some((line) => {
+// the messages the user typed in this session, each's text with its
+// whitespace runs as one space: the transcript's `origin.kind: "human"`
+// entries, never an agent's relay, a tool result or a task notification
+// (a subagent's hook input carries the main session's transcript_path)
+export const userMessages = (transcript) =>
+  lines(readFileSync(transcript, "utf8")).flatMap((line) => {
     try {
       const entry = JSON.parse(line);
-      if (entry.type !== "user" || entry.isMeta || entry.origin?.kind !== "human") return false;
+      if (entry.type !== "user" || entry.isMeta || entry.origin?.kind !== "human") return [];
       const content = entry.message?.content;
-      const text = typeof content === "string" ? content : (content ?? []).map((part) => (part.type === "text" ? part.text : "")).join(" ");
-      return flat(text).includes(wanted);
+      return [flat(typeof content === "string" ? content : (content ?? []).map((part) => (part.type === "text" ? part.text : "")).join(" "))];
     } catch {
-      return false;
+      return [];
     }
   });
-};
+
+// whether the user typed `quote` in this session
+const userTyped = (transcript, quote) => userMessages(transcript).some((text) => text.includes(flat(quote)));
 
 // null when the survey isn't dictated; else { holds: true }, or { why }:
 // the first limit the change is past. `pending` is the edit about to be
@@ -444,8 +453,18 @@ export const dictatedHolds = (cwd, work, input, pending) => {
 };
 
 // what an edit waits for: the survey, then the plan review (unless the
-// change is dictated and holds); `missing` says the first one not done yet
+// change is dictated and holds); `missing` says the first one not done yet.
+// On main in a checkout whose origin is on GitHub no survey is enough: a
+// change there reaches main by PR (`branchFirst`), and edits made on main
+// would leave the checkout diverged from it
 export const beforeEdit = (cwd, work, input = {}, pending = null) => {
+  const github = DEFAULT_BRANCHES.includes(work.branch) && githubOrigin(cwd);
+  if (github)
+    return {
+      survey: { ok: false },
+      branchFirst: true,
+      missing: `branch first: ${work.branch} takes no edits in a checkout whose origin is on GitHub (${github.owner}/${github.name}), where a change reaches ${work.branch} by PR; make a worktree off origin/${work.branch} (\`git worktree add -b <name> <path> origin/${work.branch}\`), work there, and open a PR from it, as the \`change\` skill says`,
+    };
   const found = survey(cwd, work.key);
   if (!found.ok)
     return {

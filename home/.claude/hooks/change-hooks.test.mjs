@@ -4,15 +4,15 @@
 // <hook>.mjs`, the tool call's JSON on stdin, with the input fields
 // MORE_INPUT adds, in a scratch repo), and below them plain tests of
 // scratch-gate at a subagent's start, reviewer-gate's other callers, the
-// survey gate on main (one survey per change), a dictated settings
-// change, a prototype branch, lib's cwdFor and
+// survey gate on main (branch first where origin is on GitHub),
+// review-gate's merge rule, a dictated settings change, a prototype branch, lib's cwdFor and
 // substitutions, how copy.mjs and sync.mjs register a repo's copy, the
 // scripts' flags, prune-merged (the SessionStart hook that removes merged
 // work), usage (the ledger of tokens spent, its reports, and the
 // SessionStart check that the weekly review is due), main-session (the
 // main session's SessionStart message), settings-format, and the repo's
-// .githooks (pre-commit, which runs settings-format, post-commit and
-// pre-push). Run from the repo root:
+// .githooks (pre-commit, which runs settings-format, and post-commit). Run
+// from the repo root:
 //
 //   node --test 'home/.claude/hooks/*.test.mjs'
 //
@@ -737,55 +737,109 @@ test("reviewer-gate: other callers' calls through", () => {
   }
 });
 
-// on main, a survey covers one change: its files are keyed by the session
-// and where HEAD meets origin, so they hold through the change's unpushed
-// commits and a fetch of others' work, and a pushed change's next edit
-// needs a new survey (the old gate let it ride the first one's: red on it).
-// With no origin, the session alone, as before
-test("survey-gate on main: one survey per change, until it's pushed", () => {
-  const edit = (repo) => {
-    const ran = runHook("survey-gate", {
-      tool_input: { file_path: join(repo, "b.txt"), content: "x\n" },
-      cwd: repo,
-      session_id: "s",
-    });
-    return ran.stdout.trim() ? JSON.parse(ran.stdout).hookSpecificOutput.permissionDecisionReason : null;
+// on main, a checkout whose origin is on GitHub takes no edits: a change
+// there reaches main by PR, so the gate says to branch first, whatever
+// survey there is (the old gate let a surveyed change through on main:
+// red on it), and change-check says so too. With no origin, or one off
+// GitHub, main's survey is the session's, as before
+test("survey-gate on main: branch first where origin is on GitHub; elsewhere the session's survey", () => {
+  const run = (hook, repo) => {
+    const ran = runHook(hook, { tool_input: { file_path: join(repo, "b.txt"), content: "x\n" }, cwd: repo, session_id: "s" });
+    assert.equal(ran.status, 0, ran.stderr);
+    return ran.stdout.trim() ? JSON.parse(ran.stdout) : null;
   };
-  // main with a reviewed survey for the change about to start
-  const started = ({ origin = true } = {}) => {
+  const edit = (repo) => run("survey-gate", repo)?.hookSpecificOutput.permissionDecisionReason ?? null;
+  const onMain = () => {
     const repo = scratchDir();
     git(repo, "init", "-qb", "main");
     commit(repo, "b.txt", "b\n");
-    const bare = origin && withOrigin(repo);
+    return repo;
+  };
+  // a reviewed survey for the work checked out
+  const surveyed = (repo) => {
     const { key } = workOf(repo, { session_id: "s" });
     writeFileSync(stateFile(repo, "survey", key), "Change: b.\nFiles: b.txt\n");
-    writeFileSync(stateFile(repo, "plan-review", key), "# Change review: main, plan\n");
-    return { repo, bare };
+    writeFileSync(stateFile(repo, "plan-review", key), "# Change review: plan\n");
   };
+  const BRANCH_FIRST =
+    /^This edit is turned down: branch first: main takes no edits in a checkout whose origin is on GitHub \(o\/r\), where a change reaches main by PR; .*`git worktree add -b <name> <path> origin\/main`/;
 
-  const { repo: unpushed } = started();
-  commit(unpushed, "b.txt", "b2\n");
-  assert.equal(edit(unpushed), null, "a review round's fix, after the change's first commit");
+  const github = onMain();
+  withOrigin(github);
+  assert.match(edit(github) ?? "", BRANCH_FIRST, "no survey");
+  surveyed(github);
+  assert.match(edit(github) ?? "", BRANCH_FIRST, "a surveyed change on main");
+  writeFileSync(join(github, "b.txt"), "x\n");
+  assert.match(run("change-check", github)?.systemMessage ?? "", /^Branch main changes 1 files, but branch first: /);
+  git(github, "switch", "-qc", BRANCH);
+  assert.match(edit(github) ?? "", NO_SURVEY, "a branch takes the usual flow");
+  surveyed(github);
+  assert.equal(edit(github), null);
 
-  const { repo: fetched, bare } = started();
-  const other = join(scratchDir(), "other");
-  git(fetched, "clone", "-q", bare, other);
-  commit(other, "c.txt", "c\n");
-  git(other, "push", "-q", "origin", "main");
-  git(fetched, "fetch", "-q", "origin");
-  assert.equal(edit(fetched), null, "others' work fetched, not merged");
-
-  const { repo: landed } = started();
-  commit(landed, "b.txt", "b2\n");
-  git(landed, "push", "-q", "origin", "main");
-  const reason = edit(landed);
-  assert.notEqual(reason, null, "the next change rode the pushed one's survey");
-  assert.match(reason, new RegExp(`there is no survey for main: .* ${stateFile(landed, "survey", workOf(landed, { session_id: "s" }).key)}`));
-
-  const { repo: local } = started({ origin: false });
-  commit(local, "b.txt", "b2\n");
+  const local = onMain();
   assert.equal(workOf(local, { session_id: "s" }).key, "main-s");
+  assert.match(edit(local) ?? "", /there is no survey for main/);
+  surveyed(local);
   assert.equal(edit(local), null, "no origin: the session's survey, as before");
+
+  const elsewhere = onMain();
+  git(elsewhere, "remote", "add", "origin", join(scratchDir(), "elsewhere.git"));
+  surveyed(elsewhere);
+  assert.equal(edit(elsewhere), null, "an origin off GitHub: the same");
+});
+
+// review-gate's merge rule: in a checkout of CristianCrane/.dotfiles, `gh
+// pr merge` goes through only naming the PR by its number alone, and only
+// when a message the user typed in this session asks to merge that number
+// (the old gate let every merge through: red on it); another repo's
+// merges aren't its business
+test("review-gate: a dotfiles PR merges only when the user asked to merge that number", () => {
+  const { repo: dotfiles } = scratchRepo();
+  git(dotfiles, "remote", "add", "origin", "git@github.com:CristianCrane/.dotfiles.git");
+  const { repo: other } = scratchRepo();
+  git(other, "remote", "add", "origin", "https://github.com/o/r");
+  const transcript = join(scratchDir(), "t.jsonl");
+  const said = (...entries) => writeFileSync(transcript, entries.map((entry) => JSON.stringify(entry)).join("\n") + "\n");
+  const human = (content) => ({ type: "user", origin: { kind: "human" }, message: { role: "user", content } });
+  const merge = (cwd, command) => {
+    const ran = runHook("review-gate", { tool_input: { command }, cwd, session_id: "s", transcript_path: transcript });
+    assert.equal(ran.status, 0, ran.stderr);
+    return ran.stdout.trim() ? JSON.parse(ran.stdout).hookSpecificOutput.permissionDecisionReason : null;
+  };
+  const NOT_ASKED = (n) =>
+    new RegExp(String.raw`^Only the user merges a CristianCrane/\.dotfiles PR: no message the user typed in this session asks to merge #${n} \(a relay or your own words don't count\)`);
+  const ONE_WAY = /^Run `gh pr merge <number>` from a checkout of CristianCrane\/\.dotfiles, the PR named by its number alone/;
+
+  said(human("hi"), human("looks right, merge #12 please"), { type: "user", origin: { kind: "peer", from: "a1" }, isMeta: true, message: { content: "merge 13" } });
+  assert.equal(merge(dotfiles, "gh pr merge 12 --squash --delete-branch"), null);
+  assert.equal(merge(dotfiles, 'gh pr merge --squash -t "fix 13" 12'), null, "a number in the subject isn't the PR's");
+  assert.match(merge(dotfiles, "gh pr merge 13") ?? "", NOT_ASKED(13), "an agent's relay asked for 13");
+  assert.match(merge(dotfiles, "gh pr merge 1") ?? "", NOT_ASKED(1), "1 isn't 12");
+  assert.match(merge(dotfiles, "gh pr merge 2") ?? "", NOT_ASKED(2), "nor is 2");
+  for (const command of [
+    "gh pr merge",
+    "gh pr merge pr-flow",
+    "gh pr merge https://github.com/CristianCrane/.dotfiles/pull/12",
+    "gh pr merge -R CristianCrane/.dotfiles 12",
+    "gh pr merge --repo=CristianCrane/.dotfiles 12",
+    "gh pr merge 12 -Ro/r",
+    "gh -R CristianCrane/.dotfiles pr merge 12",
+    "GH_REPO=CristianCrane/.dotfiles gh pr merge 12",
+    "gh pr merge 12 13",
+  ])
+    assert.match(merge(dotfiles, command) ?? "", ONE_WAY, command);
+  // from another checkout: a command naming the dotfiles anywhere (it may be
+  // theirs, by a route the gate doesn't know), or cd-ing into one
+  assert.match(merge(other, "gh pr merge -R cristiancrane/.dotfiles 12") ?? "", ONE_WAY);
+  assert.match(merge(other, "gh pr merge -RCristianCrane/.dotfiles 12") ?? "", ONE_WAY);
+  assert.match(merge(other, 'gh pr merge 12 -t "for CristianCrane/.dotfiles"') ?? "", ONE_WAY);
+  assert.equal(merge(other, `cd ${dotfiles} && gh pr merge 12`), null);
+  assert.match(merge(other, `cd ${dotfiles} && gh pr merge 13`) ?? "", NOT_ASKED(13));
+  // another repo's merges, whatever the transcript
+  for (const command of ["gh pr merge", "gh pr merge 13 --squash", "gh pr merge -R o/r 13"]) assert.equal(merge(other, command), null, command);
+  // a message that names the number but asks no merge
+  said(human("12 looks fine"));
+  assert.match(merge(dotfiles, "gh pr merge 12") ?? "", NOT_ASKED(12));
 });
 
 // a dictated settings change (the change skill's rule): its one-line
@@ -1100,8 +1154,8 @@ describe("prune-merged", () => {
     assert.equal(byHand.status, 1);
     assert.match(byHand.stderr, /^prune-merged: error connecting to api\.github\.com$/m);
   });
-  // a branch brought into main with no PR (the dotfiles' own way, round 1
-  // F8) goes like a merged one; an unmerged worktree moved by `mv` keeps
+  // a branch brought into main with no PR (a repo whose changes land on
+  // main, round 1 F8) goes like a merged one; an unmerged worktree moved by `mv` keeps
   // its entry, so `git worktree repair` can still find it (round 1 F7)
   test("a branch in main with no PR goes; another worktree's entry stays", () => {
     const { dir, main, bin } = scratch(["live"]);
@@ -1626,10 +1680,8 @@ describe("settings-format", () => {
 });
 
 // the repo's .githooks, in throwaway repos: pre-commit runs settings-format
-// on a staged home/.claude/settings.json (against the real `claude`),
-// post-commit re-stages the file after a `git commit -- <paths>`, and
-// pre-push lets a push to main through only when the commit pushed is the
-// one ~/.dotfiles has checked out on main
+// on a staged home/.claude/settings.json (against the real `claude`), and
+// post-commit re-stages the file after a `git commit -- <paths>`
 describe("git hooks", () => {
   const SETTINGS = "home/.claude/settings.json";
   // a repo with this branch's git hooks and formatter, core.hooksPath set
@@ -1788,129 +1840,5 @@ describe("git hooks", () => {
     assert.match(ran.stderr, /^settings-format: home\/\.claude\/settings\.json: not valid JSON/m);
     assert.match(ran.stderr, /^pre-commit: .* so nothing was committed$/m);
     assert.equal(git(repo, "rev-list", "--count", "HEAD"), "1");
-  });
-
-  // against a bare origin and a HOME whose .dotfiles is a symlink to the
-  // repo, as ~/.dotfiles is to the main checkout: never the real one
-  describe("pre-push", () => {
-    // a hooked repo on main, its main pushed to a bare origin, and a HOME
-    // whose .dotfiles links to it (none when `dotfiles` is false);
-    // `push(cwd, ...args)` runs `git push origin <args>` with that HOME
-    // (its spawnSync result), `remote(ref)` is the ref's sha on origin
-    const landing = ({ dotfiles = true } = {}) => {
-      const repo = hookedRepo();
-      const dir = scratchDir();
-      const home = join(dir, "home");
-      mkdirSync(home);
-      if (dotfiles) symlinkSync(repo, join(home, ".dotfiles"));
-      const origin = join(dir, "origin.git");
-      git(dir, "init", "-q", "--bare", "-b", "main", origin);
-      git(repo, "remote", "add", "origin", origin);
-      const env = { ...process.env, HOME: home };
-      const push = (cwd, ...args) => spawnSync("git", ["push", "-q", "origin", ...args], { cwd, encoding: "utf8", env });
-      const first = push(repo, "main");
-      assert.equal(first.status, 0, first.stderr);
-      return { repo, env, push, remote: (ref = "main") => git(origin, "rev-parse", ref) };
-    };
-    // a linked worktree of `repo` on a new branch `name`, one commit past
-    // main, on a detached HEAD there when `detach`; its path and that sha
-    const worktree = (repo, name, { detach = false } = {}) => {
-      const tree = join(scratchDir(), name);
-      git(repo, "worktree", "add", "-qb", name, tree);
-      commit(tree, `${name}.txt`, `${name}\n`);
-      if (detach) git(tree, "switch", "-q", "--detach");
-      return { tree, sha: git(tree, "rev-parse", "HEAD") };
-    };
-    // the refusal's landing command, on a line of its own; group 2 is the sha
-    const LANDING = /^ {2}(git -C ~\/\.dotfiles merge --ff-only (\w+) && git -C ~\/\.dotfiles push origin main)$/m;
-    // refused: pre-push's reason, and origin's main where it was
-    const refused = (ran, before, remote) => {
-      assert.equal(ran.status, 1, ran.stderr);
-      assert.match(ran.stderr, /^pre-push: a push to main goes through only from ~\/\.dotfiles on main/m);
-      assert.equal(remote(), before);
-    };
-
-    test("refuses a worktree's `push origin HEAD:main`, naming the sha and the command that lands it", () => {
-      const { repo, push, remote } = landing();
-      const before = remote();
-      const { tree, sha } = worktree(repo, "wt");
-      const ran = push(tree, "HEAD:main");
-      refused(ran, before, remote);
-      assert.equal(ran.stderr.match(LANDING)?.[2], sha, ran.stderr);
-      assert.equal(git(repo, "rev-parse", "HEAD"), before);
-    });
-
-    test("the refusal's command, run as printed, lands the commit: origin's main and the main checkout both end at it", () => {
-      const { repo, env, push, remote } = landing();
-      const { tree, sha } = worktree(repo, "wt");
-      const [, command] = push(tree, "HEAD:main").stderr.match(LANDING);
-      const ran = spawnSync("sh", ["-c", command], { cwd: tree, encoding: "utf8", env });
-      assert.equal(ran.status, 0, ran.stderr);
-      assert.equal(remote(), sha);
-      assert.equal(git(repo, "symbolic-ref", "--short", "HEAD"), "main");
-      assert.equal(git(repo, "rev-parse", "HEAD"), sha);
-      assert.equal(readFileSync(join(repo, "wt.txt"), "utf8"), "wt\n");
-    });
-
-    test("lets `push origin main` through from the main checkout on main", () => {
-      const { repo, push, remote } = landing();
-      commit(repo, "c.txt", "c\n");
-      const ran = push(repo, "main");
-      assert.equal(ran.status, 0, ran.stderr);
-      assert.equal(remote(), git(repo, "rev-parse", "HEAD"));
-    });
-
-    // main moved to the checked-out commit, so only "on main" can hold these
-    test("from the main checkout on another branch, refuses `push origin main` and `push origin <branch>:main`, saying ~/.dotfiles isn't on main", () => {
-      const { repo, push, remote } = landing();
-      const before = remote();
-      git(repo, "switch", "-qc", "other");
-      commit(repo, "o.txt", "o\n");
-      git(repo, "branch", "-f", "main", "other");
-      for (const spec of ["main", "other:main"]) {
-        const ran = push(repo, spec);
-        refused(ran, before, remote);
-        assert.match(ran.stderr, /~\/\.dotfiles isn't on main \(it's on other\)/, spec);
-        assert.doesNotMatch(ran.stderr, LANDING, spec);
-      }
-    });
-
-    test("refuses a detached HEAD worktree's `push origin HEAD:main`, naming its sha", () => {
-      const { repo, push, remote } = landing();
-      const before = remote();
-      const { tree, sha } = worktree(repo, "wt", { detach: true });
-      const ran = push(tree, "HEAD:main");
-      refused(ran, before, remote);
-      assert.equal(ran.stderr.match(LANDING)?.[2], sha, ran.stderr);
-    });
-
-    test("lets a worktree push its own branch", () => {
-      const { repo, push, remote } = landing();
-      const { tree, sha } = worktree(repo, "wt");
-      const ran = push(tree, "wt");
-      assert.equal(ran.status, 0, ran.stderr);
-      assert.equal(remote("wt"), sha);
-    });
-
-    // another machine, or a cloud session
-    test("lets a worktree's push to main through when HOME has no .dotfiles", () => {
-      const { repo, push, remote } = landing({ dotfiles: false });
-      const { tree, sha } = worktree(repo, "wt");
-      const ran = push(tree, "HEAD:main");
-      assert.equal(ran.status, 0, ran.stderr);
-      assert.equal(remote(), sha);
-    });
-
-    // main's deletion as a dry run: origin refuses to delete its HEAD
-    test("lets deletions through: a branch's, and main's", () => {
-      const { repo, push, remote } = landing();
-      const { tree } = worktree(repo, "wt");
-      assert.equal(push(tree, "wt").status, 0);
-      const ran = push(tree, "--delete", "wt");
-      assert.equal(ran.status, 0, ran.stderr);
-      assert.throws(() => remote("wt"));
-      const main = push(tree, "--dry-run", "--delete", "main");
-      assert.equal(main.status, 0, main.stderr);
-    });
   });
 });

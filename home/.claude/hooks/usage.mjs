@@ -69,7 +69,7 @@
 // in every repo). Estimates: every weighted number (WEIGHTS below) and the
 // tokens per 1% of a window (the Tokens line's skews, below). Weighted per
 // merged PR is the week's whole spend over the PRs merged in it, so work
-// with no PR (the dotfiles, straight to main) and PRs merged a week after
+// with no PR (a repo with no GitHub origin) and PRs merged a week after
 // their work both move it.
 //
 // The Tokens line is an estimate, and says "about" at each number. The readings are the
