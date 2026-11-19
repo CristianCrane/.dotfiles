@@ -58,7 +58,11 @@ import { formatSettings } from "./settings-format.mjs";
 const HOOKS = dirname(fileURLToPath(import.meta.url));
 const BRANCH = "feature";
 
-// git, here and in the hooks, reads none of the machine's config
+// git, here and in the hooks, reads none of the machine's config but its
+// default excludes file, ~/.config/git/ignore (home.nix's
+// `programs.git.ignores`), which GIT_CONFIG_GLOBAL doesn't replace; the
+// F7 test sets its own core.excludesFile over it. (A GIT_CONFIG_COUNT entry
+// hiding it would outrank that repo config too.)
 Object.assign(process.env, {
   GIT_CONFIG_GLOBAL: "/dev/null",
   GIT_CONFIG_NOSYSTEM: "1",
