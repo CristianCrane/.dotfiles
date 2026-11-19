@@ -103,6 +103,10 @@ export const WORD = /(?:[^\s'"]+|'[^']*'|"(?:\\.|[^"\\])*")+/g;
 export const unquote = (word) =>
   word.replace(/'([^']*)'|"((?:\\.|[^"\\])*)"/g, (_, single, double) => single ?? double.replace(/\\(.)/g, "$1"));
 
+// a command's words that aren't flags (nor flag values, which this can't
+// tell apart)
+export const positional = (words) => words.filter((word) => !word.startsWith("-"));
+
 // whether any word is one of `flags`: a long one alone or, ending in `=`,
 // with its value; a one-letter one alone, among a cluster's letters
 // (`-nri`), or with its value attached (`-o/tmp/x`)
@@ -167,6 +171,17 @@ export const argsOf = (hidden, end) => {
   const stop = hidden.slice(end).search(new RegExp(BOUNDARY));
   return hidden.slice(end, stop < 0 ? undefined : end + stop);
 };
+
+// where a `gh … pr <verb>` command starts (not inside a message that
+// mentions it), after any VAR=value prefixes, with any gh flags before
+// `pr`; group 1 is the verb. Read in the masked text. (A VAR=value
+// prefix's value may be quoted: in the masked text its quotes hold blanks;
+// a wrapper such as env, command or time runs gh all the same)
+export const prStep = (...verbs) =>
+  new RegExp(
+    String.raw`(?:^|${BOUNDARY})\s*(?:(?:\w+=(?:"[^"]*"|'[^']*'|[^\s"'])*|env|command|time|nohup|exec)\s+)*gh\s+(?:-\S+(?:\s+[^-\s]\S*)?\s+)*pr\s+(${verbs.join("|")})\b`,
+    "g",
+  );
 
 // the folder a command runs in at `at`: the last `cd` before it, if any, found in the
 // masked command with its substitutions blanked too (so a `cd` in a

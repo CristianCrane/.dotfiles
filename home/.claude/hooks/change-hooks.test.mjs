@@ -87,6 +87,16 @@ const runHook = (name, input, { args = [], ...options } = {}) =>
     ...options,
   });
 
+// a fake gh, for a folder (`bin`, its own unless given) put first on
+// PATH: an sh script that logs each run's arguments, a line each, to
+// gh-args beside it, then runs `body`; that folder and log
+const fakeGh = (body, bin = scratchDir()) => {
+  mkdirSync(bin, { recursive: true });
+  const log = join(bin, "gh-args");
+  writeFileSync(join(bin, "gh"), `#!/bin/sh\necho "$*" >> "${log}"\n${body}\n`, { mode: 0o755 });
+  return { bin, log };
+};
+
 // a bare origin for `repo`, on main, reached by a github.com URL (as gh
 // and prune-merged see one), with main pushed; its path
 const withOrigin = (repo, dir = scratchDir()) => {
@@ -926,18 +936,16 @@ describe("prune-merged", () => {
   const sleepers = [];
   after(() => sleepers.forEach((sleeper) => sleeper.kill()));
 
-  // a fake gh in a folder of its own: the repo and its PRs, or, `down`, the
-  // error gh gives offline
-  const fakeGh = (prs, down = false) => {
+  // a fake gh's folder: it answers with the repo and its PRs, or, `down`,
+  // the error gh gives offline
+  const prsGh = (prs, down = false) => {
     const bin = scratchDir();
     writeFileSync(join(bin, "prs.json"), JSON.stringify(prs));
-    const answer = down
-      ? `console.error("error connecting to api.github.com"); process.exit(1);`
-      : `console.log(process.argv[2] === "api"
-           ? JSON.stringify({ data: { viewer: { login: "me" }, repository: { defaultBranchRef: { name: "main" } } } })
-           : require("fs").readFileSync(__dirname + "/prs.json", "utf8"));`;
-    writeFileSync(join(bin, "gh"), `#!/usr/bin/env node\n${answer}\n`, { mode: 0o755 });
-    return bin;
+    const repo = JSON.stringify({ data: { viewer: { login: "me" }, repository: { defaultBranchRef: { name: "main" } } } });
+    return fakeGh(
+      down ? `echo "error connecting to api.github.com" >&2; exit 1` : `if [ "$1" = api ]; then echo '${repo}'; else cat "${join(bin, "prs.json")}"; fi`,
+      bin,
+    ).bin;
   };
 
   // a main checkout and its origin, with a branch for each way a worktree
@@ -988,7 +996,7 @@ describe("prune-merged", () => {
     }
     age(main);
     branch("fresh", "MERGED");
-    return { dir, main, bin: fakeGh(prs) };
+    return { dir, main, bin: prsGh(prs) };
   };
 
   // every worktree there is last used 7 hours ago
@@ -1079,7 +1087,7 @@ describe("prune-merged", () => {
     const fromWorktree = prune(bin, join(dir, "live"), "--hook");
     assert.equal(fromWorktree.status, 0);
     assert.equal(fromWorktree.stdout, "");
-    const offline = fakeGh([], true);
+    const offline = prsGh([], true);
     const hooked = prune(offline, main, "--hook");
     assert.equal(hooked.status, 0);
     assert.equal(hooked.stdout, "");
@@ -1216,12 +1224,9 @@ describe("usage", () => {
       const file = join(home, ".claude/usage/windows.jsonl");
       return existsSync(file) ? lines(readFileSync(file, "utf8")).map((line) => JSON.parse(line)) : [];
     };
-    // gh on PATH, as a script: `body` is its shell, and each run's
-    // arguments are kept, one line each
+    // gh on PATH (fakeGh, in HOME/bin), then a run of usage
     const gh = (body) => {
-      const bin = join(home, "bin");
-      mkdirSync(bin, { recursive: true });
-      writeFileSync(join(bin, "gh"), `#!/bin/sh\necho "$*" >> "${join(home, "gh-args")}"\n${body}\n`, { mode: 0o755 });
+      const { bin } = fakeGh(body, join(home, "bin"));
       return (args) => run(args, undefined, { env: { ...process.env, HOME: home, PATH: `${bin}:${process.env.PATH}` } });
     };
     return { home, run, ledger, agent, session, windows, readings, gh };
@@ -1477,7 +1482,7 @@ describe("usage", () => {
     // gh asked for the account's PRs merged in each week, to the second before it ends
     const from = new Date(`${day(-6)}T00:00`);
     const at = (date) => date.toISOString().replace(/\.\d+Z$/, "Z");
-    const asked = lines(readFileSync(join(home, "gh-args"), "utf8"));
+    const asked = lines(readFileSync(join(home, "bin", "gh-args"), "utf8"));
     assert.equal(asked[0], `search prs --author=@me --merged-at ${at(from)}..${at(new Date(from.getTime() + 7 * 24 * 3600 * 1000 - 1000))} --limit 1000 --json repository`);
     // gh failing says why, and the rest still prints
     const failing = gh("echo 'not logged in' >&2; exit 1")(["--week", "--since", day(-6)]);

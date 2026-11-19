@@ -13,16 +13,9 @@
 // A prototype branch's PR (lib's prototypeBranch) is turned down either
 // way: it skipped the reviews because it never merges.
 import { existsSync, readFileSync } from "node:fs";
-import { argsOf, BOUNDARY, branchOf, deny, dirOf, hook, lines, masked, onBranch, prototypeBranch, REDIRECT, review, stateFile, unquote, workOf } from "./lib.mjs";
+import { argsOf, branchOf, deny, dirOf, hook, lines, masked, onBranch, prototypeBranch, prStep, REDIRECT, review, stateFile, unquote, workOf } from "./lib.mjs";
 
-// where a command starts (not inside a message that mentions it), after
-// any VAR=value prefixes, with any gh flags before `pr`
-// (a VAR=value prefix's value may be quoted: in the masked text its quotes
-// hold blanks; a wrapper such as env, command or time runs gh all the same)
-const PR_STEP = new RegExp(
-  String.raw`(?:^|${BOUNDARY})\s*(?:(?:\w+=(?:"[^"]*"|'[^']*'|[^\s"'])*|env|command|time|nohup|exec)\s+)*gh\s+(?:-\S+(?:\s+[^-\s]\S*)?\s+)*pr\s+(create|ready)\b`,
-  "g",
-);
+const PR_STEP = prStep("create", "ready");
 
 // the branch `--head` names, if any, in this gh command's own arguments:
 // found in the masked text (so a title or body that mentions --head doesn't
