@@ -1617,7 +1617,8 @@ describe("settings-format", () => {
 // the repo's .githooks, in throwaway repos: pre-commit runs settings-format
 // on a staged home/.claude/settings.json (against the real `claude`),
 // post-commit re-stages the file after a `git commit -- <paths>`, and
-// pre-push lets a push to main through only from ~/.dotfiles on main
+// pre-push lets a push to main through only when the commit pushed is the
+// one ~/.dotfiles has checked out on main
 describe("git hooks", () => {
   const SETTINGS = "home/.claude/settings.json";
   // a repo with this branch's git hooks and formatter, core.hooksPath set
