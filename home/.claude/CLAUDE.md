@@ -1,6 +1,6 @@
 # Change
 
-Each change leaves the codebase with less entropy, never more. Before the first edit of any change in a git repo, load the `change` skill: it surveys the patterns the change touches, gets a fresh review before the PR, and sets the PR's body (Problem, Fix, the lines to check, screenshots or tests, Change collapsed). Stale text, config or docs you find get fixed in the work at hand, without asking.
+Each change leaves the codebase with less entropy, never more. Before the first edit of any change in a git repo, load the `change` skill: it surveys the patterns the change touches, gets a fresh review before the PR, and writes the PR's body (2026-11-04: changes that extended whatever pattern was there). Stale text, config or docs you find get fixed in the work at hand, without asking (2026-11-10).
 
 # Evidence
 
