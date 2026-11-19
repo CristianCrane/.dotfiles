@@ -7,7 +7,9 @@
 // hooks and rules until someone pulled by hand (7 times on 2026-11-19).
 // Run as an async SessionStart hook; it says something only when it moved
 // ~/.dotfiles or is stuck, and nothing when there is no ~/.dotfiles
-// (another machine, a cloud session) or nothing to do.
+// (another machine, a cloud session) or nothing to do. What it brings under
+// home/.claude is live from then on; a change to the Nix config (a .nix
+// file, flake.lock) waits for `rebuild`, which its line then names.
 //
 // It never resets, overwrites or stashes: the user's uncommitted changes
 // there are theirs. Git refuses a fast-forward over a changed file even
@@ -122,8 +124,10 @@ hook(() => {
       return { systemMessage: `~/.dotfiles is ${plural(behind, "commit")} behind ${theirs} and was left as it is: ${stuck}.` };
     const now = git(dir, "rev-parse", "HEAD");
     const matched = done.staged ? ` (${plural(done.staged, "uncommitted file")} there already matched it)` : "";
+    const nix = paths(git(dir, "diff", "--name-only", "--no-renames", "-z", was, now, "--", "*.nix", "flake.lock"));
+    const rebuild = nix.length ? `; ${nix.join(", ")} changed: run \`rebuild\` to apply ${nix.length === 1 ? "it" : "them"}` : "";
     return {
-      systemMessage: `~/.dotfiles caught up with ${theirs}: ${plural(behind, "commit")}, ${was.slice(0, 7)}..${now.slice(0, 7)}${matched}.`,
+      systemMessage: `~/.dotfiles caught up with ${theirs}: ${plural(behind, "commit")}, ${was.slice(0, 7)}..${now.slice(0, 7)}${matched}${rebuild}.`,
     };
   } finally {
     rmSync(held, { recursive: true, force: true });

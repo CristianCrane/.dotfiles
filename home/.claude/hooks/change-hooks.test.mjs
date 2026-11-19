@@ -1329,6 +1329,23 @@ describe("catch-up", () => {
     assert.equal(start(state), "", "nothing more to do");
   });
 
+  // the catch-up makes home/.claude live, but a change to the Nix config
+  // waits for `rebuild`, which the user may run long after the merge on
+  // GitHub (review round 3 F9): the line names it when the range touches a
+  // .nix file or flake.lock, and not otherwise
+  test("a range touching the Nix config names `rebuild`; one touching only home/.claude doesn't", () => {
+    const nix = live();
+    const was = head(nix.repo);
+    nix.merged("home.nix", "{ }\n");
+    const tip = nix.merged("flake.lock", "{}\n");
+    assert.equal(start(nix), `~/.dotfiles caught up with origin/main: 2 commits, ${was.slice(0, 7)}..${tip.slice(0, 7)}; flake.lock, home.nix changed: run \`rebuild\` to apply them.`);
+    const claude = live();
+    const before = head(claude.repo);
+    mkdirSync(join(claude.dir, "other/home/.claude"), { recursive: true });
+    const after = claude.merged("home/.claude/CLAUDE.md", "rules\n");
+    assert.equal(start(claude), `~/.dotfiles caught up with origin/main: 1 commit, ${before.slice(0, 7)}..${after.slice(0, 7)}.`);
+  });
+
   // the user's own save (/model) that a PR then landed: git refuses a
   // fast-forward over a dirty file even when it equals the incoming one
   test("a dirty file equal to origin's, an untracked one origin adds, and one origin deletes: staged, then fast-forwarded", () => {
