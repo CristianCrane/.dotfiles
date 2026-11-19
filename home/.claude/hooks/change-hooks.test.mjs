@@ -1672,7 +1672,6 @@ describe("settings-format", () => {
       assert.equal(shown(repo, `:${SETTINGS}`), reordered);
     });
 
-    // a relative core.hooksPath resolves in each linked worktree, to its own hook
     // git stages the named paths into the real index, then commits from a
     // temporary one that pre-commit formats; post-commit brings the real
     // index in line, or the hook's own unstaged check refuses the next
@@ -1741,6 +1740,7 @@ describe("settings-format", () => {
       assert.equal(git(repo, "status", "--porcelain"), "");
     });
 
+    // a relative core.hooksPath resolves in each linked worktree, to its own hook
     test("works in a linked worktree", () => {
       const repo = hookedRepo();
       const tree = join(scratchDir(), "wt");
