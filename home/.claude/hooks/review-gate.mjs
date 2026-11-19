@@ -230,18 +230,27 @@ const createGate = (command, hidden, match, input) => {
 // gh pr ready, run bare from the PR's own checkout: its review still of the
 // last commit, and its lessons. --undo puts a PR back in draft, which waits
 // for nothing
-const readyGate = (command, hidden, match, input) => {
+// a `gh pr <step>` and where it runs: its own arguments, whether it names
+// the repo elsewhere, its checkout, and whether it's bare. A bare one acts
+// on the PR of the branch checked out where it runs, so a gate can read
+// that branch's files; a PR named any other way (a number, URL or branch;
+// -R or --repo, before `pr` or after the step; GH_REPO or GH_HOST anywhere
+// in the command: lib's prArgs) could be another branch's. Redirects are
+// no argument
+const stepOf = (command, hidden, match, input) => {
   const { args, elsewhere } = prArgs(command, hidden, match);
-  if (/(?:^|\s)--undo(?=\s|$)/.test(args)) return;
   const cwd = dirOf(command, hidden, match.index, input.cwd);
+  return { args, elsewhere, cwd, bare: !args.trim() && !elsewhere };
+};
+
+const readyGate = (command, hidden, match, input) => {
+  const { args, cwd, bare } = stepOf(command, hidden, match, input);
+  if (/(?:^|\s)--undo(?=\s|$)/.test(args)) return;
   const branch = branchOf(cwd);
 
   // The gate reads the lessons and review of the branch checked out where
-  // it runs, which is the PR a bare `gh pr ready` readies. A PR named any
-  // other way (a number, URL or branch; -R or --repo, before `pr` or after
-  // `ready`; GH_REPO or GH_HOST anywhere in the command: lib's prArgs)
-  // could be another branch's, so it's turned down. Redirects are no argument
-  if (args.trim() || elsewhere)
+  // it runs (stepOf's bare), so a PR named another way is turned down
+  if (!bare)
     return turnDown(
       `Run \`gh pr ready\` bare, as its own command, from the PR's own checkout (for ${branch}'s, in ${cwd}): the gate checks the lessons and review of the branch checked out where it runs, so it can't vouch for a PR named another way (a number, -R, --repo, GH_REPO).`,
       "ready",
@@ -271,7 +280,7 @@ const MERGE_VALUES = new Set(["-b", "--body", "-F", "--body-file", "-t", "--subj
 // way, by its number from a checkout of them, and merges only when the
 // user asked for that number in a message of their own
 const mergeGate = (command, hidden, match, input) => {
-  const cwd = dirOf(command, hidden, match.index, input.cwd);
+  const { args, elsewhere, cwd } = stepOf(command, hidden, match, input);
   const origin = githubOrigin(cwd);
   const here = origin && `${origin.owner}/${origin.name}`.toLowerCase() === DOTFILES.toLowerCase();
   if (!here && !command.toLowerCase().includes(DOTFILES.toLowerCase())) return;
@@ -279,7 +288,6 @@ const mergeGate = (command, hidden, match, input) => {
   // after `merge`, which prArgs leaves to the hook (pr-conflict hands them
   // on to its own gh), are turned down here. A value-taking flag's value
   // (MERGE_VALUES) is no PR, which lib's positional can't tell
-  const { args, elsewhere } = prArgs(command, hidden, match);
   const words = args.match(WORD) ?? [];
   const named = positional(words.filter((_, at) => !MERGE_VALUES.has(words[at - 1])));
   if (!here || elsewhere || has(words, "-R", "--repo=") || named.length !== 1 || !/^\d+$/.test(named[0]))
