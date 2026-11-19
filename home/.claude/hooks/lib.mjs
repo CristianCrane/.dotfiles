@@ -207,8 +207,9 @@ export const branchOf = (cwd) => git(cwd, "rev-parse", "--abbrev-ref", "HEAD");
 // review and review (workOf), and its PR is turned down (review-gate).
 // What it can't hold: a prototype merged into the default branch with no
 // PR, which in a repo whose changes go straight to main (the dotfiles) is
-// the usual route; no gate watches a merge or a push, so there only the
-// rule's text holds it.
+// the usual route; no gate watches a merge, and the dotfiles' pre-push
+// hook checks where main is pushed from, not what it holds, so there only
+// the rule's text holds it.
 export const prototypeBranch = (branch) => /^prototype-/.test(branch);
 
 // the branch being worked on, and the name its files go by: the branch,

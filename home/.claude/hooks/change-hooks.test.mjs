@@ -10,9 +10,9 @@
 // scripts' flags, prune-merged (the SessionStart hook that removes merged
 // work), usage (the ledger of tokens spent, its reports, and the
 // SessionStart check that the weekly review is due), main-session (the
-// main session's SessionStart message), and settings-format
-// with the repo's .githooks/pre-commit that runs it. Run from
-// the repo root:
+// main session's SessionStart message), settings-format, and the repo's
+// .githooks (pre-commit, which runs settings-format, post-commit and
+// pre-push). Run from the repo root:
 //
 //   node --test 'home/.claude/hooks/*.test.mjs'
 //
@@ -1540,30 +1540,31 @@ test("main-session: prints main-session.md at session start, whatever the source
   }
 });
 
-// settings-format.mjs, and the repo's .githooks: pre-commit runs it on a
-// staged home/.claude/settings.json, post-commit re-stages the file after a
-// `git commit -- <paths>`; each against the real `claude` on PATH
-// (about 1 s a format), in throwaway dirs and repos
-describe("settings-format", () => {
-  const committed = readFileSync(join(HOOKS, "../settings.json"), "utf8");
-  // the same values in a hand-edited form: top-level keys reversed, indented by 4
-  const reorder = (settings) => JSON.stringify(Object.fromEntries(Object.entries(settings).reverse()), null, 4);
-  const reordered = reorder(JSON.parse(committed));
+// for settings-format's tests and the git hooks' below: the committed
+// settings.json
+const committed = readFileSync(join(HOOKS, "../settings.json"), "utf8");
+// the same values in a hand-edited form: top-level keys reversed, indented by 4
+const reorder = (settings) => JSON.stringify(Object.fromEntries(Object.entries(settings).reverse()), null, 4);
+const reordered = reorder(JSON.parse(committed));
 
-  // runs `body` with the formatter's temp dirs in an empty dir of their own,
-  // and asserts none is left there, whether `body` throws or not
-  const leavesNoTemp = (body) => {
-    const temp = scratchDir();
-    const before = process.env.TMPDIR;
-    process.env.TMPDIR = temp;
-    try {
-      return body(temp);
-    } finally {
-      if (before === undefined) delete process.env.TMPDIR;
-      else process.env.TMPDIR = before;
-      assert.deepEqual(readdirSync(temp), [], "a temp dir was left behind");
-    }
-  };
+// runs `body` with the formatter's temp dirs in an empty dir of their own,
+// and asserts none is left there, whether `body` throws or not
+const leavesNoTemp = (body) => {
+  const temp = scratchDir();
+  const before = process.env.TMPDIR;
+  process.env.TMPDIR = temp;
+  try {
+    return body(temp);
+  } finally {
+    if (before === undefined) delete process.env.TMPDIR;
+    else process.env.TMPDIR = before;
+    assert.deepEqual(readdirSync(temp), [], "a temp dir was left behind");
+  }
+};
+
+// settings-format.mjs, against the real `claude` on PATH (about 1 s a
+// format), in throwaway dirs
+describe("settings-format", () => {
   const format = (text, options) => leavesNoTemp(() => formatSettings(text, options));
 
   test("the committed settings.json is in Claude Code's form already: formatting it changes no byte", () => {
@@ -1611,165 +1612,293 @@ describe("settings-format", () => {
     assert.equal(readFileSync(file, "utf8"), broken);
     assert.match(runHook("settings-format", undefined, { args: [] }).stderr, /Usage: node ~\/\.claude\/hooks\/settings-format\.mjs <file>/);
   });
+});
 
-  describe("git hooks", () => {
-    const SETTINGS = "home/.claude/settings.json";
-    // a repo with this branch's git hooks and formatter, core.hooksPath set
-    // as home.nix sets it, and settings.json committed in Claude Code's form
-    // (with --no-verify: it is in that form already, and a format costs 1 s)
-    const hookedRepo = () => {
-      const repo = scratchDir();
-      git(repo, "init", "-qb", "main");
-      git(repo, "config", "core.hooksPath", ".githooks");
-      mkdirSync(join(repo, ".githooks"));
-      mkdirSync(join(repo, "home/.claude/hooks"), { recursive: true });
-      const hooks = join(HOOKS, "../../../.githooks");
-      for (const name of readdirSync(hooks)) copyFileSync(join(hooks, name), join(repo, ".githooks", name));
-      for (const name of ["settings-format", "lib"])
-        copyFileSync(join(HOOKS, `${name}.mjs`), join(repo, `home/.claude/hooks/${name}.mjs`));
-      writeFileSync(join(repo, SETTINGS), committed);
-      git(repo, "add", "-A");
-      git(repo, "commit", "-qm", "start", "--no-verify");
-      return repo;
-    };
-    // `git commit -qm c` in `cwd`, then `args`, with the formatter's temp
-    // dirs in one checked empty after; its spawnSync result
-    const commitIn = (cwd, ...args) =>
-      leavesNoTemp((temp) =>
-        spawnSync("git", ["commit", "-qm", "c", ...args], { cwd, encoding: "utf8", env: { ...process.env, TMPDIR: temp } }),
-      );
-    const shown = (cwd, object) => execFileSync("git", ["show", object], { cwd, encoding: "utf8" });
-    // the committed settings with "model" set to sonnet: in Claude Code's
-    // form, and hand-reordered
-    const sonnet = committed.replace(/"model": "[^"]*"/, '"model": "sonnet"');
-    const sonnetReordered = reorder({ ...JSON.parse(committed), model: "sonnet" });
-    const stage = (repo, text) => {
-      writeFileSync(join(repo, SETTINGS), text);
-      git(repo, "add", SETTINGS);
-    };
+// the repo's .githooks, in throwaway repos: pre-commit runs settings-format
+// on a staged home/.claude/settings.json (against the real `claude`),
+// post-commit re-stages the file after a `git commit -- <paths>`, and
+// pre-push lets a push to main through only from ~/.dotfiles on main
+describe("git hooks", () => {
+  const SETTINGS = "home/.claude/settings.json";
+  // a repo with this branch's git hooks and formatter, core.hooksPath set
+  // as home.nix sets it, and settings.json committed in Claude Code's form
+  // (with --no-verify: it is in that form already, and a format costs 1 s)
+  const hookedRepo = () => {
+    const repo = scratchDir();
+    git(repo, "init", "-qb", "main");
+    git(repo, "config", "core.hooksPath", ".githooks");
+    mkdirSync(join(repo, ".githooks"));
+    mkdirSync(join(repo, "home/.claude/hooks"), { recursive: true });
+    const hooks = join(HOOKS, "../../../.githooks");
+    for (const name of readdirSync(hooks)) copyFileSync(join(hooks, name), join(repo, ".githooks", name));
+    for (const name of ["settings-format", "lib"])
+      copyFileSync(join(HOOKS, `${name}.mjs`), join(repo, `home/.claude/hooks/${name}.mjs`));
+    writeFileSync(join(repo, SETTINGS), committed);
+    git(repo, "add", "-A");
+    git(repo, "commit", "-qm", "start", "--no-verify");
+    return repo;
+  };
+  // `git commit -qm c` in `cwd`, then `args`, with the formatter's temp
+  // dirs in one checked empty after; its spawnSync result
+  const commitIn = (cwd, ...args) =>
+    leavesNoTemp((temp) =>
+      spawnSync("git", ["commit", "-qm", "c", ...args], { cwd, encoding: "utf8", env: { ...process.env, TMPDIR: temp } }),
+    );
+  const shown = (cwd, object) => execFileSync("git", ["show", object], { cwd, encoding: "utf8" });
+  // the committed settings with "model" set to sonnet: in Claude Code's
+  // form, and hand-reordered
+  const sonnet = committed.replace(/"model": "[^"]*"/, '"model": "sonnet"');
+  const sonnetReordered = reorder({ ...JSON.parse(committed), model: "sonnet" });
+  const stage = (repo, text) => {
+    writeFileSync(join(repo, SETTINGS), text);
+    git(repo, "add", SETTINGS);
+  };
 
-    test("does nothing when settings.json isn't staged", () => {
-      const repo = hookedRepo();
-      writeFileSync(join(repo, SETTINGS), reordered);
-      writeFileSync(join(repo, "a.txt"), "a\n");
-      git(repo, "add", "a.txt");
-      assert.equal(commitIn(repo).status, 0);
-      assert.equal(git(repo, "show", "HEAD:a.txt"), "a");
-      assert.equal(readFileSync(join(repo, SETTINGS), "utf8"), reordered);
-      assert.equal(git(repo, "diff", "--name-only", "HEAD~", "HEAD"), "a.txt");
-    });
+  test("does nothing when settings.json isn't staged", () => {
+    const repo = hookedRepo();
+    writeFileSync(join(repo, SETTINGS), reordered);
+    writeFileSync(join(repo, "a.txt"), "a\n");
+    git(repo, "add", "a.txt");
+    assert.equal(commitIn(repo).status, 0);
+    assert.equal(git(repo, "show", "HEAD:a.txt"), "a");
+    assert.equal(readFileSync(join(repo, SETTINGS), "utf8"), reordered);
+    assert.equal(git(repo, "diff", "--name-only", "HEAD~", "HEAD"), "a.txt");
+  });
 
-    test("formats a staged hand-reordered settings.json and commits Claude Code's form", () => {
+  test("formats a staged hand-reordered settings.json and commits Claude Code's form", () => {
+    const repo = hookedRepo();
+    stage(repo, sonnetReordered);
+    const ran = commitIn(repo);
+    assert.equal(ran.status, 0, ran.stderr);
+    assert.notEqual(sonnet, committed);
+    assert.equal(shown(repo, `HEAD:${SETTINGS}`), sonnet);
+    assert.equal(readFileSync(join(repo, SETTINGS), "utf8"), sonnet);
+    assert.equal(git(repo, "status", "--porcelain"), "");
+  });
+
+  test("refuses when settings.json has unstaged changes besides the staged ones", () => {
+    const repo = hookedRepo();
+    stage(repo, reordered);
+    writeFileSync(join(repo, SETTINGS), reordered + "\n");
+    const ran = commitIn(repo);
+    assert.equal(ran.status, 1);
+    assert.match(ran.stderr, /^pre-commit: home\/\.claude\/settings\.json has unstaged changes besides the staged ones; stage them/m);
+    assert.equal(git(repo, "rev-list", "--count", "HEAD"), "1");
+    assert.equal(readFileSync(join(repo, SETTINGS), "utf8"), reordered + "\n");
+    assert.equal(shown(repo, `:${SETTINGS}`), reordered);
+  });
+
+  // git stages the named paths into the real index, then commits from a
+  // temporary one that pre-commit formats; post-commit brings the real
+  // index in line, or the hook's own unstaged check refuses the next
+  // commit, and a --ff-only pull touching the file is refused (round 1 F2)
+  test("after `git commit -- settings.json`, nothing is left staged or unstaged, and the next commit goes through", () => {
+    const repo = hookedRepo();
+    writeFileSync(join(repo, SETTINGS), sonnetReordered);
+    const ran = commitIn(repo, "--", SETTINGS);
+    assert.equal(ran.status, 0, ran.stderr);
+    assert.equal(shown(repo, `HEAD:${SETTINGS}`), sonnet);
+    assert.equal(readFileSync(join(repo, SETTINGS), "utf8"), sonnet);
+    assert.equal(git(repo, "status", "--porcelain"), "");
+    writeFileSync(join(repo, "a.txt"), "a\n");
+    git(repo, "add", "a.txt");
+    const next = commitIn(repo);
+    assert.equal(next.status, 0, next.stderr);
+    assert.equal(git(repo, "diff", "--name-only", "HEAD~", "HEAD"), "a.txt");
+  });
+
+  // pre-commit runs before the message is written: an edit made then
+  // isn't the commit's, and post-commit leaves it unstaged
+  test("after `git commit -- settings.json`, an edit made while the message was written stays unstaged", () => {
+    const repo = hookedRepo();
+    writeFileSync(join(repo, SETTINGS), sonnetReordered);
+    const editor = `sh -c 'echo c > "$1"; echo "{}" > ${SETTINGS}' sh`;
+    const ran = leavesNoTemp((temp) =>
+      spawnSync("git", ["commit", "-q", "--", SETTINGS], {
+        cwd: repo,
+        encoding: "utf8",
+        env: { ...process.env, TMPDIR: temp, GIT_EDITOR: editor },
+      }),
+    );
+    assert.equal(ran.status, 0, ran.stderr);
+    assert.equal(shown(repo, `HEAD:${SETTINGS}`), sonnet);
+    assert.equal(readFileSync(join(repo, SETTINGS), "utf8"), "{}\n");
+    assert.notEqual(shown(repo, `:${SETTINGS}`), "{}\n");
+  });
+
+  // the working file as staged, or back to HEAD's (which post-commit's
+  // other checks alone would take for a --only commit of it)
+  test("a settings.json staged on purpose stays staged as it was while other paths are committed", () => {
+    for (const [working, status] of [
+      [sonnetReordered, "M  home/.claude/settings.json"],
+      [committed, "MM home/.claude/settings.json"],
+    ]) {
       const repo = hookedRepo();
       stage(repo, sonnetReordered);
-      const ran = commitIn(repo);
-      assert.equal(ran.status, 0, ran.stderr);
-      assert.notEqual(sonnet, committed);
-      assert.equal(shown(repo, `HEAD:${SETTINGS}`), sonnet);
-      assert.equal(readFileSync(join(repo, SETTINGS), "utf8"), sonnet);
-      assert.equal(git(repo, "status", "--porcelain"), "");
-    });
-
-    test("refuses when settings.json has unstaged changes besides the staged ones", () => {
-      const repo = hookedRepo();
-      stage(repo, reordered);
-      writeFileSync(join(repo, SETTINGS), reordered + "\n");
-      const ran = commitIn(repo);
-      assert.equal(ran.status, 1);
-      assert.match(ran.stderr, /^pre-commit: home\/\.claude\/settings\.json has unstaged changes besides the staged ones; stage them/m);
-      assert.equal(git(repo, "rev-list", "--count", "HEAD"), "1");
-      assert.equal(readFileSync(join(repo, SETTINGS), "utf8"), reordered + "\n");
-      assert.equal(shown(repo, `:${SETTINGS}`), reordered);
-    });
-
-    // git stages the named paths into the real index, then commits from a
-    // temporary one that pre-commit formats; post-commit brings the real
-    // index in line, or the hook's own unstaged check refuses the next
-    // commit, and a --ff-only pull touching the file is refused (round 1 F2)
-    test("after `git commit -- settings.json`, nothing is left staged or unstaged, and the next commit goes through", () => {
-      const repo = hookedRepo();
-      writeFileSync(join(repo, SETTINGS), sonnetReordered);
-      const ran = commitIn(repo, "--", SETTINGS);
-      assert.equal(ran.status, 0, ran.stderr);
-      assert.equal(shown(repo, `HEAD:${SETTINGS}`), sonnet);
-      assert.equal(readFileSync(join(repo, SETTINGS), "utf8"), sonnet);
-      assert.equal(git(repo, "status", "--porcelain"), "");
+      writeFileSync(join(repo, SETTINGS), working);
       writeFileSync(join(repo, "a.txt"), "a\n");
       git(repo, "add", "a.txt");
-      const next = commitIn(repo);
-      assert.equal(next.status, 0, next.stderr);
-      assert.equal(git(repo, "diff", "--name-only", "HEAD~", "HEAD"), "a.txt");
-    });
-
-    // pre-commit runs before the message is written: an edit made then
-    // isn't the commit's, and post-commit leaves it unstaged
-    test("after `git commit -- settings.json`, an edit made while the message was written stays unstaged", () => {
-      const repo = hookedRepo();
-      writeFileSync(join(repo, SETTINGS), sonnetReordered);
-      const editor = `sh -c 'echo c > "$1"; echo "{}" > ${SETTINGS}' sh`;
-      const ran = leavesNoTemp((temp) =>
-        spawnSync("git", ["commit", "-q", "--", SETTINGS], {
-          cwd: repo,
-          encoding: "utf8",
-          env: { ...process.env, TMPDIR: temp, GIT_EDITOR: editor },
-        }),
-      );
+      const ran = commitIn(repo, "--", "a.txt");
       assert.equal(ran.status, 0, ran.stderr);
-      assert.equal(shown(repo, `HEAD:${SETTINGS}`), sonnet);
-      assert.equal(readFileSync(join(repo, SETTINGS), "utf8"), "{}\n");
-      assert.notEqual(shown(repo, `:${SETTINGS}`), "{}\n");
+      assert.equal(git(repo, "diff", "--name-only", "HEAD~", "HEAD"), "a.txt");
+      assert.equal(shown(repo, `:${SETTINGS}`), sonnetReordered);
+      assert.equal(readFileSync(join(repo, SETTINGS), "utf8"), working);
+      assert.equal(git(repo, "status", "--porcelain", "--", SETTINGS), status);
+    }
+  });
+
+  test("`git commit -a` commits Claude Code's form and leaves nothing staged or unstaged", () => {
+    const repo = hookedRepo();
+    writeFileSync(join(repo, SETTINGS), sonnetReordered);
+    const ran = commitIn(repo, "-a");
+    assert.equal(ran.status, 0, ran.stderr);
+    assert.equal(shown(repo, `HEAD:${SETTINGS}`), sonnet);
+    assert.equal(git(repo, "status", "--porcelain"), "");
+  });
+
+  // a relative core.hooksPath resolves in each linked worktree, to its own hook
+  test("works in a linked worktree", () => {
+    const repo = hookedRepo();
+    const tree = join(scratchDir(), "wt");
+    git(repo, "worktree", "add", "-qb", "wt", tree);
+    stage(tree, reordered);
+    const ran = commitIn(tree);
+    assert.equal(ran.status, 0, ran.stderr);
+    assert.equal(shown(tree, `HEAD:${SETTINGS}`), committed);
+    assert.equal(git(tree, "status", "--porcelain"), "");
+  });
+
+  test("stops the commit, saying why, when the formatter refuses", () => {
+    const repo = hookedRepo();
+    stage(repo, committed.slice(0, -10));
+    const ran = commitIn(repo);
+    assert.equal(ran.status, 1);
+    assert.match(ran.stderr, /^settings-format: home\/\.claude\/settings\.json: not valid JSON/m);
+    assert.match(ran.stderr, /^pre-commit: .* so nothing was committed$/m);
+    assert.equal(git(repo, "rev-list", "--count", "HEAD"), "1");
+  });
+
+  // against a bare origin and a HOME whose .dotfiles is a symlink to the
+  // repo, as ~/.dotfiles is to the main checkout: never the real one
+  describe("pre-push", () => {
+    // a hooked repo on main, its main pushed to a bare origin, and a HOME
+    // whose .dotfiles links to it (none when `dotfiles` is false);
+    // `push(cwd, ...args)` runs `git push origin <args>` with that HOME
+    // (its spawnSync result), `remote(ref)` is the ref's sha on origin
+    const landing = ({ dotfiles = true } = {}) => {
+      const repo = hookedRepo();
+      const dir = scratchDir();
+      const home = join(dir, "home");
+      mkdirSync(home);
+      if (dotfiles) symlinkSync(repo, join(home, ".dotfiles"));
+      const origin = join(dir, "origin.git");
+      git(dir, "init", "-q", "--bare", "-b", "main", origin);
+      git(repo, "remote", "add", "origin", origin);
+      const env = { ...process.env, HOME: home };
+      const push = (cwd, ...args) => spawnSync("git", ["push", "-q", "origin", ...args], { cwd, encoding: "utf8", env });
+      const first = push(repo, "main");
+      assert.equal(first.status, 0, first.stderr);
+      return { repo, env, push, remote: (ref = "main") => git(origin, "rev-parse", ref) };
+    };
+    // a linked worktree of `repo` on a new branch `name`, one commit past
+    // main, on a detached HEAD there when `detach`; its path and that sha
+    const worktree = (repo, name, { detach = false } = {}) => {
+      const tree = join(scratchDir(), name);
+      git(repo, "worktree", "add", "-qb", name, tree);
+      commit(tree, `${name}.txt`, `${name}\n`);
+      if (detach) git(tree, "switch", "-q", "--detach");
+      return { tree, sha: git(tree, "rev-parse", "HEAD") };
+    };
+    // the refusal's landing command, on a line of its own; group 2 is the sha
+    const LANDING = /^ {2}(git -C ~\/\.dotfiles merge --ff-only (\w+) && git -C ~\/\.dotfiles push origin main)$/m;
+    // refused: pre-push's reason, and origin's main where it was
+    const refused = (ran, before, remote) => {
+      assert.equal(ran.status, 1, ran.stderr);
+      assert.match(ran.stderr, /^pre-push: a push to main goes through only from ~\/\.dotfiles on main/m);
+      assert.equal(remote(), before);
+    };
+
+    test("refuses a worktree's `push origin HEAD:main`, naming the sha and the command that lands it", () => {
+      const { repo, push, remote } = landing();
+      const before = remote();
+      const { tree, sha } = worktree(repo, "wt");
+      const ran = push(tree, "HEAD:main");
+      refused(ran, before, remote);
+      assert.equal(ran.stderr.match(LANDING)?.[2], sha, ran.stderr);
+      assert.equal(git(repo, "rev-parse", "HEAD"), before);
     });
 
-    // the working file as staged, or back to HEAD's (which post-commit's
-    // other checks alone would take for a --only commit of it)
-    test("a settings.json staged on purpose stays staged as it was while other paths are committed", () => {
-      for (const [working, status] of [
-        [sonnetReordered, "M  home/.claude/settings.json"],
-        [committed, "MM home/.claude/settings.json"],
-      ]) {
-        const repo = hookedRepo();
-        stage(repo, sonnetReordered);
-        writeFileSync(join(repo, SETTINGS), working);
-        writeFileSync(join(repo, "a.txt"), "a\n");
-        git(repo, "add", "a.txt");
-        const ran = commitIn(repo, "--", "a.txt");
-        assert.equal(ran.status, 0, ran.stderr);
-        assert.equal(git(repo, "diff", "--name-only", "HEAD~", "HEAD"), "a.txt");
-        assert.equal(shown(repo, `:${SETTINGS}`), sonnetReordered);
-        assert.equal(readFileSync(join(repo, SETTINGS), "utf8"), working);
-        assert.equal(git(repo, "status", "--porcelain", "--", SETTINGS), status);
+    test("the refusal's command, run as printed, lands the commit: origin's main and the main checkout both end at it", () => {
+      const { repo, env, push, remote } = landing();
+      const { tree, sha } = worktree(repo, "wt");
+      const [, command] = push(tree, "HEAD:main").stderr.match(LANDING);
+      const ran = spawnSync("sh", ["-c", command], { cwd: tree, encoding: "utf8", env });
+      assert.equal(ran.status, 0, ran.stderr);
+      assert.equal(remote(), sha);
+      assert.equal(git(repo, "symbolic-ref", "--short", "HEAD"), "main");
+      assert.equal(git(repo, "rev-parse", "HEAD"), sha);
+      assert.equal(readFileSync(join(repo, "wt.txt"), "utf8"), "wt\n");
+    });
+
+    test("lets `push origin main` through from the main checkout on main", () => {
+      const { repo, push, remote } = landing();
+      commit(repo, "c.txt", "c\n");
+      const ran = push(repo, "main");
+      assert.equal(ran.status, 0, ran.stderr);
+      assert.equal(remote(), git(repo, "rev-parse", "HEAD"));
+    });
+
+    // main moved to the checked-out commit, so only "on main" can hold these
+    test("from the main checkout on another branch, refuses `push origin main` and `push origin <branch>:main`, saying ~/.dotfiles isn't on main", () => {
+      const { repo, push, remote } = landing();
+      const before = remote();
+      git(repo, "switch", "-qc", "other");
+      commit(repo, "o.txt", "o\n");
+      git(repo, "branch", "-f", "main", "other");
+      for (const spec of ["main", "other:main"]) {
+        const ran = push(repo, spec);
+        refused(ran, before, remote);
+        assert.match(ran.stderr, /~\/\.dotfiles isn't on main \(it's on other\)/, spec);
+        assert.doesNotMatch(ran.stderr, LANDING, spec);
       }
     });
 
-    test("`git commit -a` commits Claude Code's form and leaves nothing staged or unstaged", () => {
-      const repo = hookedRepo();
-      writeFileSync(join(repo, SETTINGS), sonnetReordered);
-      const ran = commitIn(repo, "-a");
-      assert.equal(ran.status, 0, ran.stderr);
-      assert.equal(shown(repo, `HEAD:${SETTINGS}`), sonnet);
-      assert.equal(git(repo, "status", "--porcelain"), "");
+    test("refuses a detached HEAD worktree's `push origin HEAD:main`, naming its sha", () => {
+      const { repo, push, remote } = landing();
+      const before = remote();
+      const { tree, sha } = worktree(repo, "wt", { detach: true });
+      const ran = push(tree, "HEAD:main");
+      refused(ran, before, remote);
+      assert.equal(ran.stderr.match(LANDING)?.[2], sha, ran.stderr);
     });
 
-    // a relative core.hooksPath resolves in each linked worktree, to its own hook
-    test("works in a linked worktree", () => {
-      const repo = hookedRepo();
-      const tree = join(scratchDir(), "wt");
-      git(repo, "worktree", "add", "-qb", "wt", tree);
-      stage(tree, reordered);
-      const ran = commitIn(tree);
+    test("lets a worktree push its own branch", () => {
+      const { repo, push, remote } = landing();
+      const { tree, sha } = worktree(repo, "wt");
+      const ran = push(tree, "wt");
       assert.equal(ran.status, 0, ran.stderr);
-      assert.equal(shown(tree, `HEAD:${SETTINGS}`), committed);
-      assert.equal(git(tree, "status", "--porcelain"), "");
+      assert.equal(remote("wt"), sha);
     });
 
-    test("stops the commit, saying why, when the formatter refuses", () => {
-      const repo = hookedRepo();
-      stage(repo, committed.slice(0, -10));
-      const ran = commitIn(repo);
-      assert.equal(ran.status, 1);
-      assert.match(ran.stderr, /^settings-format: home\/\.claude\/settings\.json: not valid JSON/m);
-      assert.match(ran.stderr, /^pre-commit: .* so nothing was committed$/m);
-      assert.equal(git(repo, "rev-list", "--count", "HEAD"), "1");
+    // another machine, or a cloud session
+    test("lets a worktree's push to main through when HOME has no .dotfiles", () => {
+      const { repo, push, remote } = landing({ dotfiles: false });
+      const { tree, sha } = worktree(repo, "wt");
+      const ran = push(tree, "HEAD:main");
+      assert.equal(ran.status, 0, ran.stderr);
+      assert.equal(remote(), sha);
+    });
+
+    // main's deletion as a dry run: origin refuses to delete its HEAD
+    test("lets deletions through: a branch's, and main's", () => {
+      const { repo, push, remote } = landing();
+      const { tree } = worktree(repo, "wt");
+      assert.equal(push(tree, "wt").status, 0);
+      const ran = push(tree, "--delete", "wt");
+      assert.equal(ran.status, 0, ran.stderr);
+      assert.throws(() => remote("wt"));
+      const main = push(tree, "--dry-run", "--delete", "main");
+      assert.equal(main.status, 0, main.stderr);
     });
   });
 });

@@ -2,7 +2,7 @@
 
 The NixOS-on-WSL2 system (a flake, applied with `rebuild`) and Claude Code's own config, `home/.claude`, which `home.nix` (`claudeSettings`) links into `~/.claude`.
 
-- **Changes go straight to `main`** once the change skill's reviews are clean (a dictated settings change has none), no PR. Leave the user's uncommitted changes in `~/.dotfiles` alone.
+- **Changes go straight to `main`** once the change skill's reviews are clean (a dictated settings change has none), no PR, landed through `~/.dotfiles`: `git -C ~/.dotfiles merge --ff-only <branch> && git -C ~/.dotfiles push origin main`. Its working tree is live for every session, so a push to main from anywhere else leaves it behind; `.githooks/pre-push` refuses one, giving the command with the sha. Leave the user's uncommitted changes in `~/.dotfiles` alone.
 - **Claude Code's config** (the global CLAUDE.md, `settings.json` with its `enabledPlugins`, hooks, agents, skills) is changed here and committed, not through installers that write around it.
 - **The links point at the working tree,** so a hook edited on a branch in `~/.dotfiles` runs in every session the moment it's saved. Try a hook change first in a `git worktree` of this repo, and live in one session by registering the worktree's copy in a project's `.claude/settings.local.json` (wait a few seconds before starting agents; remove it after), then bring it into `~/.dotfiles`.
 - **Hook tests:** every hook but stale-copy has cases in `home/.claude/hooks/change-hooks.test.mjs`; a change to one (or to lib.mjs, copy.mjs, sync.mjs) adds its cases there and runs them (`node --test 'home/.claude/hooks/*.test.mjs'`). stale-copy is fed its hook inputs by hand.

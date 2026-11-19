@@ -116,8 +116,8 @@ in
     for skill in "${dotfiles}"/home/.claude/skills/*; do
       run ln -sfn "$skill" "$HOME/.claude/skills/$(basename "$skill")"
     done
-    # the repo's own git hooks (.githooks/pre-commit keeps settings.json in
-    # the form Claude Code writes); relative, so each worktree runs its own
+    # the repo's own git hooks, in .githooks (each one's header says what it
+    # does); relative, so each worktree runs its own
     run ${pkgs.git}/bin/git -C "${dotfiles}" config core.hooksPath .githooks
   '';
 }
