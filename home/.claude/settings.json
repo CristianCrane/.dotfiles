@@ -154,6 +154,17 @@
             "timeout": 10
           }
         ]
+      },
+      {
+        "matcher": "startup|resume|clear",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.claude/hooks/red-checks.mjs\" --hook",
+            "timeout": 120,
+            "async": true
+          }
+        ]
       }
     ]
   },

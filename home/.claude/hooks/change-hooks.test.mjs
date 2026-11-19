@@ -8,7 +8,8 @@
 // review-gate's merge rule, a dictated settings change, a prototype branch, lib's cwdFor and
 // substitutions, how copy.mjs and sync.mjs register a repo's copy, the
 // scripts' flags, prune-merged (the SessionStart hook that removes merged
-// work), catch-up (the SessionStart hook that fast-forwards ~/.dotfiles),
+// work), red-checks (the SessionStart hook that names what is red),
+// catch-up (the SessionStart hook that fast-forwards ~/.dotfiles),
 // usage (the ledger of tokens spent, its reports, and the
 // SessionStart check that the weekly review is due), main-session (the
 // main session's SessionStart message), pr-conflict (the note that a PR
@@ -1440,6 +1441,93 @@ describe("prune-merged", () => {
     assert.deepEqual(readdirSync(trash), []);
     assert.match(ran.stdout, /^ {2}\.\.\/base \(detached\): locked$/m);
     assert.equal(git(base, "status", "--porcelain"), "");
+  });
+});
+
+// red-checks.mjs, run by hand and as the SessionStart hook, in a scratch
+// repo whose origin is a github.com URL, with a fake `gh` first on PATH
+// answering the repo's open PRs and its default branch's runs
+describe("red-checks", () => {
+  // a checkout whose origin is on GitHub (never fetched: red-checks asks gh)
+  const checkout = () => {
+    const repo = scratchDir();
+    git(repo, "init", "-q", "-b", "main");
+    git(repo, "remote", "add", "origin", "https://github.com/o/r");
+    return repo;
+  };
+
+  // a fake gh's folder: `api` answers the open PRs, each [number, its
+  // check rollup's state], and `run list` the runs, newest first; `down`,
+  // the error gh gives offline
+  const redGh = ({ prs = [], runs = [], down = false } = {}) => {
+    const bin = scratchDir();
+    const repository = {
+      defaultBranchRef: { name: "main" },
+      pullRequests: { nodes: prs.map(([number, state]) => ({ number, commits: { nodes: [{ commit: { statusCheckRollup: state && { state } } }] } })) },
+    };
+    writeFileSync(join(bin, "api.json"), JSON.stringify({ data: { repository } }));
+    writeFileSync(join(bin, "runs.json"), JSON.stringify(runs.map(([workflowName, conclusion]) => ({ workflowName, conclusion, url: `https://github.com/o/r/actions/runs/${workflowName}-${conclusion}` }))));
+    return fakeGh(
+      down
+        ? `echo "error connecting to api.github.com" >&2; exit 1`
+        : `if [ "$1" = api ]; then cat "${join(bin, "api.json")}"; else cat "${join(bin, "runs.json")}"; fi`,
+      bin,
+    );
+  };
+
+  const check = ({ bin }, cwd, hook = false) =>
+    runHook("red-checks", hook ? { hook_event_name: "SessionStart", cwd, session_id: "s" } : undefined, {
+      args: hook ? ["--hook"] : [],
+      cwd,
+      env: { ...process.env, PATH: `${bin}:${process.env.PATH}` },
+    });
+
+  test("names each open PR whose checks failed and each workflow whose latest finished run on main failed", () => {
+    const repo = checkout();
+    const gh = redGh({
+      prs: [[3, "FAILURE"], [4, "SUCCESS"], [5, "ERROR"], [6, "PENDING"], [7, null]],
+      runs: [
+        ["CI", "success"],
+        ["CI", "failure"],
+        ["Nightly", "cancelled"],
+        ["Nightly", "timed_out"],
+        ["Deploy", "skipped"],
+        ["Deploy", "success"],
+      ],
+    });
+    const ran = check(gh, repo, true);
+    assert.equal(ran.status, 0, ran.stderr);
+    assert.deepEqual(JSON.parse(ran.stdout), {
+      systemMessage:
+        'Red in o/r: open PR #3, #5 failed checks; main\'s latest Nightly run failed (https://github.com/o/r/actions/runs/Nightly-timed_out). "No red tests" (the global CLAUDE.md): before starting new work here, say which, why, and what unblocks it.',
+    });
+    // the default branch's finished runs, from the repo origin names
+    assert.match(readFileSync(gh.log, "utf8"), /^run list -R o\/r --branch main --status completed --limit 100 --json workflowName,conclusion,url$/m);
+  });
+
+  test("says nothing at session start when all is green, and so by hand", () => {
+    const repo = checkout();
+    const gh = redGh({ prs: [[4, "SUCCESS"]], runs: [["CI", "success"], ["CI", "failure"]] });
+    const hooked = check(gh, repo, true);
+    assert.equal(hooked.status, 0, hooked.stderr);
+    assert.equal(hooked.stdout, "");
+    assert.equal(check(gh, repo).stdout, "Nothing red in o/r.\n");
+  });
+
+  test("says nothing at session start when it can't ask GitHub, and why by hand", () => {
+    const repo = checkout();
+    const gh = redGh({ down: true });
+    assert.equal(check(gh, repo, true).stdout, "");
+    const byHand = check(gh, repo);
+    assert.equal(byHand.status, 1);
+    assert.equal(byHand.stderr, "red-checks: error connecting to api.github.com\n");
+    // origin elsewhere: gh isn't asked
+    const elsewhere = checkout();
+    git(elsewhere, "remote", "set-url", "origin", "https://gitlab.com/o/r");
+    const quiet = redGh({ prs: [[3, "FAILURE"]] });
+    assert.equal(check(quiet, elsewhere, true).stdout, "");
+    assert.equal(check(quiet, elsewhere).stderr, "red-checks: origin isn't on GitHub\n");
+    assert.equal(existsSync(quiet.log), false);
   });
 });
 
