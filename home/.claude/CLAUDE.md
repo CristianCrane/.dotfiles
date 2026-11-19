@@ -18,7 +18,7 @@ A cause is a claim until evidence shows it, and so is what you say about how cod
 
 NixOS on WSL2 with Home Manager; the system is a flake at `~/.dotfiles` (`~/github/CristianCrane/dotfiles`). Leave my uncommitted changes there alone.
 
-- **Claude Code's own config** (this file, `settings.json`, hooks, agents, skills) lives in `~/.dotfiles/home/.claude`, linked to its working tree: a hook saved there runs in every session at once. Before changing any of it, read `~/.dotfiles/CLAUDE.md`.
+- **Claude Code's own config** (this file, `settings.json`, hooks, agents, skills) lives in `~/.dotfiles/home/.claude`: before changing any of it, read `~/.dotfiles/CLAUDE.md`.
 - **Installing:** no Homebrew or apt, and (until .dotfiles#5) no `python3`, `psql` or `bc`. Give the nixpkgs package; try it with `nix --extra-experimental-features 'nix-command flakes' shell nixpkgs#<pkg>`, keep it in `home.nix`'s `home.packages`, which I apply with `rebuild` (2026-10-25).
 - **One-off scripts:** Node, as a heredoc (`node - <<'EOF'` … `EOF`), not `node -e` with nested quotes; arithmetic in `$(( ))` or Node.
 - **The shell is zsh** (until .dotfiles#5): quote globs in flags (`--include='*.ts'`, else "no matches found"); no word splitting; a loop over commands held in a variable runs nothing (rc 127). `grep` is ugrep, which rejects long `.{0,N}` patterns: shorten or use `rg`. `ls` is eza and can hang with no terminal: `command ls`. Drop these lines once .dotfiles#5 lands.
