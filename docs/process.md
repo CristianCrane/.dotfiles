@@ -85,7 +85,7 @@ A signal is a moment that may teach something (D3, D15): the user disagrees or r
 Capture writes raw signals and decides nothing (D8). Three routes:
 
 - **The background pass** (step 2, not built yet): when a main session ends or compacts, a cheap fast model reads what's new and pulls out every candidate signal, wide net (D14, D15); at each session start, a catch-up for conversations that never ended cleanly. Main sessions only. It is its own script: `hooks/catch-up.mjs` is the dotfiles' fast-forward to `origin/main`, a different job.
-- **In the moment** (D16): `node ~/.claude/hooks/capture.mjs`, run by the main session when the user corrects it or either side flags something as important, as the main-session message says. `--help` gives its flags.
+- **In the moment** (D16): `node ~/.claude/hooks/capture.mjs`, run by the main session when the user corrects it or either side flags something as important, as the main-session message says. `--help` gives its flags and its text's labelled lines.
 - **The `lessons` skill** (D20): at the end of each PR, the agent writes what the work cost, a signal per cost, with `capture.mjs --source lessons`, which also adds its line to the branch's lessons file (`- <cost> → inbox <id>`), the record the PR gate reads. It is agents' only route in: the pass reads main sessions only. Cloud sessions (D24) have neither the command nor a lasting inbox: their costs go in one issue on CristianCrane/.dotfiles, "Signals from <repo>: <branch>", in the agent's own words with no quote and no name of a client or person, since that repo is public (D13); the curator reads it as signals.
 
 ### The inbox

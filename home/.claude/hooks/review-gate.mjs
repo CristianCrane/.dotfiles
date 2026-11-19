@@ -345,8 +345,10 @@ const batchUnapproved = (cwd, input) => {
   const commits = lines(git(cwd, "rev-list", "--reverse", "--no-merges", `${base(cwd)}..HEAD`));
   if (!commits.length) return "it has no commits";
   const [first, ...changes] = commits;
-  const logged = lines(git(cwd, "diff-tree", "--no-commit-id", "--name-only", "-r", first));
-  if (logged.join() !== PROCESS_LOG) return `its first commit (${first.slice(0, 7)}) must add the run's entries to ${PROCESS_LOG} and nothing else`;
+  // numstat: added, deleted, path. Only adds: an edited or removed line
+  // would rewrite a verdict the user gave
+  const logged = lines(git(cwd, "diff-tree", "--no-commit-id", "--numstat", "-r", first)).map((line) => line.split("\t"));
+  if (logged.length !== 1 || logged[0][2] !== PROCESS_LOG || logged[0][1] !== "0") return `its first commit (${first.slice(0, 7)}) must add the run's entries to ${PROCESS_LOG} and nothing else`;
   const added = git(cwd, "show", "--format=", first, "--", PROCESS_LOG);
   const approved = new Set([...added.matchAll(/^\+- (L\d+) (?:yes|edit)\b/gm)].map((entry) => entry[1]));
   for (const sha of changes) {

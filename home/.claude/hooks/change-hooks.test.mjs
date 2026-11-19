@@ -1021,6 +1021,17 @@ test("review-gate: a process batch merges by the agent once its log approves eve
   commit(mixed, "y.txt", "Change: L1");
   writeFileSync(stateFile(mixed, "review", BATCH), `# Change review: ${BATCH} @ ${git(mixed, "rev-parse", "--short", "HEAD")}, round 1, 0 open change findings\n`);
   assert.match(merge(mixed) ?? "", NOT_APPROVED("its first commit .* must add the run's entries to docs/process-log.md and nothing else"));
+  // a first commit that rewrites a past verdict, no to yes: only adds count
+  const rewrite = batch();
+  git(rewrite, "switch", "-q", "main");
+  git(rewrite, "branch", "-qD", BATCH);
+  mkdirSync(join(rewrite, "docs"), { recursive: true });
+  commit(rewrite, "docs/process-log.md", "- L3 no · hook → dotfiles · global · recommended yes\n");
+  git(rewrite, "switch", "-qc", BATCH);
+  commit(rewrite, "docs/process-log.md", "- L3 yes · hook → dotfiles · global · recommended yes\n");
+  commit(rewrite, "c.txt", "Change: the hook, L3");
+  writeFileSync(stateFile(rewrite, "review", BATCH), `# Change review: ${BATCH} @ ${git(rewrite, "rev-parse", "--short", "HEAD")}, round 1, 0 open change findings\n`);
+  assert.match(merge(rewrite) ?? "", NOT_APPROVED("its first commit .* must add the run's entries to docs/process-log.md and nothing else"));
   // named any other way, it's the user's merge as before
   for (const command of ["gh pr merge 12", "gh pr merge -R CristianCrane/.dotfiles", `gh pr merge ${BATCH}`])
     assert.match(merge(batch(), command) ?? "", /^(?:Only the user merges|Run `gh pr merge <number>`)/, command);

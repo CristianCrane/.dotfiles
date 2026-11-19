@@ -76,4 +76,4 @@ Where the decisions were silent, step 1 took the simplest option. Each is the us
 - Placement moves from the session that learned something to the curator: lessons stop landing by the nearest file, and repeats become visible.
 - The user's time goes to one short list a week, and to the reasons they give when they override, which become principles.
 - Every route that changes guidance (the curator's batches, the user's own asks, any agent's PR) passes one check: the change reviewer against [process.md](process.md) (D30).
-- Until step 2's background pass, signals come only from the in-the-moment command and the lessons step; a week with none captured is a failure to look into.
+- Until step 2's background pass, new signals come only from the in-the-moment command and the lessons step (the history run's came from a one-off pass: [process.md](process.md), Build order); a week with none captured is a failure to look into.
