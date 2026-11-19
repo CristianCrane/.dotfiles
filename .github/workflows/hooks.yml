@@ -1,0 +1,16 @@
+# The hook tests (CLAUDE.md, Hook tests) on each PR: a process batch's PR
+# merges by the agent once they're green (docs/process.md, Landing).
+name: Hook tests
+on:
+  pull_request:
+  push:
+    branches: [main]
+jobs:
+  hooks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: node --test 'home/.claude/hooks/*.test.mjs'

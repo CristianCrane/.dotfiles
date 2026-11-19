@@ -16,8 +16,13 @@
 // Only the user merges a PR of the dotfiles (DOTFILES; their CLAUDE.md):
 // `gh pr merge` on one goes through only naming the PR by its number
 // alone, from a checkout of it, and only when a message the user typed in
-// this session asks to merge that number. Another repo's merges go
-// through. What it can't hold: a message that negates the ask ("don't
+// this session asks to merge that number. The one exception is a process
+// batch (lib's processBatch; the dotfiles' docs/process.md, Landing),
+// whose approval is the user's verdicts in its log: run bare from its own
+// checkout, it merges once its review leaves no change finding open, its
+// first commit only adds log entries, and every later commit names one of
+// them (`L<n>`) with a yes or edit verdict (batchUnapproved). Another
+// repo's merges go through. What it can't hold: a message that negates the ask ("don't
 // merge #12"), and a merge by any other route (`gh api`, the web).
 //
 // It reads Bash and Monitor commands alike (settings.json registers it on
@@ -26,9 +31,11 @@
 import { existsSync, readFileSync } from "node:fs";
 import {
   argsOf,
+  base,
   branchOf,
   deny,
   dirOf,
+  git,
   githubOrigin,
   has,
   hook,
@@ -36,6 +43,7 @@ import {
   masked,
   onBranch,
   positional,
+  processBatch,
   prArgs,
   prototypeBranch,
   prStep,
@@ -291,6 +299,16 @@ const mergeGate = (command, hidden, match, input) => {
   // (MERGE_VALUES) is no PR, which lib's positional can't tell
   const words = args.match(WORD) ?? [];
   const named = positional(words.filter((_, at) => !MERGE_VALUES.has(words[at - 1])));
+  // a process batch, run bare from its own checkout: its log is the
+  // approval (batchUnapproved)
+  if (here && !elsewhere && !has(words, "-R", "--repo=") && named.length === 0 && processBatch(branchOf(cwd))) {
+    const why = batchUnapproved(cwd, input);
+    if (!why) return;
+    return turnDown(
+      `A process batch merges by the agent only when the user's verdicts in its log approve every change (the dotfiles' docs/process.md, Landing), and ${branchOf(cwd)}'s can't: ${why}. Fix that, or leave the PR for the user to merge.`,
+      "merge",
+    );
+  }
   if (!here || elsewhere || has(words, "-R", "--repo=") || named.length !== 1 || !/^\d+$/.test(named[0]))
     return turnDown(
       `Run \`gh pr merge <number>\` from a checkout of ${DOTFILES}, the PR named by its number alone (no branch, URL, -R, --repo or GH_REPO): only the user merges its PRs, and the gate checks that they asked to merge that number.`,
@@ -307,6 +325,33 @@ const mergeGate = (command, hidden, match, input) => {
       `Only the user merges a ${DOTFILES} PR: no message the user typed in this session asks to merge #${number} (a relay or your own words don't count). Leave it for them to merge on GitHub, or merge it once they ask for #${number} by its number.`,
       "merge",
     );
+};
+
+// the log a process batch adds its verdicts to
+const PROCESS_LOG = "docs/process-log.md";
+
+// why a process batch's PR can't merge without the user, if it can't: its
+// review isn't clean, or its commits aren't the verdicts its log adds (the
+// first commit adds them and nothing else; every later one names one, and
+// only ones the user said yes to or edited)
+const batchUnapproved = (cwd, input) => {
+  const work = workOf(cwd, input);
+  const found = review(cwd, work, input);
+  if (!found.ok) return `its review isn't ready (${found.reason})`;
+  if (found.open !== 0) return found.open ? `its review leaves ${found.open} change finding(s) open` : "it has no review of its own";
+  const commits = lines(git(cwd, "rev-list", "--reverse", "--no-merges", `${base(cwd)}..HEAD`));
+  if (commits.length < 2) return "it has no change after its log commit";
+  const [first, ...changes] = commits;
+  const logged = lines(git(cwd, "diff-tree", "--no-commit-id", "--name-only", "-r", first));
+  if (logged.join() !== PROCESS_LOG) return `its first commit (${first.slice(0, 7)}) must add the run's entries to ${PROCESS_LOG} and nothing else`;
+  const added = git(cwd, "show", "--format=", first, "--", PROCESS_LOG);
+  const approved = new Set([...added.matchAll(/^\+- (L\d+) (?:yes|edit)\b/gm)].map((entry) => entry[1]));
+  for (const sha of changes) {
+    const named = [...git(cwd, "log", "-1", "--format=%B", sha).matchAll(/\bL\d+\b/g)].map((id) => id[0]);
+    const wrong = named.filter((id) => !approved.has(id));
+    if (!named.length || wrong.length)
+      return `commit ${sha.slice(0, 7)} names ${named.length ? `${wrong.join(", ")}, which the log doesn't add with a yes or edit` : "no log entry (L<n>)"}`;
+  }
 };
 
 const GATES = { create: createGate, ready: readyGate, merge: mergeGate };
