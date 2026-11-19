@@ -1,0 +1,21 @@
+#!/bin/sh
+# Edited in github.com/CristianCrane/.dotfiles; this repo's own git hook,
+# wired by home.nix like pre-commit.
+#
+# After `git commit -- <paths>` (git's --only mode), brings the index in
+# line with the home/.claude/settings.json that pre-commit formatted. Git
+# stages the named paths into the real index, then commits from a temporary
+# one, so pre-commit's format reaches the commit and the working file but
+# not the index; left there, the stale staged form makes pre-commit refuse
+# the next commit, and a --ff-only pull touching the file refuse too. Git
+# has released the real index by the time this runs.
+#
+# Only when the commit just made changed the file and the working file
+# equals HEAD's: a file staged on purpose while other paths were committed
+# stays staged, and an edit made while the message was written stays
+# unstaged. After an ordinary or -a commit the index equals HEAD already,
+# so the add changes nothing.
+file=home/.claude/settings.json
+git diff-tree --quiet --root HEAD -- "$file" && exit 0
+git diff --quiet HEAD -- "$file" || exit 0
+git add -- "$file"

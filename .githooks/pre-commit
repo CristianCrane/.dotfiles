@@ -12,8 +12,8 @@
 # hold to it too.
 #
 # After `git commit -- <paths>` (git's --only mode, which commits from a
-# temporary index) the commit and the working file are formatted, but the
-# index keeps the form that was staged: `git add` the file to match.
+# temporary index) the index keeps the form that was staged; post-commit
+# re-stages the formatted file.
 set -u
 file=home/.claude/settings.json
 
