@@ -26,7 +26,7 @@ A **pattern** is any shape the change follows or adds: a helper, a table, a laye
 
 ## 1. Survey
 
-Before the first edit: the survey gate turns edits down until it exists and names a file by its path from the top of the checkout (`home/.claude/hooks/lib.mjs`, not `lib.mjs`), and its turn-down names the survey's path. (The survey lives in the git dir, one per branch. On `main` in a checkout whose origin is on GitHub the gate turns down every edit of a file git doesn't ignore: branch first, a worktree off origin's `main`, and a PR. An ignored file there (`.claude/settings.local.json`), and `main` with no GitHub origin, keep the session's survey.)
+Before the first edit: the survey gate turns edits down until it exists and names a file by its path from the top of the checkout (`home/.claude/hooks/lib.mjs`, not `lib.mjs`), and its turn-down names the survey's path. (The survey lives in the git dir, one per branch. On `main` in a checkout whose origin is on GitHub the gate turns down every edit of a file git doesn't ignore: branch first, a worktree off origin's `main`, and a PR. An ignored file there (`.claude/settings.local.json`, in every checkout, by the global git ignore home.nix sets), and `main` with no GitHub origin, keep the session's survey.)
 
 ```
 Change: <one line>

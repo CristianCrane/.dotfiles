@@ -794,12 +794,19 @@ test("survey-gate on main: branch first where origin is on GitHub; elsewhere the
 // so branch-first leaves it the flow it had: the session's survey, or a
 // dictated one (review round 1 F7: branch-first turned it down, red on
 // it); a tracked file there, or a new one nothing ignores, still branches
-// first
+// first. The ignore is the global one, home.nix's `programs.git.ignores`
+// (Home Manager writes it to ~/.config/git/ignore, git's default
+// core.excludesFile), not the checkout's .gitignore, which most of the
+// user's checkouts lack (review round 2 F7): the test reads that list from
+// home.nix and hands it to git as core.excludesFile
 test("survey-gate on main: a git-ignored file keeps the session's flow; a tracked one still branches first", () => {
   const SAID = "add a deny rule for Bash(rm *) here";
   const repo = scratchDir();
   git(repo, "init", "-qb", "main");
-  commit(repo, ".gitignore", ".claude/settings.local.json\n");
+  const ignores = readFileSync(join(HOOKS, "../../../home.nix"), "utf8").match(/^\s*ignores = \[([^\]]*)\];/m)?.[1].match(/"[^"]*"/g)?.map((name) => JSON.parse(name)) ?? [];
+  const excludes = join(scratchDir(), "ignore");
+  writeFileSync(excludes, ignores.map((name) => `${name}\n`).join(""));
+  git(repo, "config", "core.excludesFile", excludes);
   commit(repo, "b.txt", "b\n");
   withOrigin(repo);
   mkdirSync(join(repo, ".claude"));

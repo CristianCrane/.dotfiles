@@ -467,9 +467,10 @@ export const dictatedHolds = (cwd, work, input, pending) => {
 // change is dictated and holds); `missing` says the first one not done yet.
 // On main in a checkout whose origin is on GitHub no survey is enough: a
 // change there reaches main by PR (`branchFirst`), and edits made on main
-// would leave the checkout diverged from it. A file git ignores there
-// (`.claude/settings.local.json`) reaches no commit or PR, so its edit keeps
-// the session's survey, or a dictated one
+// would leave the checkout diverged from it. A file git ignores there reaches
+// no commit or PR, so its edit keeps the session's survey, or a dictated one:
+// `.claude/settings.local.json` is ignored in every checkout by the global git
+// ignore home.nix sets (`programs.git.ignores`, written to ~/.config/git/ignore)
 export const beforeEdit = (cwd, work, input = {}, pending = null) => {
   const github = DEFAULT_BRANCHES.includes(work.branch) && !(pending && ignored(cwd, pending.path)) && githubOrigin(cwd);
   if (github)

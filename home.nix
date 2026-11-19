@@ -55,6 +55,9 @@ in
     settings.user.name = "Cris Crane";
     settings.user.email = "12250662+CristianCrane@users.noreply.github.com";
     settings.init.defaultBranch = "main";
+    # a checkout's own Claude settings reach no commit or PR, so branch-first
+    # (home/.claude/hooks/lib.mjs, beforeEdit) leaves their edits alone on main
+    ignores = [ ".claude/settings.local.json" ];
   };
   
   programs.eza = {
