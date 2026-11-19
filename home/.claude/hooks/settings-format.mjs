@@ -55,7 +55,7 @@ export const formatSettings = (text, { claudeJson = MIGRATED } = {}) => {
       });
       if (ran.status !== 0)
         throw new Error(
-          `\`claude plugin ${action} ${plugin}\` failed: ${(ran.stderr || ran.stdout).trim() || ran.error?.message}`,
+          `\`claude plugin ${action} ${plugin}\` failed: ${(ran.stderr || ran.stdout || "").trim() || ran.error?.message}`,
         );
     }
     const formatted = readFileSync(file, "utf8");
