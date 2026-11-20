@@ -1606,10 +1606,6 @@ describe("catch-up", () => {
     assert.equal(start(claude), `~/.dotfiles caught up with origin/main: 1 commit, ${before.slice(0, 7)}..${after.slice(0, 7)}.`);
   });
 
-  // home.nix links each skill folder into ~/.claude/skills on its own, at
-  // rebuild, so a skill added or removed waits for it too (the audits
-  // batch's plan review F2, 2026-11-20); an edit to a skill already linked
-  // doesn't
   test("a skill folder added or removed names `rebuild`; an edit to one doesn't", () => {
     const state = live();
     const was = head(state.repo);

@@ -9,7 +9,7 @@
 // ~/.dotfiles or is stuck, and nothing when there is no ~/.dotfiles
 // (another machine, a cloud session) or nothing to do. What it brings under
 // home/.claude is live from then on, but for a skill folder added or
-// removed (home.nix links each skill on its own); that, and a change to the
+// removed (home.nix links, or unlinks, each skill on its own); that, and a change to the
 // Nix config (a .nix file, flake.lock), wait for `rebuild`, which its line
 // then names.
 //
@@ -127,7 +127,6 @@ hook(() => {
     const now = git(dir, "rev-parse", "HEAD");
     const matched = done.staged ? ` (${plural(done.staged, "uncommitted file")} there already matched it)` : "";
     const nix = paths(git(dir, "diff", "--name-only", "--no-renames", "-z", was, now, "--", "*.nix", "flake.lock"));
-    // skill folders, each linked by home.nix's activation, so only at rebuild
     const skills = (rev) => paths(git(dir, "ls-tree", "-z", "-d", "--name-only", rev, "home/.claude/skills/"));
     const [before, after] = [skills(was), skills(now)];
     const moved = [...after.filter((skill) => !before.includes(skill)), ...before.filter((skill) => !after.includes(skill))];

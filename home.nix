@@ -115,7 +115,13 @@ in
     run ln -sfn "${dotfiles}/home/.claude/CLAUDE.md" "$HOME/.claude/CLAUDE.md"
     run ln -sfn "${dotfiles}/home/.claude/hooks" "$HOME/.claude/hooks"
     run ln -sfn "${dotfiles}/home/.claude/agents" "$HOME/.claude/agents"
-    # each skill on its own, so ~/.claude/skills keeps Claude Code's own
+    # each skill on its own, so ~/.claude/skills keeps Claude Code's own;
+    # a skill's link goes when its folder does
+    for link in "$HOME"/.claude/skills/*; do
+      if [ -L "$link" ] && [ ! -e "$link" ] && [[ "$(readlink "$link")" == "${dotfiles}/home/.claude/skills/"* ]]; then
+        run rm "$link"
+      fi
+    done
     for skill in "${dotfiles}"/home/.claude/skills/*; do
       run ln -sfn "$skill" "$HOME/.claude/skills/$(basename "$skill")"
     done
