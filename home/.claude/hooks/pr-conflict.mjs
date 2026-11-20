@@ -1,5 +1,3 @@
-// Edited in github.com/CristianCrane/.dotfiles (home/.claude); user-level only, never copied into repos.
-//
 // Before `gh pr checks` (--watch too), `gh pr view`, `gh pr ready` or
 // `gh pr merge`, asks GitHub whether that PR conflicts with its base and,
 // when it does, tells the agent: GitHub runs no `pull_request` CI on a PR

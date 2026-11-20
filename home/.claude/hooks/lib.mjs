@@ -1,5 +1,3 @@
-// The change rules: edited in github.com/CristianCrane/.dotfiles (home/.claude); repos carry copies made by hooks/sync.mjs.
-//
 // What the change hooks share: git, and the survey, plan review and review
 // files the `change` skill writes into the git dir (never committed, kept
 // per worktree): one set per branch. On main, a checkout whose origin is
@@ -15,16 +13,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-
-// A repo's copy of these hooks (for cloud sessions, which have no
-// ~/.claude) stands aside wherever the user-level ones are installed, so
-// only the newest rules run, and only once. A copy knows itself by where
-// sync puts it.
-const standAside =
-  dirname(fileURLToPath(import.meta.url)).endsWith("/.claude/hooks/change") &&
-  existsSync(join(homedir(), ".claude/hooks/lib.mjs"));
 
 export const git = (cwd, ...args) =>
   execFileSync("git", args, {
@@ -104,11 +93,10 @@ export const flagsOf = (name, usage, config) => {
 // the top folder of the checkout `cwd` is in
 export const topOf = (cwd) => git(cwd, "rev-parse", "--show-toplevel");
 
-// Runs a hook's body on its input and prints what the body returns. A
-// repo's copy stands aside here, and any failure (not a git checkout, bad
-// input) stays silent, so the tool call goes through.
+// Runs a hook's body on its input and prints what the body returns. Any
+// failure (not a git checkout, bad input) stays silent, so the tool call
+// goes through.
 export const hook = (body) => {
-  if (standAside) return;
   try {
     const output = body(JSON.parse(readFileSync(0, "utf8")));
     if (output) console.log(JSON.stringify(output));

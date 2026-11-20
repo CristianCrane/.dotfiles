@@ -1,5 +1,3 @@
-// Edited in github.com/CristianCrane/.dotfiles (home/.claude); user-level only, never copied into repos.
-//
 // Records the tokens each agent and main session spends, so a finished
 // workstream's update can say what it cost, and an audit still has the
 // numbers once Claude Code deletes the transcripts (cleanupPeriodDays, 30
@@ -96,7 +94,7 @@ import { appendFileSync, closeSync, existsSync, fstatSync, mkdirSync, openSync, 
 import { homedir } from "node:os";
 import { execFileSync } from "node:child_process";
 import { basename, dirname, join } from "node:path";
-import { CLAUDE } from "./copy.mjs";
+import { fileURLToPath } from "node:url";
 import { context, flagsOf, hook, lines } from "./lib.mjs";
 
 const USAGE = join(homedir(), ".claude/usage");
@@ -108,6 +106,8 @@ const COUNTS = ["cacheRead", "cacheWrite", "output", "input"];
 const WEIGHTS = { cacheRead: 0.1, cacheWrite: 1.25, cacheWrite1h: 2, output: 5, input: 1 };
 const READINGS = join(USAGE, "windows.jsonl");
 // the weekly review's log, and when the hook last said a review was due
+// ~/.claude, the dotfiles' home/.claude
+const CLAUDE = join(dirname(fileURLToPath(import.meta.url)), "..");
 const LOG = join(CLAUDE, "../../docs/token-review.md");
 const OFFERED = join(USAGE, "review-offered");
 const DAY = 24 * 3600 * 1000;

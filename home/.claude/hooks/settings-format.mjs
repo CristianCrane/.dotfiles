@@ -1,5 +1,3 @@
-// Edited in github.com/CristianCrane/.dotfiles (home/.claude); user-level only, never copied into repos.
-//
 // Puts a settings.json in the exact bytes Claude Code writes, so a commit of
 // home/.claude/settings.json can't hold a form Claude Code rewrites on its
 // next save (an agent's hand edit did: the rewrite blocked a fast-forward

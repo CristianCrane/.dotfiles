@@ -1,5 +1,3 @@
-// The change rules: edited in github.com/CristianCrane/.dotfiles (home/.claude); repos carry copies made by hooks/sync.mjs.
-//
 // After each edit, counts the files the current branch changes against
 // the default branch. Each time the count crosses another 25, the agent is
 // told once to step back and compare with the survey's Expected files.

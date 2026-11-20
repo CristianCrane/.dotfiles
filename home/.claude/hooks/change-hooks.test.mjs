@@ -6,7 +6,7 @@
 // scratch-gate at a subagent's start, reviewer-gate's other callers and the curator, capture (the process layer's inbox), the
 // survey gate on main (branch first where origin is on GitHub),
 // review-gate's merge rule, a dictated settings change, a prototype branch, lib's cwdFor and
-// substitutions, how copy.mjs and sync.mjs register a repo's copy, the
+// substitutions, the
 // scripts' flags, prune-merged (the SessionStart hook that removes merged
 // work), red-checks (the SessionStart hook that names what is red),
 // catch-up (the SessionStart hook that fast-forwards ~/.dotfiles),
@@ -22,7 +22,7 @@
 // (quoted, so node expands the glob: Node 24 runs a bare directory as one
 // failing file). The hooks are this file's neighbours, never ~/.claude's,
 // so a copy of it in a checkout of an older commit tests that commit's
-// hooks. Never copied into repos (copy.mjs lists what is).
+// hooks.
 //
 // A gate's case is a row: [state, command, expected]. The command (for
 // scratch-gate, a path to Write or a shell command) is what TOOL_INPUT
@@ -53,7 +53,6 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { after, describe, test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { repoCopy, repoHooks } from "./copy.mjs";
 import { cwdFor, lines, stateFile, substitutions, workOf } from "./lib.mjs";
 import { formatSettings } from "./settings-format.mjs";
 
@@ -170,11 +169,10 @@ const STATES = {
   lessonNoArrow: ["review-gate", () => scratchRepo({ review: true, lessons: "- A lesson\n" })],
   lessonsEmpty: ["review-gate", () => scratchRepo({ review: true, lessons: "" })],
   lessonsNone: ["review-gate", () => scratchRepo({ review: true, lessons: "None: a one-line fix\n" })],
-  // `Ruled out`, the older skill's spelling of None:, which repos' copies
-  // write until their sync
-  lessonsRuledOut: ["review-gate", () => scratchRepo({ review: true, lessons: `${ROUTED}\nRuled out:\n- F1 a cost: one quick fix\n` })],
-  lessonsOnlyRuledOut: ["review-gate", () => scratchRepo({ review: true, lessons: "Ruled out (none of the costs is a lesson):\n- F1 a cost: one quick fix\n" })],
-  lessonsRuledOutEmpty: ["review-gate", () => scratchRepo({ review: true, lessons: "Ruled out:\n" })],
+  // bullets after None: are its reason, not costs; a bare None: says none
+  lessonsNoneAfter: ["review-gate", () => scratchRepo({ review: true, lessons: `${ROUTED}\nNone:\n- F1 a cost: one quick fix\n` })],
+  lessonsOnlyNone: ["review-gate", () => scratchRepo({ review: true, lessons: "None: none of the costs is a lesson\n- F1 a cost: one quick fix\n" })],
+  lessonsNoneEmpty: ["review-gate", () => scratchRepo({ review: true, lessons: "None:\n" })],
   // a lesson with no → before None: (None: once let the whole file through)
   lessonUnroutedNone: ["review-gate", () => scratchRepo({ review: true, lessons: "- A lesson\nNone: the rest\n" })],
   // a commit after the review, with no recheck of it
@@ -360,11 +358,11 @@ const CASES = [
   ["lessonsEmpty", "gh pr ready", /lists none/],
   ["ready", "gh pr ready", THROUGH],
   ["lessonsNone", "gh pr ready", THROUGH],
-  ["lessonsRuledOut", "gh pr ready", THROUGH],
-  ["lessonsOnlyRuledOut", "gh pr ready", THROUGH],
-  ["lessonsRuledOut", "gh pr ready 12", NAMED],
-  ["lessonsOnlyRuledOut", "gh pr ready 12", NAMED],
-  ["lessonsRuledOutEmpty", "gh pr ready", /lists none/],
+  ["lessonsNoneAfter", "gh pr ready", THROUGH],
+  ["lessonsOnlyNone", "gh pr ready", THROUGH],
+  ["lessonsNoneAfter", "gh pr ready 12", NAMED],
+  ["lessonsOnlyNone", "gh pr ready 12", NAMED],
+  ["lessonsNoneEmpty", "gh pr ready", /lists none/],
   ["lessonUnroutedNone", "gh pr ready", /1 cost\(s\) that don't say where they went/],
   ["lessonsNone", "gh pr ready 12", NAMED],
   ["noLessons", "gh pr ready --undo", THROUGH],
@@ -689,53 +687,6 @@ test("every state with a through case holds one too, and every case's state exis
     assert.ok(expected.length, `${name} has no case`);
     if (expected.includes(THROUGH)) assert.ok(expected.some(Boolean), `${name} holds nothing`);
   }
-});
-
-// sync.mjs registers in a repo the entries of settings.json that run a
-// copied hook, and nothing else (round 1 F4: any other entry came out as
-// a hook named undefined)
-test("repoHooks: only settings.json's entries that run a copied hook", () => {
-  const command = (name) => ({ type: "command", command: `node "$HOME/.claude/hooks/${name}.mjs"` });
-  const settings = {
-    hooks: {
-      PreToolUse: [
-        { matcher: "Bash", hooks: [command("review-gate")] },
-        { matcher: "Agent", hooks: [command("agent-gate"), { type: "command", command: "echo hi" }] },
-        { matcher: "Read", hooks: [command("user-only")] },
-      ],
-      SessionStart: [{ hooks: [command("stale-copy")] }],
-      Stop: [{ hooks: [{ type: "prompt", prompt: "done?" }] }],
-    },
-  };
-  assert.deepEqual(repoHooks(settings), {
-    PreToolUse: [
-      ["Bash", "review-gate"],
-      ["Agent", "agent-gate"],
-    ],
-  });
-});
-
-// a repo's copy reads stale when its registered hooks differ from what a
-// sync writes, not only its files (round 1 F6)
-test("repoCopy: current after a sync, stale once a registered hook differs", () => {
-  const { repo } = scratchRepo();
-  assert.equal(runHook("sync", undefined, { args: [repo] }).status, 0);
-  assert.equal(repoCopy(repo), "current");
-  const file = join(repo, ".claude/settings.json");
-  const settings = JSON.parse(readFileSync(file, "utf8"));
-  settings.hooks.PreToolUse.find((group) => group.hooks.some((hook) => hook.command?.includes("/review-gate.mjs"))).matcher = "Read";
-  writeFileSync(file, JSON.stringify(settings));
-  assert.equal(repoCopy(repo), "stale");
-});
-
-// a flag isn't a repo: sync says how it runs, not a stack trace from git
-// in a folder named --help
-test("sync: a flag it doesn't know says how it runs, and copies nothing", () => {
-  const { repo } = scratchRepo();
-  const ran = runHook("sync", undefined, { args: ["--help"], cwd: repo });
-  assert.equal(ran.status, 1);
-  assert.match(ran.stderr, /^sync: .*'--help'.*\nUsage: node ~\/\.claude\/hooks\/sync\.mjs \[repo\]$/m);
-  assert.ok(!existsSync(join(repo, ".claude/hooks/change")));
 });
 
 // scratch-gate at a subagent's start: it makes the agent's folder and
@@ -1123,7 +1074,7 @@ test("dictated: a settings change the user typed out skips the reviews, and noth
   // committed, it needs no review to leave draft, only its lessons
   writeFileSync(join(plain.repo, ".claude/settings.json"), json(deny("Skill(x:pr)")));
   git(plain.repo, "commit", "-qam", "deny");
-  write(plain.repo, "lessons", "Ruled out:\n- none: dictated\n");
+  write(plain.repo, "lessons", "None: dictated\n");
   assert.equal(run("review-gate", plain, { command: "gh pr ready" }), null, "a dictated change has no review to wait for");
   writeFileSync(join(plain.repo, ".claude/settings.json"), json({ ...deny("Skill(x:pr)"), env: { A: "1" } }));
   git(plain.repo, "commit", "-qam", "env");
@@ -2051,14 +2002,14 @@ describe("usage", () => {
     assert.match(failing.stdout, /^weighted per merged PR {2,}- {2,}-$/m);
   });
 
-  // usage.mjs, lib.mjs and copy.mjs in a dotfiles-shaped tree, whose
+  // usage.mjs and lib.mjs in a dotfiles-shaped tree, whose
   // docs/token-review.md is the log the hook reads
   test("--hook at SessionStart: says once a week, at a main session's startup, that the review is due", () => {
     const home = scratchDir();
     const tree = scratchDir();
     mkdirSync(join(tree, "home/.claude/hooks"), { recursive: true });
     mkdirSync(join(tree, "docs"));
-    for (const name of ["usage", "lib", "copy"]) copyFileSync(join(HOOKS, `${name}.mjs`), join(tree, `home/.claude/hooks/${name}.mjs`));
+    for (const name of ["usage", "lib"]) copyFileSync(join(HOOKS, `${name}.mjs`), join(tree, `home/.claude/hooks/${name}.mjs`));
     const log = join(tree, "docs/token-review.md");
     const offered = join(home, ".claude/usage/review-offered");
     const start = (input = {}) =>

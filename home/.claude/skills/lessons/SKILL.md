@@ -3,8 +3,6 @@ name: lessons
 description: Notice what finished work cost and write each cost to the process layer's inbox as a raw signal, placing nothing. Use when work is done (the change skill's last step, before a PR leaves draft), when the user asks for lessons or a retro, or before they clear the session.
 ---
 
-<!-- The change rules: edited in github.com/CristianCrane/.dotfiles (home/.claude); repos carry copies made by hooks/sync.mjs. -->
-
 # Lessons
 
 What a piece of work cost is lost unless someone writes it down. This skill only **notices**: each cost goes to the process layer's inbox as a raw signal, and the curator decides, in a batch with every guidance file in view, what it teaches and where it lives (the dotfiles' `docs/process.md`). So write every cost, and place none: a rule written here would skip the curator's check of its place and its repeats.

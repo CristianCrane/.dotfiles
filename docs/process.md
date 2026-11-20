@@ -17,7 +17,7 @@ One policy and one log, here, for every repo (D4). A repo keeps only what is abo
 Each line of guidance holds four things, and a line missing one is a finding (D29):
 
 - **A reason:** what it prevents, with the event that showed it (a PR, an issue, a date). A line with no reason found gets "keep, cite a reason" or "remove".
-- **One copy:** one meaning in one place. A copy elsewhere is cut to a pointer or removed. A repo's byte copy of the change rules (`hooks/sync.mjs`) is one copy, made by a script.
+- **One copy:** one meaning in one place. A copy elsewhere is cut to a pointer or removed.
 - **An end condition:** when it goes, said when it isn't "never" ("until .dotfiles#5", "while Stripe is in test mode"). A line whose end has come is removed.
 - **The right place:** where its scope puts it (Place, below; principle 1).
 

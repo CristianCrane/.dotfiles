@@ -1,5 +1,3 @@
-// The change rules: edited in github.com/CristianCrane/.dotfiles (home/.claude); repos carry copies made by hooks/sync.mjs.
-//
 // An agent isn't spawned into a harness-isolated worktree (`isolation:
 // "worktree"`). There the Write tool refuses the git dir, where the
 // `change` skill's files live, and every powershell.exe command is refused

@@ -1,5 +1,3 @@
-// The change rules: edited in github.com/CristianCrane/.dotfiles (home/.claude); repos carry copies made by hooks/sync.mjs.
-//
 // `gh pr create` waits for the branch's change review (the `change` skill):
 // it is turned down until the review exists (a dictated change that holds
 // has none: lib's dictatedHolds), is of the last commit (or
@@ -85,19 +83,18 @@ const prototypeTurnDown = (branch, verb) =>
 
 // why the branch's PR can't leave draft yet, if it can't: its lessons file
 // is missing, lists nothing, or has a cost that doesn't say where it went.
-// The costs are the bullets before the first line starting `None:` (or
-// `Ruled out`, the older skill's spelling, which repos' copies write until
-// their sync); its reason follows, in any form
+// The costs are the bullets before the first line starting `None:`; its
+// reason follows, in any form
 const lessonsMissing = (cwd, work) => {
   const file = stateFile(cwd, "lessons", work.key);
   const how = `run the \`lessons\` skill (the \`change\` skill's step 6): its \`capture.mjs --source lessons\` writes each cost to ${file} with where it went (\`→ inbox <id>\`), or write \`None: <why>\` there when the work cost nothing`;
   if (!existsSync(file)) return `${work.branch}'s PR can't leave draft before its lessons: ${how}.`;
   const all = lines(readFileSync(file, "utf8"));
-  const split = all.findIndex((line) => /^(?:ruled out|none:)/i.test(line.trim()));
+  const split = all.findIndex((line) => /^none:/i.test(line.trim()));
   const items = (split < 0 ? all : all.slice(0, split)).filter((line) => /^\s*-\s/.test(line));
-  const ruledOut = split >= 0 && /\w/.test(all.slice(split).join(" ").replace(/^\s*(?:ruled out|none)\W*/i, ""));
+  const reasoned = split >= 0 && /\w/.test(all.slice(split).join(" ").replace(/^\s*none\W*/i, ""));
   const unsaid = items.filter((line) => !/→\s*\S/.test(line));
-  if ((items.length === 0 && !ruledOut) || unsaid.length)
+  if ((items.length === 0 && !reasoned) || unsaid.length)
     return `The lessons file for ${work.branch} (${file}) ${items.length ? `has ${unsaid.length} cost(s) that don't say where they went` : "lists none"}: ${how}.`;
 };
 
