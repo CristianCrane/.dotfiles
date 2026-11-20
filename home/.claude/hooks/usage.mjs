@@ -556,7 +556,7 @@ const reviewDue = (input) => {
   return context(
     "SessionStart",
     `The weekly token review is due: ${last ? `the last entry in ${LOG} is from ${last}` : `${LOG} has no entry yet`}. ` +
-      `In your first reply, offer the user to run it; on their yes, one agent runs it as that file's "Running a review" says. This is said once a week.`,
+      `In your first reply, offer the user to run it; on their yes, start the agents that file's "Running a review" names. This is said once a week.`,
   );
 };
 
