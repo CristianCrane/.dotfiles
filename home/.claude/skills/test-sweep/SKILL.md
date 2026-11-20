@@ -5,7 +5,7 @@ description: The weekly sweep of tests in every repo: about 2 slices a week in a
 
 # Test sweep
 
-Tests pile up: a new one can repeat an old one, pass whatever the code does, or check something that no longer exists. The `change` skill checks the tests each change touches; this sweep reads the rest, a little at a time, where the code is moving. It grows with activity, not with how many repos exist (the dotfiles' `docs/process.md`, principle 2): a repo nobody has touched since its last sweep costs nothing.
+Tests pile up: a new one can repeat an old one, pass whatever the code does, or check something that no longer exists. The `change` skill, through the `testing` skill, checks the tests each change touches; this sweep reads the rest, a little at a time, where the code is moving. It grows with activity, not with how many repos exist (the dotfiles' `docs/process.md`, principle 2): a repo nobody has touched since its last sweep costs nothing.
 
 ## 1. Pick about 2 slices
 
@@ -18,14 +18,14 @@ A **slice** is a set of tests with the code they test, small enough for one care
 
 ## 2. Read each test beside its code
 
-Read each test in the slice next to the code it guards. What makes a test a duplicate or weak is the `change` skill's rule (Rules, "Each test a change adds or edits earns its place"); the sweep adds how it finds them, and two more kinds:
+Read each test in the slice next to the code it guards. What makes a test a duplicate or weak is the `testing` skill's rule ("Each test earns its place"); the sweep adds how it finds them, and two more kinds:
 
 - **Duplicates:** cite both tests.
 - **Weak:** suspect it from what it asserts (only that something renders, a mock checked against itself, a check that passes on an empty page), then prove it as that rule says, in a worktree on a detached HEAD (`git worktree add --detach <path> origin/<default>`, where edits need no survey): break the code, run that one test, see it stay green, and remove the worktree. Do this only for suspects, with no mutation tool.
 - **Stale:** skipped (`.skip`, `.fixme`, `todo`), checking behaviour the code no longer has, or covering code nothing calls.
 - **Slow and covered:** a slow test (by its duration in a run; the repo's testing doc says how to get one) whose checks a faster test already makes.
 
-The repo's own test rules apply (its CLAUDE.md, and the testing doc it points to).
+The `testing` skill's rules apply, and the repo's own (its CLAUDE.md, and the testing doc it points to).
 
 ## 3. Report
 
