@@ -23,7 +23,7 @@ Read each test in the slice next to the code it guards. What makes a test a dupl
 - **Duplicates:** cite both tests.
 - **Weak:** suspect it from what it asserts (only that something renders, a mock checked against itself, a check that passes on an empty page: the `testing` skill's "Every check can fail"), then prove it as that rule says, in a worktree on a detached HEAD (`git worktree add --detach <path> origin/<default>`, where edits need no survey): break the code, run that one test, see it stay green, and remove the worktree. Do this only for suspects, with no mutation tool.
 - **Stale:** skipped (`.skip`, `.fixme`, `todo`), checking behaviour the code no longer has, or covering code nothing calls.
-- **Slow and covered:** a slow test (by its duration in a run; the repo's testing doc says how to get one) whose checks a faster test already makes.
+- **Slow and covered:** a slow test (by its duration in a run's report, as the `testing` skill's time budgets say) whose checks a faster test already makes.
 
 The `testing` skill's rules apply, and the repo's own (its CLAUDE.md, and the testing doc it points to).
 
