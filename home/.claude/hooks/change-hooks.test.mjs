@@ -1557,6 +1557,21 @@ describe("catch-up", () => {
     assert.equal(start(claude), `~/.dotfiles caught up with origin/main: 1 commit, ${before.slice(0, 7)}..${after.slice(0, 7)}.`);
   });
 
+  test("a skill folder added or removed names `rebuild`; an edit to one doesn't", () => {
+    const state = live();
+    const was = head(state.repo);
+    mkdirSync(join(state.dir, "other/home/.claude/skills/old"), { recursive: true });
+    const old = state.merged("home/.claude/skills/old/SKILL.md", "old\n");
+    assert.equal(start(state), `~/.dotfiles caught up with origin/main: 1 commit, ${was.slice(0, 7)}..${old.slice(0, 7)}; home/.claude/skills/old added or removed: run \`rebuild\` to apply it.`);
+    const edited = state.merged("home/.claude/skills/old/SKILL.md", "old, edited\n");
+    assert.equal(start(state), `~/.dotfiles caught up with origin/main: 1 commit, ${old.slice(0, 7)}..${edited.slice(0, 7)}.`);
+    mkdirSync(join(state.dir, "other/home/.claude/skills/new"), { recursive: true });
+    state.merged("home/.claude/skills/new/SKILL.md", "new\n");
+    state.merged("home/.claude/skills/old/SKILL.md", null);
+    const tip = state.merged("home.nix", "{ }\n");
+    assert.equal(start(state), `~/.dotfiles caught up with origin/main: 3 commits, ${edited.slice(0, 7)}..${tip.slice(0, 7)}; home.nix changed, and home/.claude/skills/new, home/.claude/skills/old added or removed: run \`rebuild\` to apply them.`);
+  });
+
   // the user's own save (/model) that a PR then landed: git refuses a
   // fast-forward over a dirty file even when it equals the incoming one
   test("a dirty file equal to origin's, an untracked one origin adds, and one origin deletes: staged, then fast-forwarded", () => {

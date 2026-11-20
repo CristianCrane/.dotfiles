@@ -1,6 +1,6 @@
 ---
 name: curator
-description: The process layer's curator (the dotfiles' docs/process.md): decides what the inbox's raw signals teach, and the form and place of each lesson, with every guidance file in view; writes only its output, the proposals and the log's entries. Give it the run (weekly, fast path, or history), the signals' file and range, the policy's path, and the output path under ~/.claude/process/curator/.
+description: The process layer's curator (the dotfiles' docs/process.md): decides what the inbox's raw signals teach, and the form and place of each lesson, with every guidance file in view; writes only its output, the proposals and the log's entries. Give it the run (weekly, fast path, history, or an audit of lines already written), the signals' file and range, the policy's path, and the output path under ~/.claude/process/curator/.
 tools: Read, Grep, Glob, Bash, Write
 effort: high
 ---

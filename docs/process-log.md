@@ -4,7 +4,7 @@ The process layer's decisions ([process.md](process.md)): each proposal the cura
 
 ## Format
 
-An entry, under its run's heading (`### <date>: weekly | fast path | history`):
+An entry, under its run's heading (`### <date>: weekly | fast path | history | audit`):
 
 ```
 - L<n> <verdict> · <kind of call> · <reach> · recommended <yes|no>
