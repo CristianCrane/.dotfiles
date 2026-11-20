@@ -1,5 +1,3 @@
-// Edited in github.com/CristianCrane/.dotfiles (home/.claude); user-level only, never copied into repos.
-//
 // Each subagent keeps its scratch files in a folder of its own,
 // `<scratchpad>/agents/<agent_id>`. Claude Code gives every agent of a
 // session the session's one scratchpad, so agents running at once wrote

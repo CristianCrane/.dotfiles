@@ -28,6 +28,20 @@ Kept from step 3 on: per kind of call and reach, the matching verdicts in a row,
 
 ## Entries
 
+### 2026-11-20: fast path, local only
+
+The user's decision, 2026-11-20, relayed in the audits' session: local only. L82–L84 are its three parts; no curator proposal came before it.
+
+- L82 yes · remove → dotfiles · global · recommended yes
+  The repo copies of the change rules go, and everything that exists only to keep them current: `hooks/sync.mjs`, copy.mjs, stale-copy.mjs (the session-start "this repo's copy … differs" warning) and its settings.json entry, lib.mjs's stand-aside for a copy, review-gate's reading of the copies' older lessons spelling, their tests, and each line that tells an agent to sync (the change rules' headers, CLAUDE.md, process.md). empire-cleaning's `.claude/` loses the synced copies (skills/change, skills/lessons, agents/change-reviewer.md, hooks/change/) and the hooks sync registered in its settings.json, keeping what sync didn't write; its #475 (the sync PR) closes · signals — · caught by no rule · repeat of —
+  The user: remove the repo copies of the change rules and everything that exists only to keep them current; cloud sessions are out until they start them · landed in —
+- L83 yes · principle → process.md · global · recommended yes
+  D24 becomes: local only; cloud sessions, and the repo copies they'd need, come back only if the user starts using cloud sessions. The cloud route goes with it: the lessons skill's issue fallback, process.md's line on it and the reviewer's public copy of the policy (process.md, One gate; change-reviewer's hunt 10), and the decision record's "Cloud sessions" call · signals — · caught by no rule · repeat of —
+  landed in —
+- L84 yes · principle → process.md · global · recommended yes
+  process.md, The inbox, records the tradeoff: the inbox and memory are local only, with no backup; a sudden disk loss costing up to a week of undecided signals is accepted for simplicity. The dotfiles get a README whose one line on moving machines says to copy `~/.claude/process` and `~/.claude/projects` across · signals — · caught by no rule · repeat of —
+  landed in —
+
 ### 2026-11-20: audit
 
 The user's verdicts, 2026-11-20, on two curator audits of guidance already written, read line by line rather than from signals: `audit-2026-11-20-testing.md` (empire-cleaning's docs/testing.md; L36–L54 are its items 1–19, L81 its Also noted) and `audit-2026-11-20-empire-docs.md` (the rest of empire-cleaning's guidance; L55–L80 are its items 1–26). Every item as the audit recommended, but where an entry says. The re-timings (L53, L76) wait for a quiet machine and an agent of their own, and nothing their numbers rest on changes here. Cloud sessions are out of scope (the user: local only), so the new skills stay out of sync.mjs.

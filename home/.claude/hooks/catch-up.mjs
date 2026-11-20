@@ -1,5 +1,3 @@
-// Edited in github.com/CristianCrane/.dotfiles (home/.claude); user-level only, never copied into repos.
-//
 // Fast-forwards ~/.dotfiles to origin's main at every session start,
 // whatever folder the session is in. Its working tree is linked into
 // ~/.claude, live for every session, and a dotfiles PR merges on GitHub,

@@ -1,5 +1,3 @@
-// Edited in github.com/CristianCrane/.dotfiles (home/.claude); user-level only, never copied into repos.
-//
 // `pgrep`/`pkill` matching full command lines (-f, -af, --full …) is turned
 // down in a Bash or Monitor command. Claude Code runs each command inside
 // `zsh -c '… eval "<command>"'`, so the command's own text, the pattern

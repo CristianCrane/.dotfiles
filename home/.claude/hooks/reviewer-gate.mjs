@@ -1,5 +1,3 @@
-// The change rules: edited in github.com/CristianCrane/.dotfiles (home/.claude); repos carry copies made by hooks/sync.mjs.
-//
 // The change-reviewer reads, and writes its review: nothing else (and the
 // curator, which writes only its output: HELD). In
 // empire-cleaning#374 it ran vitest in the author's checkout while the

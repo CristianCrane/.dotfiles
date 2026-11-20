@@ -1,5 +1,3 @@
-// Edited in github.com/CristianCrane/.dotfiles (home/.claude); user-level only, never copied into repos.
-//
 // Names what is red in a GitHub repo when a session starts there, so "No
 // red tests" (the global CLAUDE.md, Working with me) holds when nobody is
 // looking: each open PR whose checks failed, and each workflow whose latest

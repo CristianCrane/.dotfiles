@@ -1,5 +1,3 @@
-// Edited in github.com/CristianCrane/.dotfiles (home/.claude); user-level only, never copied into repos.
-//
 // Removes a repo's worktrees and branches whose PR merged, so nobody has to
 // remember to (CristianCrane/empire-cleaning#263: 4 worktrees and 34
 // branches on GitHub had piled up). By hand, from any checkout of a GitHub

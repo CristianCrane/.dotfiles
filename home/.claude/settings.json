@@ -128,11 +128,6 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$HOME/.claude/hooks/stale-copy.mjs\"",
-            "timeout": 10
-          },
-          {
-            "type": "command",
             "command": "node \"$HOME/.claude/hooks/prune-merged.mjs\" --hook",
             "timeout": 600,
             "async": true

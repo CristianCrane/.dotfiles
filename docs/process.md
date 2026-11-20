@@ -17,7 +17,7 @@ One policy and one log, here, for every repo (D4). A repo keeps only what is abo
 Each line of guidance holds four things, and a line missing one is a finding (D29):
 
 - **A reason:** what it prevents, with the event that showed it (a PR, an issue, a date). A line with no reason found gets "keep, cite a reason" or "remove".
-- **One copy:** one meaning in one place. A copy elsewhere is cut to a pointer or removed. A repo's byte copy of the change rules (`hooks/sync.mjs`) is one copy, made by a script.
+- **One copy:** one meaning in one place. A copy elsewhere is cut to a pointer or removed.
 - **An end condition:** when it goes, said when it isn't "never" ("until .dotfiles#5", "while Stripe is in test mode"). A line whose end has come is removed.
 - **The right place:** where its scope puts it (Place, below; principle 1).
 
@@ -87,11 +87,11 @@ Capture writes raw signals and decides nothing (D8). Three routes:
 
 - **The background pass** (step 2, not built yet): when a main session ends or compacts, a cheap fast model reads what's new and pulls out every candidate signal, wide net (D14, D15); at each session start, a catch-up for conversations that never ended cleanly. Main sessions only. It is its own script: `hooks/catch-up.mjs` is the dotfiles' fast-forward to `origin/main`, a different job.
 - **In the moment** (D16): `node ~/.claude/hooks/capture.mjs`, run by the main session when the user corrects it or either side flags something as important, as the main-session message says. `--help` gives its flags and its text's labelled lines.
-- **The `lessons` skill** (D20): at the end of each PR, the agent writes what the work cost, a signal per cost, with `capture.mjs --source lessons`, which also adds its line to the branch's lessons file (`- <cost> → inbox <id>`), the record the PR gate reads. It is agents' only route in: the pass reads main sessions only. Cloud sessions (D24) have neither the command nor a lasting inbox: their costs go in one issue on CristianCrane/.dotfiles, "Signals from <repo>: <branch>", in the agent's own words with no quote and no name of a client or person, since that repo is public (D13); the curator reads it as signals.
+- **The `lessons` skill** (D20): at the end of each PR, the agent writes what the work cost, a signal per cost, with `capture.mjs --source lessons`, which also adds its line to the branch's lessons file (`- <cost> → inbox <id>`), the record the PR gate reads. It is agents' only route in: the pass reads main sessions only.
 
 ### The inbox
 
-`~/.claude/process/inbox.jsonl`, local, never committed: its quotes can name clients (D13). One JSON object per line:
+`~/.claude/process/inbox.jsonl`, local, never committed: its quotes can name clients (D13). It and memory (`~/.claude/projects`) have no backup: a sudden disk loss can cost up to a week of undecided signals, accepted for simplicity (D24, 2026-11-20); moving machines, the README says what to copy. One JSON object per line:
 
 ```
 {"id":"<8 hex>","at":"2026-11-19T21:30:00.000Z","session":"<session id>","project":"<repo or folder>","source":"capture|pass|lessons","kind":"correction|important|decision|retraction|repeat|frustration|cost","said":"<the user's words, quoted>","proposed":"<what Claude proposed or did>","note":"<one line of context>"}
@@ -128,7 +128,7 @@ One PR per repo per batch, on a branch `process-batch-<date>-<slug>` (a fast-pat
 
 ### One gate for every route
 
-The change reviewer checks every diff that touches guidance against this file and its principles, whoever wrote it: a batch, the user's own ask, any agent's PR (D30). A dictated settings change stays exempt (the `change` skill). Its hunt reads this file at `~/.dotfiles/docs/process.md`, or with no `~/.dotfiles` the public copy on GitHub.
+The change reviewer checks every diff that touches guidance against this file and its principles, whoever wrote it: a batch, the user's own ask, any agent's PR (D30). A dictated settings change stays exempt (the `change` skill). Its hunt reads this file at `~/.dotfiles/docs/process.md`.
 
 ### The log
 

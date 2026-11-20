@@ -1,5 +1,3 @@
-// Edited in github.com/CristianCrane/.dotfiles (home/.claude); user-level only, never copied into repos.
-//
 // Writes one raw signal to the process layer's inbox,
 // ~/.claude/process/inbox.jsonl (the dotfiles' docs/process.md, Capture):
 // the user corrected Claude, either side flagged something as important,

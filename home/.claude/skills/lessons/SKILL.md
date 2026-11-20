@@ -3,8 +3,6 @@ name: lessons
 description: Notice what finished work cost and write each cost to the process layer's inbox as a raw signal, placing nothing. Use when work is done (the change skill's last step, before a PR leaves draft), when the user asks for lessons or a retro, or before they clear the session.
 ---
 
-<!-- The change rules: edited in github.com/CristianCrane/.dotfiles (home/.claude); repos carry copies made by hooks/sync.mjs. -->
-
 # Lessons
 
 What a piece of work cost is lost unless someone writes it down. This skill only **notices**: each cost goes to the process layer's inbox as a raw signal, and the curator decides, in a batch with every guidance file in view, what it teaches and where it lives (the dotfiles' `docs/process.md`). So write every cost, and place none: a rule written here would skip the curator's check of its place and its repeats.
@@ -30,8 +28,6 @@ EOF
 The quoted heredoc keeps the words as written: in double quotes the shell would run a backtick span and expand a `$`.
 
 Each run also adds the cost's line to the branch's lessons file (`- <cost> → inbox <id>`), the record the PR gate reads. Wide net: a small cost goes in too; the curator drops noise.
-
-With no `~/.claude/hooks/capture.mjs` (a cloud session), open one issue on CristianCrane/.dotfiles, "Signals from <repo>: <branch>", listing the costs in your own words, with no quote of the user's and no name of a client or person: the repo is public, and raw signals stay local (D13). Then write the lessons file by hand, a line per cost: `- <cost> → <the issue's URL>`.
 
 Done when every cost on the list has its line in the lessons file.
 
