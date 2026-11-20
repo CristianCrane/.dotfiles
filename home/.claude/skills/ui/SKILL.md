@@ -9,7 +9,7 @@ A screen is for the person using it. Each rule here came from a screen that got 
 
 ## What a screen shows
 
-- **Lead with what the person came for.** Each screen starts from what this person came to see or do, and shows it first and largest. Everything else ranks below it, and what doesn't earn a place on the first view moves off it.
+- **Lead with what this reader, on this screen, needs.** Each screen starts from what the person looking came to see or do, and shows it first and largest. Everything else ranks below it, and what doesn't earn a place on the first view moves off it. A call carried to every screen like it, which keeps them consistent, carries that question, not one screen's answer: an empty Extras row is noise to a Client who asked for a clean, but elsewhere it can matter that nothing is there. One row's call, made a rule for every fact, buried the values on every screen it reached (empire-cleaning #490, 2026-11-20).
 - **The first view stays focused.** Explanations, how a figure is worked out, history and rare actions wait behind a tap (a link, a folded section, an actions menu) until they matter. No step is shown before it applies.
 - **Few words.** Rows and pages carry only what drives the decision: no subtitle that repeats the title, no help text that says what the screen already shows, no paragraph where a label will do. Offer to cut rather than add.
   These three are empire-cleaning's owner's "clear, focused, simple, peaceful" (2026-11-13), the rule for every screen type since #431.
