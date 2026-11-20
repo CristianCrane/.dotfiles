@@ -91,7 +91,7 @@ Capture writes raw signals and decides nothing (D8). Three routes:
 
 ### The inbox
 
-`~/.claude/process/inbox.jsonl`, local, never committed: its quotes can name clients (D13). One JSON object per line:
+`~/.claude/process/inbox.jsonl`, local, never committed: its quotes can name clients (D13). It and memory (`~/.claude/projects`) have no backup: a sudden disk loss can cost up to a week of undecided signals, accepted for simplicity (D24, 2026-11-20); moving machines, the README says what to copy. One JSON object per line:
 
 ```
 {"id":"<8 hex>","at":"2026-11-19T21:30:00.000Z","session":"<session id>","project":"<repo or folder>","source":"capture|pass|lessons","kind":"correction|important|decision|retraction|repeat|frustration|cost","said":"<the user's words, quoted>","proposed":"<what Claude proposed or did>","note":"<one line of context>"}
