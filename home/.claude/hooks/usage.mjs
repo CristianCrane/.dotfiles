@@ -105,9 +105,9 @@ const COUNTS = ["cacheRead", "cacheWrite", "output", "input"];
 // cache's
 const WEIGHTS = { cacheRead: 0.1, cacheWrite: 1.25, cacheWrite1h: 2, output: 5, input: 1 };
 const READINGS = join(USAGE, "windows.jsonl");
-// the weekly review's log, and when the hook last said a review was due
 // ~/.claude, the dotfiles' home/.claude
 const CLAUDE = join(dirname(fileURLToPath(import.meta.url)), "..");
+// the weekly review's log, and when the hook last said a review was due
 const LOG = join(CLAUDE, "../../docs/token-review.md");
 const OFFERED = join(USAGE, "review-offered");
 const DAY = 24 * 3600 * 1000;
