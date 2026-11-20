@@ -1,6 +1,6 @@
 ---
 name: testing
-description: Test rules for any repo. Use before writing or editing a test, or changing how tests run.
+description: Test rules for any repo. Use before writing or editing a test, changing how tests run, or timing a run or chasing a test that fails or runs slow.
 ---
 
 # Testing
@@ -18,3 +18,10 @@ A test is worth what it catches. Each rule here came from a test that passed wit
 - **A change to how tests start, stop or wait checks how they fail beside how they pass**, before its review: a port already held, a process that dies, a setup step that fails, each failing at once and saying what. A start only seen passing can run the tests against the wrong server, or wait out its timeout: on empire-cleaning #312 an API on a held port said it was listening and served nothing, and a failed start held the run for 120 s (PR #325, review F3 and F10).
 - **A run's shared resources are named for the run** (its databases, its scratch folders), never for the checkout or the machine. Two runs in one checkout happen: named per checkout, the second recreated the first's databases under it, and 48 of 51 files failed (empire-cleaning #375). Ports can stay per checkout, as a held port fails at once and says so.
 - **A project sets the time budget for its kind of test, and says why in its config.** A single test past it says so beside it, with why, and the issue that will bring it back when there is one; raising the project's budget to fit one slow test would hide a hang or a slowdown in all the others. The tests nearest the budget are the ones that fail under load, so read each one's duration from a run's report (Vitest's `--reporter=json`, Playwright's report): empire-cleaning's slowest server test passed 5 s with two checkouts' runs at once (PR #323).
+
+## Timing a run, or chasing a failure
+
+How a cause is shown is the global CLAUDE.md's Evidence and the `change` skill's Survey. For tests:
+
+- **Before against after: in turns, on tests both share.** Other runs start and stop mid-measurement: on empire-cleaning PR #379 the load went from 9.2 to 12.2 as another checkout's run started, and five runs of one file drifted from 6.7 s to 9.6 s. So time the default branch and the change in turns, each in a worktree of its own, never one series and then the other. Time only tests both sides have: tests the change adds time themselves, not the change.
+- **A run alone against one beside another.** A test red only beside another run is load or something shared, such as a port or a database name. Many copies of one test at once (Playwright's `--repeat-each`, several workers) tell a race apart from state left behind (empire-cleaning #310).
