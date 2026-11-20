@@ -28,6 +28,29 @@ Kept from step 3 on: per kind of call and reach, the matching verdicts in a row,
 
 ## Entries
 
+### 2026-11-20: fast path
+
+The user's verdicts, 2026-11-20: all six proposals as written, proposal 1 moved to the change skill. L30–L35 are this run's proposals 1–6; L30 is L7 in the user's words. Signal d55b11a0 waits for the next weekly run.
+
+- L30 edit · rule line → repo doc · repo · recommended yes
+  Change skill, Rules, beside L31's line: a speed-up runs the same checks faster (more workers or shards, a quicker setup), never fewer or weaker ones; cutting checks for speed was offered and turned down twice (empire-cleaning's seed tests, 2026-11-05; less coverage, 2026-11-06). Supersedes L7, which never landed; empire-cleaning's docs/testing.md gets nothing · signals 62682c83, d9c6b040, bdbe241a, 937818b5 · caught by no rule · repeat of —
+  The user dropped "locally too", and moved the line: "does this really only apply to empire cleaning?" It's about every repo (curation principle 1), so the change skill, generalised, its reason dates kept; the quick-tests/ADR-0026 clause dropped (it contradicted the change skill's §4). The placement override counts against "rule line → repo doc" (D19d) · landed in —
+- L31 yes · rule line → change skill · skill · recommended yes
+  Change skill, Rules: each test a change adds or edits earns its place (no other test checks the same thing at the same level; it goes red when its code is broken by hand; a bug fix's red test counts); the change reviewer's hunt 1 points there: "A test is a copy too (the change skill's Rules, "earns its place")" · signals cb2a0c8c · caught by no rule (only a test harness's copies, a removed feature's tests and a bug fix's red test were checked) · repeat of —
+  landed in —
+- L32 yes · skill → dotfiles · skill · recommended yes
+  A `test-sweep` skill, started by the weekly review beside the token review (token-review.md, Running a review; usage.mjs's reminder and its case in change-hooks.test.mjs): about 2 slices a week across every repo, picked by what changed since each slice's last sweep (`~/.claude/process/test-sweep.json`, local); duplicate and weak tests as the change skill's "earns its place" says, weak ones proved by breaking code by hand, stale and slow-but-covered tests; the report as main-session.md's "When you ask me to decide something" says; approved items land as one PR per repo through the change skill, with coverage before and after, naming no repo's coverage script · signals cb2a0c8c, 9681a7aa · caught by no rule · repeat of —
+  The user's shape: ~2 slices a week whatever the number of repos, picked by recent change, weak tests proved by hand only for suspects, no mutation tool · landed in —
+- L33 yes · principle → process.md · global · recommended yes
+  Curation principle 2: background upkeep scales with activity, not with how many things exist · signals 9681a7aa · caught by no rule · repeat of —
+  Approved in conversation 2026-11-20 (D5) · landed in —
+- L34 yes · rule line → process.md · global · recommended yes
+  The curator reads whole the global files and the guidance of the repos its signals come from, and searches every other repo's for each lesson's words (principle 2): process.md, The curator, and curator.md's step 1; prunes process.md's "it reads everything" and curator.md's heading "Read everything" (now "Read what's in play") · signals 9681a7aa · caught by no rule (follows from L33) · repeat of —
+  landed in —
+- L35 yes · rule line → agent type · skill · recommended yes
+  curator.md, Output: the template's "Recommend: yes | no" becomes "make this change | don't make this change", and a pointer to main-session.md's "When you ask me to decide something" line, with its event ("Recommend: no" read as "remove", 2026-11-19); the log keeps "recommended yes|no" · signals 8590036a, 5e05e68f · caught by main-session message, "When you ask me to decide something" (L2), which agents never get · repeat of L2
+  landed in —
+
 ### 2026-11-19: history
 
 The user's verdicts, 2026-11-19: "approve all", each item as recommended, proposal 2 in the user's own words. L1–L9 are the run's proposals 1–9, L10 is .dotfiles#24's item 2, and L11–L29 are its existing lines 1–19.
