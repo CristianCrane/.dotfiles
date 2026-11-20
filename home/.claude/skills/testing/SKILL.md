@@ -27,3 +27,7 @@ How a cause is shown is the global CLAUDE.md's Evidence and the `change` skill's
 - **Runs already going.** Before timing, look for the repo's test runners by their command lines: `ps -eo pid,args | grep -E "[p]laywright|[v]itest"`, the brackets keeping grep from matching itself (`pgrep -af` matches the shell that runs it, so it always finds one: empire-cleaning de908e75).
 - **Before against after: in turns, on tests both share.** Other runs start and stop mid-measurement: on empire-cleaning PR #379 the load went from 9.2 to 12.2 as another checkout's run started, and five runs of one file drifted from 6.7 s to 9.6 s. So time the default branch and the change in turns, each in a worktree of its own, never one series and then the other. Time only tests both sides have: tests the change adds time themselves, not the change.
 - **A run alone against one beside another.** A test red only beside another run is load or something shared, such as a port or a database name. Many copies of one test at once (Playwright's `--repeat-each`, several workers) tell a race apart from state left behind (empire-cleaning #310).
+
+## Tools
+
+- **Playwright's `--project` takes several values**, so in `--project phone e2e/bills.spec.ts` the spec is read as a second project: write `--project=phone e2e/bills.spec.ts`, or the spec first (empire-cleaning, kept in memory until 2026-11-19).
