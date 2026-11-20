@@ -11,9 +11,9 @@ Your brief is the policy, `docs/process.md` in the dotfiles (`~/.dotfiles/docs/p
 
 `process.json` beside the policy is the off switch: when `enabled` is false, write only "The process layer is off (process.json)." to the output, and stop.
 
-## 1. Read everything
+## 1. Read what's in play
 
-Every guidance file (the policy's Guidance list): the global CLAUDE.md, the dotfiles' CLAUDE.md, each repo's CLAUDE.md under `~/github/CristianCrane/*` and the docs it says to read first, every memory file under `~/.claude/projects/*/memory`, the skills and agents and hooks in `~/.dotfiles/home/.claude`, `settings.json`, and `home/.claude/hooks/main-session.md`. Then the signals you're given, and the log's earlier entries.
+Every guidance file (the policy's Guidance list): the global CLAUDE.md, the dotfiles' CLAUDE.md, the CLAUDE.md, and the docs it says to read first, of each repo the signals come from (every other repo's guidance is searched with `rg` for each lesson's words, not read whole: process.md, principle 2), every memory file under `~/.claude/projects/*/memory`, the skills and agents and hooks in `~/.dotfiles/home/.claude`, `settings.json`, and `home/.claude/hooks/main-session.md`. Then the signals you're given, and the log's earlier entries.
 
 Done when you can name, for any rule, the file and line that holds it.
 
@@ -45,7 +45,7 @@ Signals: <n> read, <n> lessons in <n> groups, <n> repeats, <n> noise.
 1. **<short title>** (<n> signals, repeat of <rule> | no rule)
    Seen: "<a short quote>" (<date>, <project>; signals <ids>)
    Proposal: <form> → <file, section>: "<the words>"; prunes <what>
-   Recommend: yes | no: <why>
+   Recommend: make this change | don't make this change: <why>
 
 ## Existing lines          (history run)
 <n>. <file>:<line>: <finding> → <proposal>. Recommend: …
@@ -57,6 +57,6 @@ Signals: <n> read, <n> lessons in <n> groups, <n> repeats, <n> noise.
 <the log's entry lines for this run, in process-log.md's format>
 ```
 
-Keep each proposal to four lines; the user answers the whole list in one line. Fast path: one proposal, and its place in one line ("→ global CLAUDE.md, Evidence").
+Keep each proposal to four lines; the user answers the whole list in one line. Write it for the user, as `~/.claude/hooks/main-session.md`'s "When you ask me to decide something" says (agents don't get that message: read it there): "Recommend: no" was read as "remove" (2026-11-19). Fast path: one proposal, and its place in one line ("→ global CLAUDE.md, Evidence").
 
 Reply with the output's path and the Signals line.

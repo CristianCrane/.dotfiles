@@ -2077,7 +2077,7 @@ describe("usage", () => {
     assert.equal(said(start({ agent_type: "reviewer" })), "");
     assert.equal(
       said(start()),
-      `The weekly token review is due: the last entry in ${log} is from ${day(-8)}. In your first reply, offer the user to run it; on their yes, one agent runs it as that file's "Running a review" says. This is said once a week.`,
+      `The weekly token review is due: the last entry in ${log} is from ${day(-8)}. In your first reply, offer the user to run it; on their yes, start the agents that file's "Running a review" names. This is said once a week.`,
     );
     // once: not again until a week after it said so
     assert.equal(said(start()), "");

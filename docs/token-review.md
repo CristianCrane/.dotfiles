@@ -2,11 +2,11 @@
 
 Where the plan's tokens went each week, against the week before, whether 3 of the week's PRs used the `change` skill for real, and what was done about it. One entry per week, newest first.
 
-A SessionStart hook (`home/.claude/hooks/usage.mjs`, `--hook`) says when a review is due: at the first main session started 7 days after the newest entry's date. Claude then offers to run it, and an agent does, on a yes. The hook dates the review by the newest `### YYYY-MM-DD` heading below, so keep that shape.
+A SessionStart hook (`home/.claude/hooks/usage.mjs`, `--hook`) says when a review is due: at the first main session started 7 days after the newest entry's date. Claude then offers to run it, and on a yes starts the agents "Running a review" names. The hook dates the review by the newest `### YYYY-MM-DD` heading below, so keep that shape.
 
 ## Running a review
 
-One agent runs it, started from the main session, and reports back in a few lines.
+One agent runs it, started from the main session, and reports back in a few lines. A second agent, started beside it, runs the `test-sweep` skill; its numbered list goes to the user with the review's report.
 
 1. **Work in a `git worktree` of the dotfiles, under the `change` skill**, as the dotfiles' CLAUDE.md says. The entry lands by PR, which the user merges.
 2. **Run `node ~/.claude/hooks/usage.mjs --week`.** It prints the 7 days before today beside the 7 before those, measured the same way every week; its header says which numbers are estimates. A week whose readings or PRs need a closer look: `--week --since <day>` for another week, `--since <day>` for each workstream from a day, the transcripts under `~/.claude/projects` (kept 30 days).
