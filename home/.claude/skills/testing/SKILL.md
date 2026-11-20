@@ -11,6 +11,7 @@ A test is worth what it catches. Each rule here came from a test that passed wit
 
 - **Each test earns its place.** If another test already checks the same thing at the same level (unit, browser, end-to-end), merge the two or drop one. And it must fail when the code it guards breaks: break that code by hand (flip a condition, drop a call), see the test go red, and put the code back. A bug fix's test, red on the old code (the `change` skill's Survey), has shown that already (2026-11-19: nothing checked a new test against the others, or against broken code).
 - **Every check can fail.** Before breaking the code by hand, say what each check would see with the code wrong. An absence check first shows where the thing would be: the page settled, the menu that would hold the action open. A text match is exact, or reads the text from where the app holds it (a tour's steps from its data). A hidden-check on a page still loading, a count of 0 after an action moved into a menu, and a substring match on a retyped title each passed with the code wrong (empire-cleaning #331, #409, #336).
+- **A test no PR runs** (nightly, or against a sandbox) finds what it acts on through the helpers the PR's tests use, so a change that would break it breaks them first. empire-cleaning #444 moved a button, and only the next night's sandbox run went red (2026-11-14).
 
 ## Changing how tests run
 
