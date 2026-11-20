@@ -15,3 +15,4 @@ A test is worth what it catches. Each rule here came from a test that passed wit
 ## Changing how tests run
 
 - **A speed-up runs the same checks faster** (more workers or shards, a quicker setup), **never fewer or weaker ones.** Cutting checks for speed was offered and turned down twice: skipping or thinning a slow suite's tests (empire-cleaning's seed tests, 2026-11-05), and less coverage (2026-11-06).
+- **A project sets the time budget for its kind of test, and says why in its config.** A single test past it says so beside it, with why, and the issue that will bring it back when there is one; raising the project's budget to fit one slow test would hide a hang or a slowdown in all the others. The tests nearest the budget are the ones that fail under load, so read each one's duration from a run's report (Vitest's `--reporter=json`, Playwright's report): empire-cleaning's slowest server test passed 5 s with two checkouts' runs at once (PR #323).
