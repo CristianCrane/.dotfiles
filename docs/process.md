@@ -66,6 +66,7 @@ What may ever change without asking (D19b): only a repo's files, one skill, or m
 Each is a reason the user gave when they overrode a call, written here once they approved it (D19a). Read them before every call; a call that breaks one is wrong whatever its count.
 
 1. **Scope comes from what a rule is about, not from where it has come up so far.** A rule first met in one repo is global when it is about something every repo meets. On 2026-11-19 the context audit moved the vendor-guide check (a third-party setup plan is checked against the vendor's own guide) and the mergeable check into empire-cleaning's CLAUDE.md (f4e8764b), because they had come up there; the user moved them back the same day (2f6d152a): the vendor-guide check is about any third-party service, so global, and the mergeable check is about a dotfiles hook (`pr-conflict.mjs`).
+2. **Background upkeep scales with activity, not with how many things exist.** A recurring sweep (of tests, or of guidance lines) picks its work by what changed since it last looked, under one budget that doesn't grow with the count, so a repo nobody touches costs nothing. On 2026-11-20 a weekly test sweep was proposed that rotated through a repo's whole suite; the user asked how it would hold a year on, ten projects later, and chose about 2 slices a week in all, picked by recent change across repos (the `test-sweep` skill).
 
 ## Design
 
