@@ -28,6 +28,35 @@ Kept from step 3 on: per kind of call and reach, the matching verdicts in a row,
 
 ## Entries
 
+### 2026-11-20: fast path, ui principles
+
+The user's verdict, 2026-11-20: yes to all 8, as written, after agreeing to write the UI principles they taught reviewing #490's screenshots (empire-cleaning #493) down ("beautiful summary/takeaways, yes. agreed."). L85–L92 are this run's proposals 1–8 (`fast-2026-11-20-ui.md`), places as it gives them. Two wait for the user's ruling on a conflict the change review found, and land once they rule: L86's status dot is a colour with no label, against the ui skill's "One meaning per colour and per icon" (the curator's Existing lines checked, 1, left it to #493's people-badge pick); L88's status clause asks for a status word per reader, against empire-cleaning's ADR-0029 (one word per concept, for every reader), where a Sent Quote already reads "Sent" to the Office and "To answer" to a Client.
+
+- L85 yes · rule line → skill · skill · recommended yes
+  ui skill, What a screen shows: the first bullet becomes "Lead with what this reader, on this screen, needs"; a call carried to every screen like it carries that question, not one screen's answer (empire-cleaning #490) · signals aa98a573, 06fcfd6e · caught by no rule (06fcfd6e's writing-down half is held by docs/ux.md, Changing a screen, step 5) · repeat of —
+  landed in —
+- L86 yes · rule line → skill · skill · recommended yes
+  ui skill, What a screen shows: "A picture, not a paragraph": keep all the information, cut the noise; show state, don't tell it; size and weight carry the ranking · signals 15b41484, 6e40e02a, 14ab2068 · caught by no rule · repeat of —
+  landed in —
+- L87 yes · rule line → skill · skill · recommended yes
+  ui skill, What a screen shows: "A value is only the value": context never rides in it; hidden-until-later looks hidden; a row with nothing this reader needs isn't shown. empire-cleaning docs/ux-log.md's #485 row is marked withdrawn, and #230's row's words too, both redone in #493 · signals 5f93cd77, 6e40e02a · caught by no rule (docs/ux-log.md's #485 row held the opposite) · repeat of —
+  landed in —
+- L88 yes · rule line → skill · skill · recommended yes
+  ui skill, Words: "Words from the reader's side": a field is named by its reader's question (how long, who, where), a status from their side. empire-cleaning docs/ux.md's "Everyday words" points at it · signals 5f93cd77, 14ab2068 · caught by docs/ux.md, Words, "Everyday words" (in part: it never said whose words) · repeat of —
+  landed in —
+- L89 yes · rule line → skill · skill · recommended yes
+  ui skill, What a screen shows: "Each reader sees only their own concerns": one role's working never reaches another, even through a shared component · signals 14ab2068 · caught by no rule · repeat of —
+  landed in —
+- L90 yes · rule line → skill · skill · recommended yes
+  ui skill, What a screen shows: "No box in a box": no card in a card, no alert in an alert. empire-cleaning docs/ux.md's three copies (Record's Notice, Page structure, Lists' empty place) are cut to pointers · signals 14ab2068 · caught by docs/ux.md, Page structure, "never a box in a box" · repeat of —
+  landed in —
+- L91 yes · rule line → skill · skill · recommended yes
+  ui skill, "Few words" becomes "Few words, each fact once": a fact shows once on a screen · signals 14ab2068 · caught by ui skill, What a screen shows, "Few words" (in part) · repeat of —
+  landed in —
+- L92 yes · rule line → skill · skill · recommended yes
+  ui skill, "The first view stays focused": what matters only once a button is pressed (which card, how a deposit is held) comes after the press, not before the button · signals 14ab2068 · caught by ui skill, What a screen shows, "The first view stays focused" ("No step is shown before it applies") · repeat of —
+  landed in —
+
 ### 2026-11-20: fast path, local only
 
 The user's decision, 2026-11-20, relayed in the audits' session: local only. L82–L84 are its three parts; no curator proposal came before it.
