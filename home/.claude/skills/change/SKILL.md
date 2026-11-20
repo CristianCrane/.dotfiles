@@ -14,13 +14,12 @@ A **pattern** is any shape the change follows or adds: a helper, a table, a laye
 ## Rules
 
 - **Ratchet.** A change may leave the code no simpler, but it never adds a third copy of a pattern, never bends a pattern that fights the change, and never edits one idea in many places (shotgun surgery: fold the idea into one place first).
-- **A removal leaves nothing behind.** A change that removes a feature, or the last caller of something, finds what only it used (props, states, words, stories, route guards, endpoints, its tests) and deletes them in the same change: empire-cleaning#404's review found two such leftovers, a round each (F22, F26).
-- **Each test a change adds or edits earns its place.** If another test already checks the same thing at the same level (unit, browser, end-to-end), merge the two or drop one. And it must fail when the code it guards breaks: break that code by hand (flip a condition, drop a call), see the test go red, and put the code back. A bug fix's test, red on the old code (Survey), has shown that already (2026-11-19: nothing checked a new test against the others, or against broken code).
-- **A speed-up runs the same checks faster** (more workers or shards, a quicker setup), **never fewer or weaker ones.** Cutting checks for speed was offered and turned down twice: skipping or thinning a slow suite's tests (empire-cleaning's seed tests, 2026-11-05), and less coverage (2026-11-06).
+- **A removal leaves nothing behind.** A change that removes a feature, or the last caller of something, finds what only it used (props, states, words, stories, route guards, endpoints, its tests) and deletes them in the same change: empire-cleaning#404's review found two such leftovers, a round each (F22, F26). It also searches every test for the words and values it removes, not only the tests the quick run takes: on empire-cleaning PR #109 a list row's trimmed text failed a spec nobody ran locally, on CI alone.
 - **The simplest shape is the plan.** When the survey finds a simpler shape than extending, build that. Extending instead takes a written reason, which goes in Change.
 - **One kind of work per commit**: a refactor, a change, or a cleanup. A PR carries them in that order: refactor commits, then the change, then cleanups. That order holds up to round 1; fixes and later scope go on top, never before a refactor commit.
 - **Refactor first.** A refactor that changes no behaviour goes in the PR's first commits, and the change is built on top of it.
 - **Fix what you see.** A problem outside the change, seen while building or by the reviewer, goes on the survey's `Seen nearby:` list and is fixed in a cleanup commit after the change's. Nothing is filed for later.
+- **Keep open issues true.** An open issue's body is the plan the next agent builds from. A change that makes one wrong (a file it names, where something lives, a placeholder issue number) edits that body in the same PR, and merging the default branch into a branch rechecks the bodies of the issues it plans: empire-cleaning #337 moved the shared messages while #302 still planned them a second home (#308, review F11).
 - **Big work.** A refactor or cleanup over ~10 files, or one that crosses packages: stop and ask the user one thing, whether it rides in this PR or gets its own. It's done either way. A refactor's own PR merges first, and the change's branch then starts from the default branch; a cleanup's own PR follows the change's.
 - **Every change** but a dictated one or a prototype (below) gets a survey, a plan review and a review. A small change writes a one-line survey; one for a bug carries its Cause.
 - **Dictated config:** a change to one Claude settings file that the user dictated exactly (they named the permission rule, model or theme), that only makes Claude ask or refuse more (an allow rule removed, a deny or ask rule added) or sets the model or theme to a value they named, touching no code, hook or rule text, gets a one-line survey, `dictated: "<their words>" <the file's path>`, and no plan review or review; the report to the user says it went with no reviewer. The gates hold it: they find the quote in a message the user typed, and each entry the change makes named in it; anything wider (another file, a plugin, a rule that widens what runs, an entry the quote doesn't name as a whole, more than five entries) gets the full flow. Its lessons still run (a `None:` line is enough); a PR's Change section says `Review: none, dictated`.
@@ -51,9 +50,11 @@ A bug (wrong behaviour, a failing or flaky test, a run that's too slow) has a ca
 
 Run the `change-reviewer` agent in **plan** mode, with the survey's path and the plan review's path (`plan-review-…` beside the survey; the gate names it). It reads the survey before any code exists, when a wrong shape or an unshown cause costs a paragraph rather than rework. Revise the survey for each finding, or give round 1 your reason against it (round 1 carries the plan review's findings forward). One plan review per change; edits go through once it's written.
 
-Post the survey in chat, then go on, unless it has Big work to ask about.
+Post the survey in chat, then go on, unless it has Big work to ask about, or departs from what the user picked (a prototype, an option they chose): put each departure to them then, not at the PR (empire-cleaning #435: three waited from the plan review to the PR, and held it there).
 
 ## 3. Build
+
+A change that writes or edits a test, or changes how tests run, loads the `testing` skill first; one that changes a screen, or words a person reads, the `ui` skill.
 
 Keep the survey true: when the plan or the file count changes, update it, and when a `to show:` cause is shown, say `shown by` what. A hook compares the branch's size with `Expected files` every 25 files.
 
@@ -70,7 +71,7 @@ A round is the reviewer and you arguing about shape, and about a bug's evidence.
   - **`[text]`**: a comment or doc that's false, stale or missing. A fix that changes only comment lines in code needs no review: the PR gate lets it through. A fix to Markdown gets a recheck.
 - **A recheck** reviews a commit that fixes no change finding: a text fix in Markdown, a cleanup from `Seen nearby:`, a fix to a failing test, typecheck, lint or CI. It checks only that commit, keeps the round's number and costs no round; a change finding it raises starts the next round. Rechecks have no cap.
 - **Push back** when a finding is wrong: give your reason in the prompt of the reviewer's next pass (a recheck of the same commit, when nothing else changed). It concedes or holds, with evidence. A change finding it still holds goes to the user with both sides; their ruling goes in the next pass's prompt, and closes the finding.
-- **The full suite** runs once, after a round or recheck leaves no change finding open, before the PR. A fix it needs gets a recheck, and only what failed runs again, with the quick tests.
+- **The full suite** runs once, after a round or recheck leaves no change finding open, before the PR; where it's CI's (the repo's CLAUDE.md says so), on the PR: open it as a draft (`gh pr create --draft`) once the review leaves no change finding open and the quick tests pass, and mark it ready once every check is green and step 6 is done (empire-cleaning ADR-0026). A fix it needs gets a recheck before it's pushed (nothing gates a push to a draft), and only what failed runs again, with the quick tests.
 - **Done** when the last review leaves no change finding open, every text finding is fixed, and the full suite has passed.
 - **Going nowhere** goes to the user in any round. When a round reopens a finding an earlier round marked fixed, the fixes are going back and forth: stop and put it to them with both sides. New, narrower findings each round are progress; keep going.
 - **After round 5**, any change finding still open goes to the user: stop and put each one to them with its paths. A round 6 runs only when they say so.
@@ -118,3 +119,5 @@ No other headings or labels (a line led by bold is a label): no summary of runs,
 ## 6. Lessons
 
 Once the full suite has passed, run the `lessons` skill: before the PR leaves draft (`gh pr ready`, or `gh pr create` without `--draft`). It writes what the work cost to the process layer's inbox and commits nothing: the curator places every lesson (the dotfiles' `docs/process.md`). The gate holds a PR in draft until its lessons file says where every cost went and the review is of the last commit.
+
+**A PR merges on the user's word**, which they often give ahead ("merge when green", 2026-10-31), or, for a process batch, on their verdicts (the dotfiles' `docs/process.md`, Landing); the dotfiles' own rule is stricter (their CLAUDE.md).

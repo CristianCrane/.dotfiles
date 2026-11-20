@@ -28,6 +28,149 @@ Kept from step 3 on: per kind of call and reach, the matching verdicts in a row,
 
 ## Entries
 
+### 2026-11-20: audit
+
+The user's verdicts, 2026-11-20, on two curator audits of guidance already written, read line by line rather than from signals: `audit-2026-11-20-testing.md` (empire-cleaning's docs/testing.md; L36–L54 are its items 1–19, L81 its Also noted) and `audit-2026-11-20-empire-docs.md` (the rest of empire-cleaning's guidance; L55–L80 are its items 1–26). Every item as the audit recommended, but where an entry says. The re-timings (L53, L76) wait for a quiet machine and an agent of their own, and nothing their numbers rest on changes here. Cloud sessions are out of scope (the user: local only), so the new skills stay out of sync.mjs.
+
+- L36 yes · remove → repo doc · repo · recommended yes
+  empire-cleaning docs/testing.md: "The machine's own faults" goes; .dotfiles#8 fixed its cause (2026-11-07), and the global CLAUDE.md names .dotfiles#5 · signals — · caught by process.md, Every line (an end condition) · repeat of —
+  landed in —
+- L37 yes · remove → global CLAUDE.md · global · recommended yes
+  The Windows-CPU clause goes from docs/testing.md's "Time on a quiet machine", and from the global CLAUDE.md's Evidence once WSL is 3.0.1 or later (microsoft/WSL#41173); Evidence keeps "time things on a quiet machine: give the load and the runs already going" · signals — · caught by process.md, Every line (an end condition, the right place) · repeat of —
+  The user updated WSL to 3.0.5, shown 2026-11-20 by `wsl.exe --version` (3.0.5.0) and `uname -r` (6.18.58.1) · landed in —
+- L38 yes · remove → repo doc · repo · recommended yes
+  docs/testing.md: the three log rows on the spinning `wsl.exe` threads (2026-11-03, 2026-11-07 twice) go; configuration.nix and .dotfiles#8 hold the cause · signals — · caught by process.md, Every line (the right place) · repeat of —
+  landed in —
+- L39 yes · skill → dotfiles · skill · recommended yes
+  A `testing` skill (home/.claude/skills/testing) holds the test rules for any repo: writing or editing a test, changing how tests run, timing one or chasing one that fails. L30's and L31's lines move from the change skill into it, and the change skill's Build keeps one pointer; the change reviewer's hunt 1 and the test-sweep skill point at it; empire-cleaning CLAUDE.md's Tests line loads it before docs/testing.md · signals — · caught by process.md, Form (3 or more related rules on one kind of task) · repeat of —
+  The user: the two change-skill rules move too, so the change skill keeps only the pointer · landed in —
+- L40 yes · rule line → skill · skill · recommended yes
+  testing skill: every check can fail (say what it would see with the code wrong; an absence check first shows where the thing would be; a text match is exact or read from where the app holds it; empire-cleaning #331, #409, #336). docs/testing.md drops its tour-data line (packages/web/README.md holds `walkTour`) and cuts the hidden-check and menu rules to their helpers · signals — · caught by process.md, Place (one kind of task, every repo) · repeat of —
+  landed in —
+- L41 yes · rule line → skill · skill · recommended yes
+  testing skill: a project sets its kind of test's budget with its reason, one test past it says so beside it, raising the project's would hide hangs, and the tests nearest it fail under load (PR #323). docs/testing.md keeps this repo's budgets · signals — · caught by process.md, Place, and Every line (a reason) · repeat of —
+  landed in —
+- L42 yes · rule line → skill · skill · recommended yes
+  testing skill: a change to how tests start, stop or wait checks how they fail beside how they pass (#312, PR #325), from docs/testing.md · signals — · caught by process.md, Place · repeat of —
+  landed in —
+- L43 yes · rule line → skill · skill · recommended yes
+  testing skill: a run's shared resources are named for the run, never the checkout (#375). docs/testing.md's line is cut to `claimTestDatabase` as the one way a run gets its databases, and ports per checkout (#312) · signals — · caught by process.md, Place, and Every line (one copy) · repeat of —
+  landed in —
+- L44 yes · rule line → skill · skill · recommended yes
+  testing skill: before against after in turns, on tests both share (PR #379), and a run alone against one beside another (#310), from docs/testing.md; ADR-0028's pointer names the skill · signals — · caught by process.md, Place · repeat of —
+  landed in —
+- L45 yes · rule line → skill · skill · recommended yes
+  testing skill's timing rule: check for the repo's test runners already going, with docs/testing.md's `ps` line as the example (`pgrep -af` matches its own shell, de908e75); docs/testing.md's bullet goes. Reverses L12's keeping the `ps` line in docs/testing.md (principle 1) · signals — · caught by process.md, principle 1 · repeat of —
+  landed in —
+- L46 yes · remove → repo doc · repo · recommended yes
+  docs/testing.md: "Show the cause before fixing it" and "Reproduce a failure as the tool runs it" go, copies of the global Evidence and the change skill's Survey; the section's lead points at the testing skill · signals — · caught by process.md, Every line (one copy) · repeat of —
+  landed in —
+- L47 yes · rule line → change skill · skill · recommended yes
+  Change skill, "A removal leaves nothing behind": search every test for the words and values it removes, as the quick tests run only part of the suite (empire-cleaning PR #109); docs/testing.md's grep line goes · signals — · caught by process.md, Place · repeat of —
+  landed in —
+- L48 yes · rule line → skill · skill · recommended yes
+  testing skill: a test no PR runs (nightly, a sandbox) finds what it acts on through the helpers the PR's tests use (empire-cleaning #444, 2026-11-14); docs/testing.md keeps `payAndBook`, `payThisBill`, `saveACard` and the sandbox's dispatch · signals — · caught by process.md, Place · repeat of —
+  landed in —
+- L49 yes · keep → repo doc · repo · recommended yes
+  docs/testing.md: the 2026-11-09 wall-time-bound row stays a log row, a skill rule if it comes up again · signals — · caught by no rule · repeat of —
+  landed in —
+- L50 yes · keep → repo doc · repo · recommended yes
+  docs/testing.md's own rules stay (`expectAccessible`, `saved`, `switchArea`, Payments, UTC, what a build leaves out here, the shared Postgres, the intro); the intro's "how to time things on this machine" becomes this repo's specifics for showing a cause and timing · signals — · caught by no rule · repeat of —
+  landed in —
+- L51 yes · remove → repo doc · repo · recommended yes
+  docs/testing.md: "Record what you find in the log below" goes; CLAUDE.md's Tests line holds it · signals — · caught by process.md, Every line (one copy) · repeat of —
+  landed in —
+- L52 yes · keep → repo doc · repo · recommended yes
+  docs/testing.md's repo budgets stay, naming the plan-change test rather than `changing.test.ts:113` (it moved); its own 10 s waits for L53's re-timing · signals — · caught by process.md, Every line (a stale reference) · repeat of —
+  landed in —
+- L53 yes · keep → repo doc · repo · recommended yes
+  The 21 log rows timed before .dotfiles#8 stay as history; what rests on them (ADR-0026's 2 local e2e workers and its 157 s and 225 s, the #316 row's starved figure) is re-timed on a quiet machine by an agent of its own · signals — · caught by process.md, Every line (a reason) · repeat of —
+  landed in —
+- L54 yes · place → repo doc · repo · recommended yes
+  docs/testing.md's findings log moves to docs/testing-log.md; CLAUDE.md's Tests line says to read it before chasing a failure or timing a change, and to record each finding there · signals — · caught by no rule (a must-read's size) · repeat of —
+  landed in —
+- L55 yes · rule line → repo CLAUDE.md · repo · recommended yes
+  empire-cleaning CLAUDE.md: "a screen never keeps its own copy of a server rule" goes to the `ui` skill (L61); the line keeps `@empire-cleaning/models` as the one copy, and its stale tail names `hasRoomFor` in ScheduleCalendar.tsx and a new issue for the Schedule drag's copy · signals — · caught by process.md, Every line (one copy, the right place, an end condition) · repeat of —
+  landed in —
+- L56 yes · rule line → change skill · skill · recommended yes
+  Change skill, Review: where the full suite is CI's, the PR opens as a draft once the review leaves no change finding open and the quick tests pass, what fails there is rerun locally and fixed with its recheck before the push, and it's marked ready once every check is green and its lessons are written (empire-cleaning ADR-0026). CLAUDE.md's Tests paragraph keeps the quick tests, the full suite's place and the cancelled-runs sentence · signals — · caught by process.md, principle 1 · repeat of —
+  landed in —
+- L57 yes · rule line → change skill · skill · recommended yes
+  Change skill, Lessons: a PR merges on the user's word, which they often give ahead ("merge when green", 2026-10-31); the dotfiles' rule is stricter. empire-cleaning CLAUDE.md's copy goes · signals — · caught by process.md, principle 1 · repeat of —
+  landed in —
+- L58 yes · remove → repo CLAUDE.md · repo · recommended yes
+  empire-cleaning CLAUDE.md's UX line: "record each new decision there, and add a Storybook pattern" is cut to a pointer at docs/ux.md's Changing a screen · signals — · caught by process.md, Every line (one copy) · repeat of —
+  landed in —
+- L59 yes · rule line → repo CLAUDE.md · repo · recommended yes
+  empire-cleaning CLAUDE.md, "Human tasks go on two lists", cites its reason: eleven human-task issues (#43 to #196) folded into #205 and #206 (d152bee3, 2026-11-02) · signals — · caught by process.md, Every line (a reason) · repeat of —
+  landed in —
+- L60 yes · place → repo doc · repo · recommended yes
+  docs/ux.md's decisions log moves to docs/ux-log.md; CLAUDE.md's UX line says to read it before reworking a screen and to record each new decision there · signals — · caught by no rule (a must-read's size) · repeat of —
+  landed in —
+- L61 yes · skill → dotfiles · skill · recommended yes
+  A `ui` skill (home/.claude/skills/ui) holds the UI rules for any repo with screens, each with its reason: lead with what the person came for, a focused first view, few words; simplest option first; what loads holds its room; one primary button, destructive actions red, a third-party sign-in keeps its owner's look; a problem says what's wrong then how to fix it, a field says its limit; words that state a rule are checked against its code; a screen keeps no copy of a server rule and a message both show is written once; a rework drops nothing by accident; one meaning per colour and per icon, no colour without a label, a row's title wraps. docs/ux.md keeps this product's choices and its rules open with "The `ui` skill's rules hold here too"; the change skill's Build points at it; it stays out of sync.mjs · signals — · caught by process.md, Form (3 or more related rules on one kind of task), principle 1 · repeat of —
+  landed in —
+- L62 yes · rule line → change skill · skill · recommended yes
+  Change skill, Plan review: a plan that departs from what the user picked (a prototype, an option they chose) puts each departure to them then, not at the PR (empire-cleaning #435); docs/ux.md step 4's copy goes · signals — · caught by process.md, principle 1 · repeat of —
+  landed in —
+- L63 yes · remove → repo doc · repo · recommended yes
+  docs/ux.md step 4's `pnpm pr:shots` sentence goes; CLAUDE.md and packages/web/README.md hold it · signals — · caught by process.md, Every line (one copy) · repeat of —
+  landed in —
+- L64 yes · rule line → repo doc · repo · recommended yes
+  docs/ux.md step 2: `PrototypeSwitcher` isn't on main; it's copied from the latest `prototype-*` branch · signals — · caught by process.md, Every line (a stale name) · repeat of —
+  landed in —
+- L65 yes · remove → repo doc · repo · recommended yes
+  docs/agents/domain.md's copy of docs/ux.md's Words is cut to what's about glossary entries (the `_On screen_` line's shape, searching each reader's strings), pointing at Words (ADR-0029) · signals — · caught by process.md, Every line (one copy) · repeat of —
+  landed in —
+- L66 yes · rule line → change skill · skill · recommended yes
+  Change skill, Rules: keep open issues true (empire-cleaning #308, F11); docs/agents/issue-tracker.md's line goes · signals — · caught by process.md, principle 1 · repeat of —
+  landed in —
+- L67 yes · keep → repo doc · repo · recommended no
+  The mattpocock plugin's template text in docs/agents/ stays: its setup skill wrote it and would write it back · signals — · caught by no rule · repeat of —
+  landed in —
+- L68 yes · remove → repo doc · repo · recommended yes
+  docs/screens.md's "Keep it true" is cut to a pointer at docs/ux.md's Changing a screen, keeping "each fact is in one place" · signals — · caught by process.md, Every line (one copy) · repeat of —
+  landed in —
+- L69 yes · remove → repo doc · repo · recommended yes
+  README.md's "The PR opens as a draft, and is marked ready once CI is green" goes, with L56 · signals — · caught by process.md, Every line (one copy) · repeat of —
+  landed in —
+- L70 yes · rule line → skill · skill · recommended yes
+  testing skill: Playwright's `--project` takes several values, so a spec path after it reads as a project; moves from packages/web/README.md (L28 put it there) · signals — · caught by process.md, principle 1 · repeat of —
+  landed in —
+- L71 yes · keep → repo doc · repo · recommended no
+  packages/web/README.md's "search the specs for the old value" of a URL stays: `test:change` takes specs from git, so each is named · signals — · caught by no rule · repeat of —
+  landed in —
+- L72 yes · keep → repo doc · repo · recommended no
+  "2 workers (why: ADR-0026)" in packages/web/README.md and packages/landing/README.md stays until L53's re-timing · signals — · caught by no rule · repeat of —
+  landed in —
+- L73 yes · keep → repo doc · repo · recommended no
+  packages/ui/README.md's NixOS `nix-ld` libraries stay: setup help for people cloning on NixOS · signals — · caught by no rule · repeat of —
+  landed in —
+- L74 yes · remove → repo doc · repo · recommended yes
+  packages/server/README.md: "speed comes from more jobs, not fewer instants" goes, the testing skill's speed-up rule holds it; "All 28 stay" stays · signals — · caught by process.md, Every line (one copy) · repeat of —
+  landed in —
+- L75 yes · rule line → repo doc · repo · recommended yes
+  packages/server/README.md's title "Express server starter" (the boilerplate's, 2026-08-18) becomes "Server" · signals — · caught by process.md, Every line (a stale name) · repeat of —
+  landed in —
+- L76 yes · keep → repo doc · repo · recommended no
+  packages/server/README.md's "web e2e took 3.6 min alone and 4.7 min beside" is re-timed with L53 · signals — · caught by no rule · repeat of —
+  landed in —
+- L77 yes · keep → repo doc · repo · recommended no
+  packages/server/README.md's drizzle-kit rename (until drizzle-orm#5307), one-off `pg` scripts and stored-words migration lines stay · signals — · caught by no rule · repeat of —
+  landed in —
+- L78 yes · human task → #205 · repo · recommended yes
+  empire-cleaning #205, section 5, gets a box: weigh ADR-0028 again before launch (should edited end-to-end specs run 3 times before a PR?), its own end condition, tracked nowhere · signals — · caught by process.md, Every line (an end condition) · repeat of —
+  landed in —
+- L79 yes · keep → repo doc · repo · recommended no
+  ADR-0026 and ADR-0028 stay ADRs, this repo's test process; ADR-0028's pointer per L44 · signals — · caught by no rule · repeat of —
+  landed in —
+- L80 yes · keep → repo doc · repo · recommended no
+  The glossary and the other 29 ADRs hold no how-we-work lines; ADR-0025's "an agent drafts the Spanish" is a product decision · signals — · caught by no rule · repeat of —
+  landed in —
+- L81 yes · remove → dotfiles · global · recommended yes
+  configuration.nix's `reg.exe` cover goes now WSL is 3.0.5 (microsoft/WSL#41173, fixed since 3.0.1), giving back Claude in Chrome's registration from WSL; anthropics/claude-code#108203 gets a follow-up. Its own PR, which the user merges and then runs `rebuild`, not this batch's · signals — · caught by process.md, Every line (an end condition) · repeat of —
+  landed in —
+
 ### 2026-11-20: fast path
 
 The user's verdicts, 2026-11-20: all six proposals as written, proposal 1 moved to the change skill. L30–L35 are this run's proposals 1–6; L30 is L7 in the user's words. Signal d55b11a0 waits for the next weekly run.
