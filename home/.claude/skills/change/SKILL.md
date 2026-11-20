@@ -53,7 +53,7 @@ Post the survey in chat, then go on, unless it has Big work to ask about.
 
 ## 3. Build
 
-A change that writes or edits a test, or changes how tests run, loads the `testing` skill first.
+A change that writes or edits a test, or changes how tests run, loads the `testing` skill first; one that changes a screen, or words a person reads, the `ui` skill.
 
 Keep the survey true: when the plan or the file count changes, update it, and when a `to show:` cause is shown, say `shown by` what. A hook compares the branch's size with `Expected files` every 25 files.
 
