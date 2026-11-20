@@ -45,7 +45,7 @@ Signals: <n> read, <n> lessons in <n> groups, <n> repeats, <n> noise.
 1. **<short title>** (<n> signals, repeat of <rule> | no rule)
    Seen: "<a short quote>" (<date>, <project>; signals <ids>)
    Proposal: <form> → <file, section>: "<the words>"; prunes <what>
-   Recommend: yes | no: <why>
+   Recommend: make this change | don't make this change: <why>
 
 ## Existing lines          (history run)
 <n>. <file>:<line>: <finding> → <proposal>. Recommend: …
@@ -57,6 +57,6 @@ Signals: <n> read, <n> lessons in <n> groups, <n> repeats, <n> noise.
 <the log's entry lines for this run, in process-log.md's format>
 ```
 
-Keep each proposal to four lines; the user answers the whole list in one line. Fast path: one proposal, and its place in one line ("→ global CLAUDE.md, Evidence").
+Keep each proposal to four lines; the user answers the whole list in one line. Write it for the user, as `~/.claude/hooks/main-session.md`'s "When you ask me to decide something" says (agents don't get that message: read it there): "Recommend: no" was read as "remove" (2026-11-19). Fast path: one proposal, and its place in one line ("→ global CLAUDE.md, Evidence").
 
 Reply with the output's path and the Signals line.
