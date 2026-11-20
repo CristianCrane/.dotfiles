@@ -118,3 +118,5 @@ No other headings or labels (a line led by bold is a label): no summary of runs,
 ## 6. Lessons
 
 Once the full suite has passed, run the `lessons` skill: before the PR leaves draft (`gh pr ready`, or `gh pr create` without `--draft`). It writes what the work cost to the process layer's inbox and commits nothing: the curator places every lesson (the dotfiles' `docs/process.md`). The gate holds a PR in draft until its lessons file says where every cost went and the review is of the last commit.
+
+**A PR merges on the user's word**, which they often give ahead ("merge when green", 2026-10-31), or, for a process batch, on their verdicts (the dotfiles' `docs/process.md`, Landing); the dotfiles' own rule is stricter (their CLAUDE.md).
