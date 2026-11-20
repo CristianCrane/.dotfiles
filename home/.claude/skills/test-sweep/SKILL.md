@@ -21,7 +21,7 @@ A **slice** is a set of tests with the code they test, small enough for one care
 Read each test in the slice next to the code it guards. What makes a test a duplicate or weak is the `testing` skill's rule ("Each test earns its place"); the sweep adds how it finds them, and two more kinds:
 
 - **Duplicates:** cite both tests.
-- **Weak:** suspect it from what it asserts (only that something renders, a mock checked against itself, a check that passes on an empty page), then prove it as that rule says, in a worktree on a detached HEAD (`git worktree add --detach <path> origin/<default>`, where edits need no survey): break the code, run that one test, see it stay green, and remove the worktree. Do this only for suspects, with no mutation tool.
+- **Weak:** suspect it from what it asserts (only that something renders, a mock checked against itself, a check that passes on an empty page: the `testing` skill's "Every check can fail"), then prove it as that rule says, in a worktree on a detached HEAD (`git worktree add --detach <path> origin/<default>`, where edits need no survey): break the code, run that one test, see it stay green, and remove the worktree. Do this only for suspects, with no mutation tool.
 - **Stale:** skipped (`.skip`, `.fixme`, `todo`), checking behaviour the code no longer has, or covering code nothing calls.
 - **Slow and covered:** a slow test (by its duration in a run; the repo's testing doc says how to get one) whose checks a faster test already makes.
 
