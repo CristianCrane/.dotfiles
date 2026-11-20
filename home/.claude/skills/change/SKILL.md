@@ -49,7 +49,7 @@ A bug (wrong behaviour, a failing or flaky test, a run that's too slow) has a ca
 
 Run the `change-reviewer` agent in **plan** mode, with the survey's path and the plan review's path (`plan-review-…` beside the survey; the gate names it). It reads the survey before any code exists, when a wrong shape or an unshown cause costs a paragraph rather than rework. Revise the survey for each finding, or give round 1 your reason against it (round 1 carries the plan review's findings forward). One plan review per change; edits go through once it's written.
 
-Post the survey in chat, then go on, unless it has Big work to ask about.
+Post the survey in chat, then go on, unless it has Big work to ask about, or departs from what the user picked (a prototype, an option they chose): put each departure to them then, not at the PR (empire-cleaning #435: three waited from the plan review to the PR, and held it there).
 
 ## 3. Build
 
