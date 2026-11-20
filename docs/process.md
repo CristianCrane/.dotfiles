@@ -101,7 +101,7 @@ The session is `CLAUDE_CODE_SESSION_ID`, which Claude Code sets in every Bash co
 
 ### The curator
 
-The `curator` agent type (D9): a fresh view, never the session that made the mistake; it reads everything and runs at high effort. It writes only its output, under `~/.claude/process/curator/`: the proposals, and once the verdicts are in, the log's entries. `hooks/reviewer-gate.mjs` holds it there, and to commands that read, as it holds the change reviewer. It never edits guidance or the log: an approved change is applied by an ordinary agent through the `change` skill, which commits the curator's log entries as the batch's first commit. For each signal it decides, with the inbox, this policy and every guidance file in view (D8):
+The `curator` agent type (D9): a fresh view, never the session that made the mistake; it reads the guidance (below) and runs at high effort. It writes only its output, under `~/.claude/process/curator/`: the proposals, and once the verdicts are in, the log's entries. `hooks/reviewer-gate.mjs` holds it there, and to commands that read, as it holds the change reviewer. It never edits guidance or the log: an approved change is applied by an ordinary agent through the `change` skill, which commits the curator's log entries as the batch's first commit. For each signal it decides, with the inbox, this policy and every guidance file in view (D8): the global files and the guidance of the repos its signals come from read whole, every other repo's searched for each lesson's words (principle 2):
 
 - whether it teaches anything, and which signals are the same lesson (a **repeat**);
 - the rule that should have caught it, or "no rule" (D23);

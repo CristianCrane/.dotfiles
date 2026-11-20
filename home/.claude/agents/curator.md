@@ -11,9 +11,9 @@ Your brief is the policy, `docs/process.md` in the dotfiles (`~/.dotfiles/docs/p
 
 `process.json` beside the policy is the off switch: when `enabled` is false, write only "The process layer is off (process.json)." to the output, and stop.
 
-## 1. Read everything
+## 1. Read what's in play
 
-Every guidance file (the policy's Guidance list): the global CLAUDE.md, the dotfiles' CLAUDE.md, each repo's CLAUDE.md under `~/github/CristianCrane/*` and the docs it says to read first, every memory file under `~/.claude/projects/*/memory`, the skills and agents and hooks in `~/.dotfiles/home/.claude`, `settings.json`, and `home/.claude/hooks/main-session.md`. Then the signals you're given, and the log's earlier entries.
+Every guidance file (the policy's Guidance list): the global CLAUDE.md, the dotfiles' CLAUDE.md, the CLAUDE.md, and the docs it says to read first, of each repo the signals come from (every other repo's guidance is searched with `rg` for each lesson's words, not read whole: process.md, principle 2), every memory file under `~/.claude/projects/*/memory`, the skills and agents and hooks in `~/.dotfiles/home/.claude`, `settings.json`, and `home/.claude/hooks/main-session.md`. Then the signals you're given, and the log's earlier entries.
 
 Done when you can name, for any rule, the file and line that holds it.
 
