@@ -29,8 +29,6 @@ The quoted heredoc keeps the words as written: in double quotes the shell would 
 
 Each run also adds the cost's line to the branch's lessons file (`- <cost> → inbox <id>`), the record the PR gate reads. Wide net: a small cost goes in too; the curator drops noise.
 
-With no `~/.claude/hooks/capture.mjs` (a cloud session), open one issue on CristianCrane/.dotfiles, "Signals from <repo>: <branch>", listing the costs in your own words, with no quote of the user's and no name of a client or person: the repo is public, and raw signals stay local (D13). Then write the lessons file by hand, a line per cost: `- <cost> → <the issue's URL>`.
-
 Done when every cost on the list has its line in the lessons file.
 
 ## 3. Close

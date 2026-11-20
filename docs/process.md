@@ -87,7 +87,7 @@ Capture writes raw signals and decides nothing (D8). Three routes:
 
 - **The background pass** (step 2, not built yet): when a main session ends or compacts, a cheap fast model reads what's new and pulls out every candidate signal, wide net (D14, D15); at each session start, a catch-up for conversations that never ended cleanly. Main sessions only. It is its own script: `hooks/catch-up.mjs` is the dotfiles' fast-forward to `origin/main`, a different job.
 - **In the moment** (D16): `node ~/.claude/hooks/capture.mjs`, run by the main session when the user corrects it or either side flags something as important, as the main-session message says. `--help` gives its flags and its text's labelled lines.
-- **The `lessons` skill** (D20): at the end of each PR, the agent writes what the work cost, a signal per cost, with `capture.mjs --source lessons`, which also adds its line to the branch's lessons file (`- <cost> → inbox <id>`), the record the PR gate reads. It is agents' only route in: the pass reads main sessions only. Cloud sessions (D24) have neither the command nor a lasting inbox: their costs go in one issue on CristianCrane/.dotfiles, "Signals from <repo>: <branch>", in the agent's own words with no quote and no name of a client or person, since that repo is public (D13); the curator reads it as signals.
+- **The `lessons` skill** (D20): at the end of each PR, the agent writes what the work cost, a signal per cost, with `capture.mjs --source lessons`, which also adds its line to the branch's lessons file (`- <cost> → inbox <id>`), the record the PR gate reads. It is agents' only route in: the pass reads main sessions only.
 
 ### The inbox
 
@@ -128,7 +128,7 @@ One PR per repo per batch, on a branch `process-batch-<date>-<slug>` (a fast-pat
 
 ### One gate for every route
 
-The change reviewer checks every diff that touches guidance against this file and its principles, whoever wrote it: a batch, the user's own ask, any agent's PR (D30). A dictated settings change stays exempt (the `change` skill). Its hunt reads this file at `~/.dotfiles/docs/process.md`, or with no `~/.dotfiles` the public copy on GitHub.
+The change reviewer checks every diff that touches guidance against this file and its principles, whoever wrote it: a batch, the user's own ask, any agent's PR (D30). A dictated settings change stays exempt (the `change` skill). Its hunt reads this file at `~/.dotfiles/docs/process.md`.
 
 ### The log
 

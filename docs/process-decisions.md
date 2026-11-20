@@ -46,7 +46,7 @@ The user wants their judgement to become the curator's over time, without being 
 - **D21 Start with history:** the first batch comes from the last 30 days of main-session conversations; it tests the pass on real data and gives the curator its first verdicts.
 - **D22 Budgets:** global CLAUDE.md 1,200 tokens, each repo CLAUDE.md 1,000, memory index 400, start-of-session message 600. Over budget is a weekly item (trim, move, or raise); raising one is a policy change.
 - **D23 Seeing it learn:** each signal tagged with the rule that should have caught it, or "no rule"; the main number is repeats per week, which should fall. Health: captured, decided, backlog, oldest signal's age; zero captured shows as a failure, never as quiet. After 8 weeks, if repeats aren't falling, revisit the design.
-- **D24 Cloud sessions out for now:** their PRs still report through the lessons step; revisit if real conversations move there.
+- **D24 Local only:** the layer runs on this machine alone. Cloud sessions, and the repo copies of the change rules they'd need, come back only if the user starts using cloud sessions (2026-11-20).
 - **D25 Cost cap:** the whole layer under 3% of the plan's week, measured weekly; over it, it trims itself and says so.
 
 ### Round 5
@@ -69,7 +69,6 @@ Where the decisions were silent, step 1 took the simplest option. Each is the us
 - **The curator writes the log's entries into its output** (under `~/.claude/process/curator/`, where reviewer-gate holds it), and the agent applying the batch commits them as the batch's first commit: the log is committed in the dotfiles, where every change rides a PR.
 - **Each signal has an `id`** (8 hex), which proposals and log entries cite.
 - **The lessons file is capture's output:** `capture.mjs --source lessons` adds each cost's line to it, so the PR gate reads one record, not a hand copy of the inbox.
-- **Cloud sessions** write their costs to one issue on CristianCrane/.dotfiles, which the curator reads (D24), in the agent's own words with no quote and no name of a client or person: that repo is public, and D13 keeps raw signals local.
 
 ## Consequences
 
