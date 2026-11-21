@@ -58,6 +58,7 @@ All three are from empire-cleaning's UX pass (#96).
 ## Settling a screen
 
 - **Simplest option first.** Lead with the option that asks nothing new of anyone and uses what the app holds; each added step, role or signal earns its place against it (empire-cleaning #416, PR #423).
+- **Draw a call before trusting it.** Read each shot against these mechanics at a phone's width, a laptop's, and each width where the frame changes, before anyone else sees it. Five of empire-cleaning's Office's Job calls, sound as written, failed once drawn, and the user still caught a side column, a timestamp out of place and a wrapped title row that the checks of the shots had missed (#493, 2026-11-21).
 
 ## Reworking a screen
 
