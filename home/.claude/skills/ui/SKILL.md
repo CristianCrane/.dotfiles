@@ -17,6 +17,8 @@ A screen is for the person using it, and its budget is their attention: everythi
 
 ## Rank and order
 
+- **Rank shows by position, size, weight, colour and grouping, and they agree.** What the reader's decision rests on leads, largest, in a header of its own. One divider parts it from the rest; equals go without one, as a line between them reads as a change of rank. A detail too rich for one line (people and their state, a list) earns its own section, placed by its rank, and a count above it is its signpost, not a repeat. When room runs short, the lesser part gives way first (a badge drops under the title before the button moves). One signal against the rest says two ranks at once, like an outlined button in the primary's place (empire-cleaning #493: a price big and bold, "a clean" smaller, the tax smaller still; the Cleaner's Job, 2026-11-20).
+
 ## Compact
 
 - **A value is only the value.** What's still to come, or why it's missing, never rides in the value after a comma ("Robin, number shows on the day"): at a glance it reads as the value and buries it. (empire-cleaning #485, #490, 2026-11-20).
