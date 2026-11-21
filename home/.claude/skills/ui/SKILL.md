@@ -35,6 +35,7 @@ A screen is for the person using it, and its budget is their attention: everythi
 - **One thing, one form, one place, screen to screen.** The same control does the same job in each case, a section's title sits where the others' do, and an entry's time sits on the same line in each entry: each variation makes the reader learn it again, so one has to be worth that. Things that mean different things look clearly different, and a difference that means nothing is noise, like a brand-coloured avatar for "you" (empire-cleaning's Cleaner's Job and Office's Job, #493).
 - **One meaning per colour and per icon**, app-wide, and never colour alone, which a colour-blind reader can't tell apart: a shape or a word carries the meaning, and colour agrees (empire-cleaning's UX pass, #96).
 - **Each device keeps its own habits.** A bottom action bar and a tab bar belong to a phone; on a laptop they surprise, however narrow the window. A wide screen keeps its actions in the header, which sticks once they scroll away, and makes room its own way (a sidebar folding to icons). A menu opens toward free space. A laptop window under 1024 px given the phone's frame was turned down (empire-cleaning's Office's Job, #493, 2026-11-21).
+- **Aligned, even and balanced.** A ragged line, a stray gap or broken symmetry pulls the eye from the page's purpose, whether or not it's noticed. A title row whose button wrapped under it left an empty band (empire-cleaning's Office's Job, #493, 2026-11-21).
 
 ## Buttons
 
