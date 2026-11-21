@@ -22,6 +22,7 @@ A screen is for the person using it, and its budget is their attention: everythi
 
 ## Compact
 
+- **A picture, not a paragraph.** State shows as a mark the eye takes in at once (a tick, a badge, a face), not a sentence to read and then picture: keep all the information, and cut the noise. A mark says it once (a tick alone, no "Confirmed" beside it, nothing for not yet), and it says what it means: a cleaner still needed is a faint person, not an empty circle (empire-cleaning #493, 2026-11-20 and 21).
 - **A value is only the value.** What's still to come, or why it's missing, never rides in the value after a comma ("Robin, number shows on the day"): at a glance it reads as the value and buries it. (empire-cleaning #485, #490, 2026-11-20).
 - **Few words, each fact once.** Rows and pages carry only what drives the decision, and a fact shows once on a screen: no subtitle that repeats the title, no second card that says the schedule or price again, no help text that says what the screen already shows, no paragraph where a label will do. Offer to cut rather than add (empire-cleaning's Client Quote, 2026-11-20).
 - **No box in a box:** no card in a card, no alert in an alert. empire-cleaning's Client Quote nested the Office's quote card in its details card (2026-11-20), and a Card around a List read as two boxes (#94).
@@ -30,7 +31,7 @@ A screen is for the person using it, and its budget is their attention: everythi
 
 ## Consistency and habit
 
-- **One meaning per colour and per icon**, app-wide, and no colour without a visible label (empire-cleaning's UX pass, #96).
+- **One meaning per colour and per icon**, app-wide, and never colour alone, which a colour-blind reader can't tell apart: a shape or a word carries the meaning, and colour agrees (empire-cleaning's UX pass, #96).
 
 ## Buttons
 
