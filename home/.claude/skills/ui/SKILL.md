@@ -47,6 +47,7 @@ All three are from empire-cleaning's UX pass (#96).
 
 ## Words
 
+- **Words from the reader's side.** A field is named by the reader's own question (How long, Who, Where, not "On site" or "Area"), and a status says where things stand for them: "Available" to a cleaner, for what the office calls offered. Where a repo keeps one word per term for every reader (empire-cleaning ADR-0029), that rule is about the term's name, and a status isn't one (empire-cleaning #493, 2026-11-20).
 - **A problem says what's wrong, then how to fix it**, in two short sentences at most, never how the system works, and no codes. When nothing can be done, it says what happened. A field that's too long says its limit, since the number is what fixes it (empire-cleaning #336).
 - **Words that state a rule are checked against the code that applies it**, never against another page's or message's wording of it: copies drift from the code together. empire-cleaning told a plan's Client a late fee was the plan's whole deposit, and its Terms of service copied it, while the code charged that clean's share (#462).
 
