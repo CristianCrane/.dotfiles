@@ -1,6 +1,6 @@
 # Worked examples
 
-Two screens of empire-cleaning, a cleaning business's app, settled with the user in review on 2026-11-20 and 21. Every pick and its why is in empire-cleaning #493's comments: [the Cleaner's Job](https://github.com/CristianCrane/empire-cleaning/issues/493#issuecomment-7066321804) and [the Office's Job](https://github.com/CristianCrane/empire-cleaning/issues/493#issuecomment-7067307937). Read them for how the mechanics in SKILL.md decide a screen, not as rules: another screen's reader and moment give other answers.
+Two screens of empire-cleaning, a cleaning business's app, settled with the user in review on 2026-11-20 and 21. Every pick and its why is in empire-cleaning #493's comments: [the Cleaner's Job](https://github.com/CristianCrane/empire-cleaning/issues/493#issuecomment-7066321804) and [the Office's Job](https://github.com/CristianCrane/empire-cleaning/issues/493#issuecomment-7067307937). Read them for how the mechanics in SKILL.md decide a screen, not as rules: another screen's reader and goal give other answers.
 
 ## A Cleaner's Job (six review passes)
 
@@ -19,7 +19,7 @@ The verdict: "a human can glance at this for a mere second and understand the en
 
 ## The Office's Job (the agent made every call; graded "professional grade")
 
-The reader: the owner, mostly at a desk, opening a job at one of seven moments: short of cleaners, booked, a move asked for, on the day, done, couldn't get in, or cancelled. Listing the moments first gave each call its reason.
+The reader: the owner, mostly at a desk, opening a job at one of seven moments: short of cleaners, booked, a move asked for, on the day, done, couldn't get in, or cancelled. Listing her goal at each moment first gave each call its reason.
 
 What held: the header card holds the date, the time range, the address and the client's name, which is how she identifies a job. One status badge, from her side, with none for the usual booked job. Cleaning hours show because they're her concern, unlike the cleaner's, but only for a crew of more than one, where they differ from how long. Money is one line per fact.
 
