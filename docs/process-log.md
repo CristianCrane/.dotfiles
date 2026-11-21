@@ -28,6 +28,94 @@ Kept from step 3 on: per kind of call and reach, the matching verdicts in a row,
 
 ## Entries
 
+### 2026-11-21: fast path, ux consolidation
+
+The user's verdict, 2026-11-21, on the curator's UX consolidation (`ux-2026-11-21.md`), asked for before any more UX work: "all yes, with a word of caution: be careful with infinitives - 'never' 'always', a scenario can always come up where it might make one of these hard rules bend and even break." L93–L118 are its items 1–26 and L119 its Existing lines, places as it gives them. The held L86 lands as L98 (its size-and-weight clause in L96), and the held L88 as L103. The main session applied the caution to every line the batch writes: an absolute ("never", "always", "every", "ever") becomes a strong default that carries its reason, so a reader can tell the rare case where it bends. Nine entries are `edit` for it (L95–L100, L108, L110, L118), each with its before → after on the third line. Absolutes kept, each with its reason beside it: colour alone (L98: a colour-blind reader can't tell the colours apart; the reason is added); the intro's "must pay that back" (L94: attention is the budget); a phone's bars on a laptop (L101) and a Record's actions in the header on a wider screen (L111), both the user's "no bottom action bar, ever"; "settled on the prototype" (L107, the user's own words); a history stays whole (L109: a log with entries missing costs trust); History last at every width (L112: a side column competed with the page); and the main session's hold on rules until the feedback is complete (L116, the user's instruction, with its end). Lines moved word for word (L87's first sentence, L89, L90, L92) keep their absolutes until the next run. The fixes from the plan reviews and the review rounds are not the user's edits; each is noted on its entry's third line. One point went to the user: the kept L85 ("came to see or do, and shows it first and largest") against L97 (the facts come before the decision). They ruled that a screen leads with what its reader came to see (L119, `edit`).
+
+Candidate curation principle, for the curator's next run (D19a: an override's reason becomes a principle once the user approves its words; process.md is unchanged, D5): a line states its rule as a strong default with its reason, not as an absolute, since a case can come up where it bends or breaks. An absolute stays only where breaking it does real harm, with that harm beside it.
+
+- L93 yes · skill → dotfiles · skill · recommended yes
+  The ui skill becomes the one UX skill, laid out by mechanic (Relevance, Rank and order, Compact, Consistency and habit, Buttons, Words, Rules the server keeps, Settling a screen, Reworking a screen), its trigger widened to designing, prototyping, reviewing or changing a screen and any UX call; empire-cleaning CLAUDE.md's UX line starts "Before designing, prototyping, reviewing or changing any screen", and docs/ux.md:48–49's pointer becomes "the `ui` skill says how" · signals 43fc4fbe · caught by no rule · repeat of —
+  Beyond the proposal: docs/ux.md:3–6's copy of the trigger is widened too (empire-cleaning plan review F5) · landed in —
+- L94 yes · rule line → skill · skill · recommended yes
+  ui skill, the intro: a screen's budget is its reader's attention; good UX is frictionless; the mechanics are terms of one equation; examples.md is read before making the calls on a screen · signals e4fb2e02, 6e6fce66, 4bfa2b3b, 15b41484, 232428c4, 3a872f81 · caught by no rule · repeat of —
+  landed in —
+- L95 edit · rule line → skill · skill · recommended yes
+  ui skill, Relevance: what this reader can't use yet is absent, not hidden (not drawn locked, blurred or "shows later"), judged per fact, and the reader isn't drawn in a state that isn't true yet. Prunes L87's "Something hidden until later looks hidden …"; empire-cleaning docs/ux-log.md:127's withdrawn note is reworded · signals 96513cbe, 76b82b63, 9bd7ad53, aa11332a, 46063e49, 8ab387e4, 6e40e02a · caught by ui skill, L87 (which said the opposite) · repeat of —
+  The user's caution: "Never draw the reader in a state that isn't true yet (…)" → "The reader isn't drawn in a state that isn't true yet (…), as the screen would then tell them something false." Not the user's: the lead "doesn't need yet" → "can't use yet", as "The first view stays focused" keeps what isn't needed yet behind a tap (dotfiles plan review F5); a client's number waits "until it's accepted" → "until the cleaner has confirmed": "accept" is on empire-cleaning's glossary's avoid list (F6), and the picked layout D shows the number once the job is the cleaner's, not on its day as F6 had it (dotfiles round 1, F10) · landed in —
+- L96 edit · rule line → skill · skill · recommended yes
+  ui skill, Rank and order: rank shows by position, size, weight, colour and grouping, and they agree; carries L86's "size and weight carry the ranking" · signals 14ab2068, 96513cbe, 4366099a, 619cecfa, 5470c84c, ba3a4687 · caught by no rule · repeat of —
+  The user's caution: "One divider parts it from the rest, and none parts equals." → "One divider parts it from the rest; equals go without one, as a line between them reads as a change of rank." · landed in —
+- L97 edit · rule line → skill · skill · recommended yes
+  ui skill, Rank and order: the facts come before the decision they lead to, and the page's next step is its primary, not an alert's button; empire-cleaning docs/ux.md's Notice line goes (L110) · signals 4366099a, ba3a4687, 8afacadf, 9bd7ad53 · caught by no rule (empire-cleaning docs/ux.md:54 said the opposite) · repeat of —
+  The user's caution: "The page's next step is always its primary, never a button in an alert, which buries it …" → "The page's next step is its primary, not a button in an alert, which buries it …" · landed in —
+- L98 edit · rule line → skill · skill · recommended yes
+  ui skill, Compact: "A picture, not a paragraph": state as a mark that says it once and says what it means; lands the held L86 with a tick, not a status dot. The colour line becomes "never colour alone: a shape or a word carries the meaning, and colour agrees" · signals 15b41484, 6e40e02a, 203a33b6, 1b6d4481 · caught by ui skill, L91 (in part: a tick beside "Confirmed") · repeat of L91 (in part)
+  The user's caution, an absolute kept with its harm beside it: "app-wide, and never colour alone: a shape …" → "app-wide, and never colour alone, which a colour-blind reader can't tell apart: a shape …". Not the user's: "an open place in a crew" → "a cleaner still needed", as empire-cleaning's ADR-0019 retired "Open Place" (dotfiles plan review F6) · landed in —
+- L99 edit · rule line → skill · skill · recommended yes
+  ui skill, Compact: a detail is one icon, one value and one line saying what it is, the line by the value; a long single fact goes last and full width · signals 4366099a, d0b3729d, 619cecfa · caught by no rule · repeat of —
+  The user's caution: "…, the same in every row." → "…, the same shape row after row, so the eye reads each the same way." · landed in —
+- L100 edit · rule line → skill · skill · recommended yes
+  ui skill, Consistency and habit: one thing, one form, one place; a difference that means nothing is noise · signals aa11332a, 8ab387e4, ba3a4687, 46063e49, 203a33b6, d0b3729d · caught by empire-cleaning docs/ux.md:286 (in part: where a section's title sits) · repeat of —
+  The user's caution: "… one place, on every screen. The same control does the same job in every case, a section's title sits where every section's does, and an entry's time is always on the same line: each variation makes the reader learn it again." → "… one place, screen to screen. The same control does the same job in each case, a section's title sits where the others' do, and an entry's time sits on the same line in each entry: each variation makes the reader learn it again, so one has to be worth that." · landed in —
+- L101 yes · rule line → skill · skill · recommended yes
+  ui skill, Consistency and habit: each device keeps its own habits; a bottom action bar and a tab bar are a phone's, and a wide screen keeps its actions in the header · signals aa11332a, 59fcab56, f582d76b, 46063e49 · caught by no rule · repeat of —
+  landed in —
+- L102 yes · rule line → skill · skill · recommended yes
+  ui skill, Consistency and habit: aligned, even and balanced · signals ba3a4687, 5470c84c · caught by no rule · repeat of —
+  landed in —
+- L103 yes · rule line → skill · skill · recommended yes
+  ui skill, Words: words from the reader's side, and ADR-0029 limited to a term's word; lands the held L88. empire-cleaning ADR-0029's second paragraph ends on a status being the reader's, and docs/ux.md:375 points at it · signals 5f93cd77, 9bd7ad53, 14ab2068 · caught by empire-cleaning docs/ux.md, Words, "Everyday words" (in part) · repeat of —
+  Beyond the proposal: docs/agents/domain.md:47's copy of ADR-0029's rule gets the same pointer (empire-cleaning plan review F5) · landed in —
+- L104 yes · rule line → skill · skill · recommended yes
+  ui skill, Settling a screen: draw a call before trusting it, at a phone's width, a laptop's and each width where the frame changes · signals 6ad0f259, 8afacadf, 5470c84c, f582d76b, 44faf9fd · caught by no rule · repeat of —
+  landed in —
+- L105 yes · rule line → skill · skill · recommended yes
+  ui skill, Settling a screen: draw it at its edges (none, one, many, the longest text, the reader alone) · signals 1b6d4481, d0b3729d, 435f4cdd · caught by no rule · repeat of —
+  landed in —
+- L106 yes · rule line → skill · skill · recommended yes
+  ui skill, Settling a screen: a call that reaches every screen is the user's, put with what it does on each device · signals 59fcab56, f582d76b · caught by no rule · repeat of —
+  landed in —
+- L107 yes · rule line → skill · skill · recommended yes
+  ui skill, Settling a screen: a detail seen in review is settled on the prototype, not noted for the build · signals 4c64f851, b7851ddd · caught by no rule · repeat of —
+  landed in —
+- L108 edit · skill → dotfiles · skill · recommended yes
+  ui skill, examples.md: empire-cleaning's Cleaner's Job and Office's Job by mechanic, with the calls that failed and why, linking #493's two pick comments; the intro (L94) points at it · signals 43fc4fbe, 4bfa2b3b, 6e6fce66 · caught by no rule · repeat of —
+  The user's caution: "The next step is always the primary; …" → "The next step is the primary; …". Not the user's: the number waits "until the job is accepted" → "until they've confirmed", and "An open place" → "A cleaner still needed", as in L95 and L98 · landed in —
+- L109 yes · rule line → skill · skill · recommended yes
+  ui skill, "Few words, each fact once": a count and the list it heads are two facts at two ranks, and a record the reader opens on purpose stays whole · signals 619cecfa, 93d2a72b, d012602c, ba3a4687 · caught by ui skill, L91 (stretched past its meaning) · repeat of —
+  landed in —
+- L110 edit · remove → repo doc · repo · recommended yes
+  empire-cleaning docs/ux.md:54–55, "A blocked step's unblocking action sits in the Notice that explains it", goes; :355 (Notices) adds that a Notice's action isn't the page's next step · signals 8afacadf, ba3a4687 · caught by no rule (docs/ux.md:54 said the opposite) · repeat of —
+  The user's caution: ", and never the page's next step, …" → ", and not the page's next step, …". Not the user's: "(#493 builds it)" added, as the code doesn't do it yet (empire-cleaning plan review F2) · landed in —
+- L111 yes · rule line → repo doc · repo · recommended yes
+  empire-cleaning docs/ux.md: the page's actions are one split button (:280–281), a part's title line no longer holds an offer's answers (:76–77), the foot bar is a phone's only (:85–86, :336–337), each marked "#493 builds it"; the Quote Draft's desktop foot bar goes to #493 (L114) · signals aa11332a, 46063e49, 9bd7ad53, 4366099a, 203a33b6, f2546d41 · caught by no rule (docs/ux.md:76, :85, :280, :336 said otherwise) · repeat of —
+  Not the user's: the width split (the header on a wider screen, the foot bar on a phone) is a Record's, as L101 and #493's Cleaner's Job pick have it: the proposal's :280 gave the title row no width, so a phone read its actions in two places (empire-cleaning plan review F1), and :280 is every page type's header, whose List and Home actions aren't settled (round 1, F6). The foot bar keeps a form's price and its button (the Quote Draft's Send, New quote's Draft a quote) on a wider screen until #493 settles it with a prototype (round 1 F6, round 2 F11, round 3 F14; L114); :336 spliced without its repeat (plan review F3) · landed in —
+- L112 yes · rule line → repo doc · repo · recommended yes
+  empire-cleaning docs/ux.md:81–83: a Record's History goes last, at every width, in one column (#493 builds it); the build updates :89's story name and FormPage's Beside line · signals ba3a4687, 43fc4fbe · caught by no rule (docs/ux.md:81–82 said otherwise) · repeat of —
+  landed in —
+- L113 yes · rule line → repo doc · repo · recommended yes
+  empire-cleaning docs/ux.md: three copies of ui skill rules point at it (:389 a field's limit, :277–279 a subtitle, :519–520 an empty place) · signals 0c2af858 · caught by process.md, Every line (one copy) · repeat of —
+  landed in —
+- L114 yes · remove → #493 · repo · recommended yes
+  empire-cleaning #493's body: its principles are cut to a pointer at the ui skill, the overturned notes are marked, and The audit names what the build changes (docs/ux.md's lines changed here, the icon rail, PageHeader's split-button slot, their docs/ux-log.md rows, the Quote Draft's desktop foot bar by prototype) · signals 96513cbe, 203a33b6 · caught by the change skill, Rules, "Keep open issues true" · repeat of —
+  Beyond the proposal: the principles' "a clear home", this product's and not in the ui skill, stays; the crew's status-dot note is marked overturned too; The audit lists the places that describe today's shape for the build to change (docs/ux-log.md:24, :44, :114 among them), and the foot bar it settles is a form's, the Quote Draft's and New quote's (empire-cleaning plan review F4, round 1 F7, F10, round 2 F11); The audit also names when a Cleaner sees the client's number, which layout D (on prototype-cleaner-job) shows once they've confirmed, while GLOSSARY.md:25, `onTheDay` (assignments.ts:361), docs/screens.md:347–348 and docs/ux-log.md:127 (#230's row) hold it until the Job's day (round 3 F13) · landed in —
+- L115 yes · keep → repo doc · repo · recommended yes
+  empire-cleaning docs/ux-log.md: the six decisions picked in #493 get their rows in the build PRs (docs/ux.md, Changing a screen, step 5); #493's pick comments are the record until then · signals 43fc4fbe, 20168ca9 · caught by docs/ux.md, Changing a screen, step 5 · repeat of —
+  landed in —
+- L116 yes · rule line → main-session message · global · recommended yes
+  main-session.md, the capture line: while the user teaches a way of judging, capture and talk, with no rule wording, landing or fast path until they say the feedback is complete; a yes to a point isn't a yes to a rule · signals 7b67f9a3, c84e97cd · caught by no rule · repeat of —
+  landed in —
+- L117 yes · snag → issue · repo · recommended yes
+  empire-cleaning, a `ready-for-agent` issue, "Prototype kit on main": PrototypeSwitcher and a route shell that passes the layout lint, the lint's marked way for a prototype's layout part, one shot script for prototypes and audits; docs/ux.md:586 then names the kit · signals eda38adc, 601b67fa, 3d4f76a2, 0a7f232a, d63f1d1a, d164a7dc, 8f78a295, 1772d7f5, 96c0c41b, d3461715, d976f938, 41bc10a2, 275844c4, 331ef283, 14a31686, 68aecf2d, 7bca5bf2, ffdef31d, 388c2954, d1a73a93, fb79f995, f8cbd8d7 · caught by process.md, Form (a snag is fixed at its source) · repeat of —
+  landed in —
+- L118 edit · rule line → agent type · skill · recommended yes
+  curator.md, step 2's Words: what a proposal contradicts is searched for (the file it joins, the repo's ADRs and glossary) and resolved in the proposal's own words · signals c344a88f, 0bd287d2, 5071a33c, 18a6fefe · caught by no rule (curator.md asked what a proposal prunes, not what it contradicts) · repeat of —
+  The user's caution: "…, never leave it for the review (L86, L88 …)" → "… rather than leave it for the review, where each one costs the user a second ruling (L86, L88 …)" · landed in —
+- L119 edit · keep → skill · skill · recommended yes
+  ui skill, the lines landed 2026-11-20: L89, L90 and L92 kept word for word under their new headings; L85 edited by the user; L87's first sentence kept under Compact, its second cut (L95); L91 edited (L109); the colour line edited (L98); "Simplest option first" moves to Settling a screen; the owner's "clear, focused, simple, peaceful" note moves under Relevance · signals b7fe4edd · caught by no rule · repeat of —
+  The user, on L85 against L97: "maybe the confusing part is the 'see or do' part. i think you can only do after you see". L85's "came to see or do, and shows it first and largest" → "came to see", with its reason: a person acts only after seeing what the action rests on, so the action follows the facts (L97); "Everything else ranks below it" goes, as rank is L96's. Not the user's: the note's "These three are …" → "This and the first line, with "Few words, each fact once" (Compact), are …", as "These" would have covered lines from 2026-11-20 and 21 under "since #431" and missed Few words (dotfiles plan review F7) · landed in —
+
 ### 2026-11-20: fast path, ui principles
 
 The user's verdict, 2026-11-20: yes to all 8, as written, after agreeing to write the UI principles they taught reviewing #490's screenshots (empire-cleaning #493) down ("beautiful summary/takeaways, yes. agreed."). L85–L92 are this run's proposals 1–8 (`fast-2026-11-20-ui.md`), places as it gives them. Two wait for the user's ruling on a conflict the change review found, and land once they rule: L86's status dot is a colour with no label, against the ui skill's "One meaning per colour and per icon" (the curator's Existing lines checked, 1, left it to #493's people-badge pick); L88's status clause asks for a status word per reader, against empire-cleaning's ADR-0029 (one word per concept, for every reader), where a Sent Quote already reads "Sent" to the Office and "To answer" to a Client.
