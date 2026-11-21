@@ -43,11 +43,10 @@ Their budget is their attention: everything shown spends it, as everything in a 
 
 ## Buttons
 
-- **At most one primary button per page.** Two primaries means neither is. A long page read in pieces may show its one action again where a reader lands (the hero's Request a quote and the form's), in the same words and look, so it reads as one action, not two (empire-cleaning's public site, 2026-11-21).
-- **Destructive actions are red.**
-- **A third-party sign-in button keeps its owner's look** (their colours, logo and font); only the touch size is ours.
-
-All three are from empire-cleaning's UX pass (#96).
+- **At most one primary button per page.** Two primaries means neither is (empire-cleaning's UX pass, #96). A long page read in pieces may show its one action again where a reader lands (the hero's Request a quote and the form's), in the same words and look, so it reads as one action, not two (empire-cleaning's public site, 2026-11-21).
+- **A red button is for losing what can't be got back** (ending a plan, deleting a draft), not for every no: declining a quote, which the Client can ask for again, is a quiet secondary. How loud it is turns on the page's goal: a page whose only action destroys is there to be read, so it has no primary, and the action sits where a page's action does ("The facts come before the decision", above), outlined in red, not filled, and not in a menu, where a menu of one would hide the page's only action; the dialog that confirms it fills it (empire-cleaning's screen audit, 2026-11-21).
+- **What can be pressed looks pressable, and what can't doesn't.** A chip or a link-like line that does nothing reads as broken once pressed (empire-cleaning's public site, 2026-11-21), and a pressable thing that looks inert gets missed (its UX pass, #120).
+- **A third-party sign-in button keeps its owner's look** (their colours, logo and font); only the touch size is ours (empire-cleaning's UX pass, #96).
 
 ## Words
 
