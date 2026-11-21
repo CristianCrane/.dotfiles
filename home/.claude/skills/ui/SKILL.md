@@ -1,25 +1,41 @@
 ---
 name: ui
-description: UI rules for any app with screens. Use before changing a screen, or writing words a person reads (a label, a server message, an email).
+description: How to judge and build a screen a person uses, in any app. Use before designing, prototyping, reviewing or changing a screen, making a UX call, or writing words a person reads (a label, a server message, an email).
 ---
 
 # UI
 
-A screen is for the person using it. Each rule here came from a screen that got in someone's way, or words that said something the code doesn't do. The repo's own UX doc, which its CLAUDE.md names, adds its screen types, layouts and words, and how a UX question is settled there.
+A screen is for the person using it, and its budget is their attention: everything shown spends it, as everything in a context window spends a model's, so each thing on it must pay that back. Good UX is frictionless: a glance of a second gives the whole picture because every mechanic below agrees, with little text and nothing the reader needs lost, sometimes more gained (the user's definition, empire-cleaning #493, 2026-11-21). The mechanics are terms of one equation, each as important as the others, and each came from a screen that got in someone's way. [examples.md](examples.md) takes two screens through them: read it before making the calls on a screen. The repo's own UX doc, which its CLAUDE.md names, adds its screen types, layouts and words, and how a UX question is settled there.
 
-## What a screen shows
+## Relevance: this reader, this moment
 
-- **Lead with what this reader, on this screen, needs.** Each screen starts from what the person looking came to see or do, and shows it first and largest. Everything else ranks below it, and what doesn't earn a place on the first view moves off it. A call carried to every screen like it, which keeps them consistent, carries that question, not one screen's answer: an empty Extras row is noise to a Client who asked for a clean, but elsewhere it can matter that nothing is there. One row's call, made a rule for every fact, buried the values on every screen it reached (empire-cleaning #490, 2026-11-20).
-- **The first view stays focused.** Explanations, how a figure is worked out, history and rare actions wait behind a tap (a link, a folded section, an actions menu) until they matter. No step is shown before it applies: what matters only once a button is pressed (which card is charged, how a deposit is held) comes after the press, not before the button (empire-cleaning's Client Quote, 2026-11-20).
-- **Few words, each fact once.** Rows and pages carry only what drives the decision, and a fact shows once on a screen: no subtitle that repeats the title, no second card that says the schedule or price again, no help text that says what the screen already shows, no paragraph where a label will do. Offer to cut rather than add (empire-cleaning's Client Quote, 2026-11-20).
-  These three are empire-cleaning's owner's "clear, focused, simple, peaceful" (2026-11-13), the rule for every screen type since #431.
-- **A value is only the value.** What's still to come, or why it's missing, never rides in the value after a comma ("Robin, number shows on the day"): at a glance it reads as the value and buries it. Something hidden until later looks hidden (redacted, locked), and a row with nothing this reader needs isn't shown (empire-cleaning #485, #490, 2026-11-20).
+- **Lead with what this reader, on this screen, needs.** Each screen leads with what the person looking came to see: a person can act only after they've seen what the action rests on, so the action follows the facts ("The facts come before the decision", below). What doesn't earn a place on the first view moves off it. A call carried to every screen like it, which keeps them consistent, carries that question, not one screen's answer: an empty Extras row is noise to a Client who asked for a clean, but elsewhere it can matter that nothing is there. One row's call, made a rule for every fact, buried the values on every screen it reached (empire-cleaning #490, 2026-11-20).
+- **What this reader can't use yet is absent, not hidden.** Not drawn locked, blurred or "shows later": it appears when it matters. Relevance is judged per fact, not per kind (a client's name is harmless on an offer; their number waits until the cleaner has confirmed), and a row with nothing this reader needs isn't shown. The reader isn't drawn in a state that isn't true yet (in a crew before they've confirmed), as the screen would then tell them something false. Three layouts of empire-cleaning's Cleaner's Job drew an offer's door code and directions as locked, and each was turned down (#493, 2026-11-20).
 - **Each reader sees only their own concerns.** One role's working (the Office's cleaning hours, its crew maths) never reaches another reader (the Client), even through a component both screens share (empire-cleaning's Client Quote, 2026-11-20).
+- **The first view stays focused.** Explanations, how a figure is worked out, history and rare actions wait behind a tap (a link, a folded section, an actions menu) until they matter. No step is shown before it applies: what matters only once a button is pressed (which card is charged, how a deposit is held) comes after the press, not before the button (empire-cleaning's Client Quote, 2026-11-20).
+  This and the first line, with "Few words, each fact once" (Compact), are empire-cleaning's owner's "clear, focused, simple, peaceful" (2026-11-13), the rule for every screen type since #431.
+
+## Rank and order
+
+- **Rank shows by position, size, weight, colour and grouping, and they agree.** What the reader's decision rests on leads, largest, in a header of its own. One divider parts it from the rest; equals go without one, as a line between them reads as a change of rank. A detail too rich for one line (people and their state, a list) earns its own section, placed by its rank, and a count above it is its signpost, not a repeat. When room runs short, the lesser part gives way first (a badge drops under the title before the button moves). One signal against the rest says two ranks at once, like an outlined button in the primary's place (empire-cleaning #493: a price big and bold, "a clean" smaller, the tax smaller still; the Cleaner's Job, 2026-11-20).
+- **The facts come before the decision they lead to.** On a phone the page's action is pinned at the foot, read after the facts; on a wide screen it sits top right, where the eye lands after the title and details. The page's next step is its primary, not a button in an alert, which buries it and leaves a weaker action in the primary's place (empire-cleaning's Cleaner's Job and Office's Job, #493, 2026-11-20 and 21).
+
+## Compact
+
+- **A picture, not a paragraph.** State shows as a mark the eye takes in at once (a tick, a badge, a face), not a sentence to read and then picture: keep all the information, and cut the noise. A mark says it once (a tick alone, no "Confirmed" beside it, nothing for not yet), and it says what it means: a cleaner still needed is a faint person, not an empty circle (empire-cleaning #493, 2026-11-20 and 21).
+- **A value is only the value.** What's still to come, or why it's missing, never rides in the value after a comma ("Robin, number shows on the day"): at a glance it reads as the value and buries it (empire-cleaning #485, #490, 2026-11-20).
+- **A detail is one icon, one value and one line saying what it is**, the same shape row after row, so the eye reads each the same way. The line sits by the value, so the value doesn't repeat it ("8" over "Extras", not "8 extras" over "Listed below"). A long single fact (how to get in) goes last and full width, so it can't push the short ones out of view (empire-cleaning's Cleaner's Job, #493, 2026-11-21).
+- **Few words, each fact once.** Rows and pages carry only what drives the decision, and a fact shows once on a screen: no subtitle that repeats the title, no second card that says the schedule or price again, no help text that says what the screen already shows, no paragraph where a label will do. Offer to cut rather than add. A count and the list it heads are two facts at two ranks, and a record the reader opens on purpose (a history) stays whole: a log with entries missing costs trust (empire-cleaning's Client Quote, 2026-11-20; its Office's Job, #493, 2026-11-21).
 - **No box in a box:** no card in a card, no alert in an alert. empire-cleaning's Client Quote nested the Office's quote card in its details card (2026-11-20), and a Card around a List read as two boxes (#94).
-- **Simplest option first.** Lead with the option that asks nothing new of anyone and uses what the app holds; each added step, role or signal earns its place against it (empire-cleaning #416, PR #423).
-- **What loads holds its room.** A part that arrives after the page is drawn at its size first, so nothing jumps when it comes: empire-cleaning's Quote form jumped in twice as its parts loaded (#180).
 - **A row's title wraps, never cuts.** A cut title hides what the row is: a payment's "Price change: 1 more hour" lost its hour at phone width, and a badge beside an address squeezed it to a word a line (empire-cleaning #436, #305).
-- **One meaning per colour and per icon**, app-wide, and no colour without a visible label (empire-cleaning's UX pass, #96).
+- **What loads holds its room.** A part that arrives after the page is drawn at its size first, so nothing jumps when it comes: empire-cleaning's Quote form jumped in twice as its parts loaded (#180).
+
+## Consistency and habit
+
+- **One thing, one form, one place, screen to screen.** The same control does the same job in each case, a section's title sits where the others' do, and an entry's time sits on the same line in each entry: each variation makes the reader learn it again, so one has to be worth that. Things that mean different things look clearly different, and a difference that means nothing is noise, like a brand-coloured avatar for "you" (empire-cleaning's Cleaner's Job and Office's Job, #493).
+- **One meaning per colour and per icon**, app-wide, and never colour alone, which a colour-blind reader can't tell apart: a shape or a word carries the meaning, and colour agrees (empire-cleaning's UX pass, #96).
+- **Each device keeps its own habits.** A bottom action bar and a tab bar belong to a phone; on a laptop they surprise, however narrow the window. A wide screen keeps its actions in the header, which sticks once they scroll away, and makes room its own way (a sidebar folding to icons). A menu opens toward free space. A laptop window under 1024 px given the phone's frame was turned down (empire-cleaning's Office's Job, #493, 2026-11-21).
+- **Aligned, even and balanced.** A ragged line, a stray gap or broken symmetry pulls the eye from the page's purpose, whether or not it's noticed. A title row whose button wrapped under it left an empty band (empire-cleaning's Office's Job, #493, 2026-11-21).
 
 ## Buttons
 
@@ -31,12 +47,21 @@ All three are from empire-cleaning's UX pass (#96).
 
 ## Words
 
+- **Words from the reader's side.** A field is named by the reader's own question (How long, Who, Where, not "On site" or "Area"), and a status says where things stand for them: "Available" to a cleaner, for what the office calls offered. Where a repo keeps one word per term for every reader (empire-cleaning ADR-0029), that rule is about the term's name, and a status isn't one (empire-cleaning #493, 2026-11-20).
 - **A problem says what's wrong, then how to fix it**, in two short sentences at most, never how the system works, and no codes. When nothing can be done, it says what happened. A field that's too long says its limit, since the number is what fixes it (empire-cleaning #336).
 - **Words that state a rule are checked against the code that applies it**, never against another page's or message's wording of it: copies drift from the code together. empire-cleaning told a plan's Client a late fee was the plan's whole deposit, and its Terms of service copied it, while the code charged that clean's share (#462).
 
 ## Rules the server keeps
 
 - **A screen shows the server's answer** to a rule the server keeps (room, what a change replaces), never a copy of the rule of its own, not even as a hint. A rule both must run lives once, in a package both import, and so does a message both show. Two browser copies of empire-cleaning's room rule drifted from the server one after the other (#356, #365).
+
+## Settling a screen
+
+- **Simplest option first.** Lead with the option that asks nothing new of anyone and uses what the app holds; each added step, role or signal earns its place against it (empire-cleaning #416, PR #423).
+- **Draw a call before trusting it.** Read each shot against these mechanics at a phone's width, a laptop's, and each width where the frame changes, before anyone else sees it. Five of empire-cleaning's Office's Job calls, sound as written, failed once drawn, and the user still caught a side column, a timestamp out of place and a wrapped title row that the checks of the shots had missed (#493, 2026-11-21).
+- **Draw it at its edges:** none, one, many, the longest text, the reader alone. A crew of one read "Just you, … not confirmed yet" (empire-cleaning #490), and eight extras and a long door note showed where the Cleaner's Job needed its own section and a full-width row (#493, 2026-11-21).
+- **A call that reaches every screen** (the app's frame, the shared header) **is the user's**, put to them with what it does on each device before it's built. One screen's calls can be yours. Moving empire-cleaning's phone frame up to 1024 px gave a laptop window the phone's bar, and the report didn't say so (#493, 2026-11-21).
+- **A detail seen in review is settled on the prototype**, drawn and seen again before the next screen, not noted for the build: "ux is everything for a user facing product" (empire-cleaning #493, 2026-11-21).
 
 ## Reworking a screen
 

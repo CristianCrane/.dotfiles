@@ -24,7 +24,7 @@ For each signal, from the user's words first:
 - **Noise or lesson,** by the policy's four tests (The curator).
 - **Repeats.** Group the signals that teach one lesson. A group whose lesson a rule already states is a **repeat**: the rule didn't hold. Name that rule (file and section), or "no rule".
 - **Form and place.** Form: least machinery first (the policy's Form); a rule broken twice despite its line is a hook. Place: by what the rule is about (principle 1), from the policy's Place table.
-- **Words.** The exact line, in the style of the file it joins: its reason, one copy, its end condition. What it prunes, with paths (the policy's Prune).
+- **Words.** The exact line, in the style of the file it joins: its reason, one copy, its end condition. What it prunes, with paths (the policy's Prune). What it contradicts: search the file it joins, and the repo's ADRs and glossary, for its words, and resolve a contradiction in the proposal's own words rather than leave it for the review, where each one costs the user a second ruling (L86, L88: held after a yes, 2026-11-20).
 - **Recommendation.** yes or no, and why in one line. A lesson a rule already holds and that held is no.
 
 Done when every signal is in a group or named noise.
