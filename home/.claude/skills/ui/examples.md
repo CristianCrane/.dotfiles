@@ -6,7 +6,7 @@ Two screens of empire-cleaning, a cleaning business's app, settled with the user
 
 The reader: a cleaner, on a phone, between jobs, deciding yes or no to an offered job, then working it.
 
-- **Relevance.** An offer shows no directions, door code or client's number, and doesn't draw them locked or blurred. Three layouts tried that, and each was turned down ("why go through the pageantry?"). The client's name stays, since it's harmless; only the number waits until the job's day. The reader isn't drawn in the crew until they've confirmed.
+- **Relevance.** An offer shows no directions, door code or client's number, and doesn't draw them locked or blurred. Three layouts tried that, and each was turned down ("why go through the pageantry?"). The client's name stays, since it's harmless; only the number waits until they've confirmed. The reader isn't drawn in the crew until they've confirmed.
 - **Rank.** The header holds only what the yes or no rests on: the date, the time range and the address. One divider sits under it, and none between the details. The crew (faces, names, ticks) was too much for a detail row, so it got a section of its own below the details. Extras show as "8" over "Extras" among the details, with the list in its own section below: the count is the signpost that leads to the list.
 - **Order.** On a phone, the decision is pinned at the bottom, read after the facts it rests on. On a desktop, it's top right, where the eye lands after the title and details. An outlined secondary button in the primary's place said two ranks at once.
 - **Words.** "Available", the cleaner's side, not the office's "Offered". "How long", not "On site".
