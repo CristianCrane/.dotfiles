@@ -5,7 +5,7 @@ description: How to judge and build a screen a person uses, in any app. Use befo
 
 # UI
 
-A screen is for the person using it. Each rule here came from a screen that got in someone's way, or words that said something the code doesn't do. The repo's own UX doc, which its CLAUDE.md names, adds its screen types, layouts and words, and how a UX question is settled there.
+A screen is for the person using it, and its budget is their attention: everything shown spends it, as everything in a context window spends a model's, so each thing on it must pay that back. Good UX is frictionless: a glance of a second gives the whole picture because every mechanic below agrees, with little text and nothing the reader needs lost, sometimes more gained (the user's definition, empire-cleaning #493, 2026-11-21). The mechanics are terms of one equation, each as important as the others, and each came from a screen that got in someone's way. [examples.md](examples.md) takes two screens through them: read it before making the calls on a screen. The repo's own UX doc, which its CLAUDE.md names, adds its screen types, layouts and words, and how a UX question is settled there.
 
 ## Relevance: this reader, this moment
 
