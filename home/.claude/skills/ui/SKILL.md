@@ -32,6 +32,7 @@ A screen is for the person using it, and its budget is their attention: everythi
 
 ## Consistency and habit
 
+- **One thing, one form, one place, screen to screen.** The same control does the same job in each case, a section's title sits where the others' do, and an entry's time sits on the same line in each entry: each variation makes the reader learn it again, so one has to be worth that. Things that mean different things look clearly different, and a difference that means nothing is noise, like a brand-coloured avatar for "you" (empire-cleaning's Cleaner's Job and Office's Job, #493).
 - **One meaning per colour and per icon**, app-wide, and never colour alone, which a colour-blind reader can't tell apart: a shape or a word carries the meaning, and colour agrees (empire-cleaning's UX pass, #96).
 
 ## Buttons
