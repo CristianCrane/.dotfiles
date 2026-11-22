@@ -5,7 +5,7 @@ description: Hand a way of judging something (what makes a screen good, a test w
 
 # Teaching loop
 
-A way of judging lives in cases more than in rules, and it has been handed over when the learner makes the teacher's calls on cases neither has seen. The user and Claude built this loop over empire-cleaning's UX, 2026-11-20 and 21, so the user could "impart the 15 years of experience ive gained … so im no longer the bottleneck without sacrificing user experience. its the only way this scales". The measure is judgement that carries to the next case, not cases done: "im trying to scale quality, not quantity" (2026-11-21).
+A way of judging lives in cases more than in rules, and it has been handed over when the learner makes the teacher's calls on cases neither has seen. The user and Claude built this loop over empire-cleaning's UX, 2026-11-20 and 21, so the user could "impart the 15 years of experience ive gained … so im no longer the bottleneck without sacrificing user experience. its the only way this scales". The measure is the global CLAUDE.md's Aim, scaling good judgement: judgement that carries to the next case, not cases done.
 
 The **teacher** holds the judgement and the **learner** is taking it on; either can be the user or Claude. Each step says what each does. Where Claude teaches, a step is drawn from the UX round by symmetry and is untried until its first round (2026-11-22). Each step is a default with its reason: a narrow way of judging may close in one case and need no step 7, and a step bends where its reason doesn't hold, said out loud when it does.
 
