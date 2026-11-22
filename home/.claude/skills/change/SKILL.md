@@ -21,7 +21,7 @@ A **pattern** is any shape the change follows or adds: a helper, a table, a laye
 - **Big work.** A refactor or cleanup over ~10 files, or one that crosses packages: stop and ask the user one thing, whether it rides in this PR or gets its own. It's done either way. A refactor's own PR merges first, and the change's branch then starts from the default branch; a cleanup's own PR follows the change's.
 - **Every change** but a dictated one or a prototype (below) gets a survey, a plan review and a review. A small change writes a one-line survey; one for a bug carries its Cause.
 - **Dictated config:** a change to one Claude settings file that the user dictated exactly (they named the permission rule, model or theme), that only makes Claude ask or refuse more (an allow rule removed, a deny or ask rule added) or sets the model or theme to a value they named, touching no code, hook or rule text, gets a one-line survey, `dictated: "<their words>" <the file's path>`, and no plan review or review; the report to the user says it went with no reviewer. The gates hold it: they find the quote in a message the user typed, and each entry the change makes named in it; anything wider (another file, a plugin, a rule that widens what runs, an entry the quote doesn't name as a whole, more than five entries) gets the full flow. Its lessons still run (a `None:` line is enough); a PR's Change section says `Review: none, dictated`.
-- **Prototype:** a branch named `prototype-<name>` holds a throwaway look (made-up data, pushed as the record) and gets no survey, plan review or review. It never reaches the default branch, by PR or by merge: the gate turns its PR down, and the pick is built on its own branch with the full flow.
+- **Prototype:** a branch named `prototype-<name>` holds a throwaway look (made-up data, pushed as the record) and gets no survey, plan review or change review (its UX review: the `ui` skill, Settling a screen). It never reaches the default branch, by PR or by merge: the gate turns its PR down, and the pick is built on its own branch with the full flow.
 - The repo's own rules (CLAUDE.md, ADRs) add to these.
 
 ## 1. Survey
@@ -62,7 +62,9 @@ When a change touches what a build ships or the order things load in: that a bui
 
 Once the change is committed, before opening the PR (`gh pr create` is turned down until the review is of the last commit, or of one before it with only comment lines changed since, and, before the last round, has no open change findings), run the `change-reviewer` agent: **round 1**, with the branch, the repo root, which commits are refactors (the survey's `Commits:`), the survey's and plan review's paths, and the review's path (`review-…` beside the survey).
 
-A round is the reviewer and you arguing about shape, and about a bug's evidence. The reviewer reads the diff and the survey and runs nothing that writes (a gate holds it to reading), so tests never hold it up: start each round as its commit lands, and run the repo's quick tests beside it (its CLAUDE.md or AGENTS.md names them, and its full suite).
+**A change a person sees** gets a UX review beside round 1. Take its after-shots at a phone's width and a laptop's, as the repo's CLAUDE.md says (empire-cleaning: `pnpm pr:shots` with `--desktop`, whose copies stay in the git dir's `pr-shots/`), and run the `ux-reviewer` agent with the after-shots' paths, each shot's screen, case, reader and moment, the commit they show, and its output's path (`ux-review-…` beside the survey). Give it nothing of the change (the diff, the brief, the survey, a fix list, the before-shots): a review that reads a change against its brief sees what the brief names, and on empire-cleaning #509 three rounds and 18 findings passed an untrue line on a screen the change touched, which a cold read of its after-shot caught (2026-11-22). Each finding (`U<n>`) is fixed, with new shots and a later pass on them, or put to the user, or left with its why, as "Fix what you see" says; the PR's Change answers each by id.
+
+A round is the reviewer and you arguing about shape, and about a bug's evidence. The change-reviewer reads the diff and the survey and runs nothing that writes (a gate holds it to reading), so tests never hold it up: start each round as its commit lands, and run the repo's quick tests beside it (its CLAUDE.md or AGENTS.md names them, and its full suite).
 
 - **Every finding is a fix**, made now and never filed for later. Each has an id (`F<n>`) and a severity:
   - **`[change]`**: a shape decision, or a bug's unshown cause (the reviewer's impact list). Fix it, with any failure the round's quick tests found, commit, and run the reviewer again: **round 2**, **round 3**, and on. A follow-up round checks only the fixes, against the previous review in the same file. Only these fixes count rounds.
@@ -70,7 +72,7 @@ A round is the reviewer and you arguing about shape, and about a bug's evidence.
 - **A recheck** reviews a commit that fixes no change finding: a text fix in Markdown, a cleanup from `Seen nearby:`, a fix to a failing test, typecheck, lint or CI. It checks only that commit, keeps the round's number and costs no round; a change finding it raises starts the next round. Rechecks have no cap.
 - **Push back** when a finding is wrong: give your reason in the prompt of the reviewer's next pass (a recheck of the same commit, when nothing else changed). It concedes or holds, with evidence. A change finding it still holds goes to the user with both sides; their ruling goes in the next pass's prompt, and closes the finding.
 - **The full suite** runs once, after a round or recheck leaves no change finding open, before the PR; where it's CI's (the repo's CLAUDE.md says so), on the PR: open it as a draft (`gh pr create --draft`) once the review leaves no change finding open and the quick tests pass, and mark it ready once every check is green and step 6 is done (empire-cleaning ADR-0026). A fix it needs gets a recheck before it's pushed (nothing gates a push to a draft), and only what failed runs again, with the quick tests.
-- **Done** when the last review leaves no change finding open, every text finding is fixed, and the full suite has passed.
+- **Done** when the last review leaves no change finding open, every text finding is fixed, and the full suite has passed, and, for a change a person sees, the last UX review's findings are each answered.
 - **Going nowhere** goes to the user in any round. When a round reopens a finding an earlier round marked fixed, the fixes are going back and forth: stop and put it to them with both sides. New, narrower findings each round are progress; keep going.
 - **After round 5**, any change finding still open goes to the user: stop and put each one to them with its paths. A round 6 runs only when they say so.
 
@@ -98,6 +100,7 @@ A PR body says what a reader needs to check the change, and nothing else. Write 
 - Extended | Retired | New: <pattern> — <paths>
 - Simpler shape considered: <a real shape>; <why not, or "done in <sha>">
 - Review: F<n> <finding> → fixed in <sha> | fixed in the survey | answered: <why, and the reviewer's or user's word on it>
+- UX review: U<n> <finding> → fixed in <sha> | answered: <the user's ruling, or why it's left>
 - Seen nearby: <problem> → fixed in <sha>
 - Harder to change: <what, or nothing>
 
