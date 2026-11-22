@@ -1,8 +1,8 @@
 // `gh pr create` waits for the branch's change review (the `change` skill):
 // it is turned down until the review exists (a dictated change that holds
 // has none: lib's dictatedHolds), is of the last commit (or
-// of one before it with only comment lines changed since) and, before the
-// last round, leaves no change finding open, and until the PR body, read
+// of one before it with only comment lines changed since) and, before
+// round 5, leaves no change finding open, and until the PR body, read
 // from its file, is in the skill's shape (its parts, Check these's
 // permalinks, Change collapsed, nothing else) and answers every finding of
 // that review in its Change section. A PR leaves draft (`gh pr ready`, or `gh pr create` without
