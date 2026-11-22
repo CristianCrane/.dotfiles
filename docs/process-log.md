@@ -28,6 +28,17 @@ Kept from step 3 on: per kind of call and reach, the matching verdicts in a row,
 
 ## Entries
 
+### 2026-11-22: fast path, aim
+
+The user's verdict, 2026-11-22 (inbox 13b1f558): "yes", to the main session's proposal after the user sharpened what they want to scale: "i think what captures my intent more is scaling good judgement", and "this is more of a guiding principle for everything we do while working together. at least for now". No curator proposal came before it: the placement is the main session's (process.md, Place: how the user works, any project). L146–L147 are its two parts. L146 is reach global, and the user said yes to it, then took the plan review's edit to it (F1).
+
+- L146 edit · rule line → global CLAUDE.md · global · recommended yes
+  A first section, "# Aim", above Change: "We're scaling good judgement; quality is what it produces (2026-11-22). Each call is made for the reason I'd give, and says that reason, so I check the reason rather than redo the call. Held for now: revisit at the weekly review once empire-cleaning#493 is built." · signals 0d83d450 · caught by no rule · repeat of —
+  The user's edit, the plan review's (F1: in this file "you" is Claude and "I" the user): "yep makes sense. good catch". "Each call is made for the reason you'd give, and says that reason, so you check the reason rather than redo the call." → "Each call is made for the reason I'd give, and says that reason, so I check the reason rather than redo the call." "#493" is written "empire-cleaning#493", the file's form for another repo's issue (.dotfiles#5). Puts the global CLAUDE.md further over budget: ~1,441 of 1,200 tokens (5,491 characters ÷ 4 now, ~1,373, plus ~68; an estimate), with nothing else trimmed to make room; over budget makes it a weekly item (D22) · landed in —
+- L147 yes · rule line → skill · skill · recommended yes
+  teaching-loop skill, SKILL.md:8: the measure stops quoting "im trying to scale quality, not quantity" (2026-11-21) and points at the Aim: "The measure is the global CLAUDE.md's Aim, scaling good judgement: judgement that carries to the next case, not cases done", so the aim has one copy, the global CLAUDE.md · signals 0d83d450 · caught by no rule · repeat of —
+  Prunes the quote L141 moved in; the 2026-11-20 and 21 origin and the "15 years" quote stay · landed in —
+
 ### 2026-11-22: fast path, teaching loop
 
 The user's verdict, 2026-11-22 (inbox 8118c1a4), on the curator's batch from their ask to make the UX round's teaching loop something to run again, in both directions, and to add a reviewer that reads screens cold (`teaching-loop-2026-11-22.md`): "all yes." L137–L145 are its items 1–9, in order, places as it gives them. Items 2 and 5 were put as their own items because each goes past words the user had already approved (the nine steps; L131's measure), and the same "all yes" covers both. Two are reach global, and the user said yes to both: L139 (the main-session message) and L142 (the `ux-reviewer` agent type, with its line in `reviewer-gate.mjs`, a hook that gates every session). L145 is a repeat: the change skill's "Fix what you see" and the global CLAUDE.md's Change line held for code and docs but not for a screen a change touched (empire-cleaning #509). Item 1's 18 signals decided earlier, read there as each step's evidence, aren't decided again here. The fixes from the plan reviews are not the user's edits; each is noted on its entry's third line.
