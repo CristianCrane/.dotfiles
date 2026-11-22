@@ -1,10 +1,12 @@
 // The change-reviewer reads, and writes its review: nothing else (and the
-// curator, which writes only its output: HELD). In
+// curator and the ux-reviewer, each of which writes only its own output:
+// HELD). In
 // empire-cleaning#374 it ran vitest in the author's checkout while the
 // author's quick tests ran there, and 36 of theirs failed; its file's "use
 // Bash for reading only" didn't hold it (CristianCrane/.dotfiles#17). Its
 // tool calls carry `agent_type: "change-reviewer"` (seen live, for a repo's
-// copy of the agent too); every other caller's go through.
+// copy of the agent too); every caller whose agent_type isn't in HELD goes
+// through.
 //
 // Its Bash runs only when every command in it, substitutions included, is
 // a reader on READERS (built from the Bash calls of past reviewers), with
@@ -276,13 +278,17 @@ const notReading = (command) => {
   return null;
 };
 
+// a file in a git dir's claude/ folder, where the surveys and reviews
+// live; git runs from the folder's parent, the git dir itself, so the
+// folder needn't exist yet
+const inClaudeFolder = (file) => basename(dirname(file)) === "claude" && inGitDir(dirname(dirname(file)), file);
+
 // a plan-review or review file beside a survey, in a git dir
 const ownReview = (path) => {
   try {
     const file = resolve(path);
-    const dir = dirname(file);
     const key = basename(file).match(/^(?:plan-review|review)-(.+\.md)$/)?.[1];
-    return Boolean(key && basename(dir) === "claude" && existsSync(join(dir, `survey-${key}`)) && inGitDir(dir, file));
+    return Boolean(key && existsSync(join(dirname(file), `survey-${key}`)) && inClaudeFolder(file));
   } catch {
     return false;
   }
@@ -306,6 +312,19 @@ const HELD = {
     writes: "its review: the output path you were given, a plan-review or review file beside the survey in the git dir",
   },
   curator: { owns: ownOutput, writes: `its output: the path you were given, under ${CURATOR}` },
+  // a UX review of after-shots (agents/ux-reviewer.md), for a change or
+  // a prototype, which has no survey, so none is asked for beside it
+  "ux-reviewer": {
+    owns: (path) => {
+      try {
+        const file = resolve(path);
+        return /^ux-review-.+\.md$/.test(basename(file)) && inClaudeFolder(file);
+      } catch {
+        return false;
+      }
+    },
+    writes: "its review: the output path you were given, a ux-review-<branch>.md in the git dir's claude/ folder",
+  },
 };
 
 // what the turn-downs say to do instead
