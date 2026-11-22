@@ -594,14 +594,15 @@ const commentOnly = (cwd, sha) => {
   }
 };
 
-// the round after which open change findings go to the user (the `change`
-// skill's "After round 5")
+// the round from which the gate lets open change findings through: a cap
+// the `change` skill no longer has (its rounds stop on what they find),
+// kept until .dotfiles#45
 const LAST_ROUND = 5;
 
 // the reviewer's read of the diff: it must be of the last commit (written
 // after it isn't enough: a round runs while fixes may land), or of one
-// before it with only comment lines changed since; and before the last
-// round it must leave no change finding open (after it the user decides). The
+// before it with only comment lines changed since; and before round 5
+// it must leave no change finding open (LAST_ROUND, until .dotfiles#45). The
 // reviewer's header line says all three: "… @ <sha>, round <n>, <k> open
 // change findings", where a recheck says "recheck of round <n>", keeping
 // the number. A dictated change that holds (dictatedHolds) has no review,
