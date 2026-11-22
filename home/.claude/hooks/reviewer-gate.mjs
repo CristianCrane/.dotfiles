@@ -276,13 +276,17 @@ const notReading = (command) => {
   return null;
 };
 
+// a file in a git dir's claude/ folder, where the surveys and reviews
+// live; git runs from the folder's parent, the git dir itself, so the
+// folder needn't exist yet
+const inClaudeFolder = (file) => basename(dirname(file)) === "claude" && inGitDir(dirname(dirname(file)), file);
+
 // a plan-review or review file beside a survey, in a git dir
 const ownReview = (path) => {
   try {
     const file = resolve(path);
-    const dir = dirname(file);
     const key = basename(file).match(/^(?:plan-review|review)-(.+\.md)$/)?.[1];
-    return Boolean(key && basename(dir) === "claude" && existsSync(join(dir, `survey-${key}`)) && inGitDir(dir, file));
+    return Boolean(key && existsSync(join(dirname(file), `survey-${key}`)) && inClaudeFolder(file));
   } catch {
     return false;
   }
