@@ -11,6 +11,8 @@ The **teacher** holds the judgement and the **learner** is taking it on; either 
 
 `grilling` settles one plan's decisions and ends when nothing in the plan is left open; this loop ends when the learner settles cases the teacher never saw, and a decision is only the case it learns from. `/teach` builds a course on a topic from outside sources; this loop hands over judgement one of you already has, inside real work.
 
+**How the steps run.** Steps 1 to 3 go round per case, and 4 runs throughout. The transfer test (6) is what lets the teacher call a round complete, and the write-up (5) closes it. Step 7 starts the next round from the write-up, its gaps going through 2 to 5 again. The root (8) is named once the cases show it, and trust (9) widens across rounds. The UX round ran: the Cleaner's Job (1 to 3, six passes), the Office's Job as the transfer test (6), the consolidation (5), the screen audit (7) with its 25 calls, the root (8) and their consolidation (5), then "proceed without asking" (9).
+
 ## 1. Start from real cases, not principles
 
 A principle stated before its cases gets read wider or narrower than it was meant, and a case shows where it stops. Eight UI rules written from one screen's review on 2026-11-20 (process log L85 to L92) were reworded the next day, and one, "hidden until later looks hidden", turned around once three layouts drawn with locks had been turned down (L95).
