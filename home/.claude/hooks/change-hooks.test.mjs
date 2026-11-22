@@ -3,7 +3,7 @@
 // reviewer-gate), each fed to the hook as Claude Code runs it (`node
 // <hook>.mjs`, the tool call's JSON on stdin, with the input fields
 // MORE_INPUT adds, in a scratch repo), and below them plain tests of
-// scratch-gate at a subagent's start, reviewer-gate's other callers and the curator, capture (the process layer's inbox), the
+// scratch-gate at a subagent's start, reviewer-gate's other callers, the curator and the ux-reviewer, capture (the process layer's inbox), the
 // survey gate on main (branch first where origin is on GitHub),
 // review-gate's merge rule, a dictated settings change, a prototype branch, lib's cwdFor and
 // substitutions, the
@@ -706,8 +706,8 @@ test("scratch-gate: a subagent's folder, made and named at its start; the main s
   assert.notEqual(run({ ...write, agent_id: AGENT, scratchpad_dir: root }), ""); // the same call, held in a subagent
 });
 
-// reviewer-gate holds the change-reviewer only: the same calls from the
-// main session or another agent go through
+// reviewer-gate holds only the agent types in its HELD table: the same
+// calls from the main session or another agent go through
 test("reviewer-gate: other callers' calls through", () => {
   const { repo } = scratchRepo();
   const run = (input) => runHook("reviewer-gate", { cwd: repo, ...input }).stdout;
@@ -732,6 +732,23 @@ test("reviewer-gate: the curator writes only its output, and runs only readers",
     assert.match(run({ file_path: join(home, path), content: "x" }), /^The curator writes only its output: the path you were given, under .*\.claude\/process\/curator\. /, path);
   assert.equal(run({ command: "git log --oneline -5" }), "");
   assert.match(run({ command: "pnpm test" }), /^The curator runs only commands that read: /);
+});
+
+// reviewer-gate holds the ux-reviewer to its review: a ux-review-*.md in
+// a git dir's claude/ folder, which needn't exist yet (a prototype's
+// branch has no survey), and nothing else (the old gate let every call
+// through: red on it)
+test("reviewer-gate: the ux-reviewer writes only a ux-review file in a git dir's claude/ folder", () => {
+  const { repo } = scratchRepo();
+  const gitDir = git(repo, "rev-parse", "--path-format=absolute", "--git-dir");
+  assert.ok(!existsSync(join(gitDir, "claude")));
+  const run = (file_path) => {
+    const ran = runHook("reviewer-gate", { cwd: repo, agent_id: AGENT, agent_type: "ux-reviewer", tool_input: { file_path, content: "x" } });
+    return ran.stdout.trim() ? JSON.parse(ran.stdout).hookSpecificOutput.permissionDecisionReason : "";
+  };
+  assert.equal(run(join(gitDir, "claude/ux-review-feature.md")), "");
+  for (const path of [join(repo, "claude/ux-review-x.md"), join(gitDir, "claude/review-x.md"), join(repo, "b.txt")])
+    assert.match(run(path), /^The ux-reviewer writes only its review: the output path you were given, a ux-review-<branch>\.md in the git dir's claude\/ folder\. /, path);
 });
 
 // capture.mjs writes one raw signal to ~/.claude/process/inbox.jsonl, with

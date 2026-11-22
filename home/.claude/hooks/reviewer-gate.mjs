@@ -1,10 +1,12 @@
 // The change-reviewer reads, and writes its review: nothing else (and the
-// curator, which writes only its output: HELD). In
+// curator and the ux-reviewer, each of which writes only its own output:
+// HELD). In
 // empire-cleaning#374 it ran vitest in the author's checkout while the
 // author's quick tests ran there, and 36 of theirs failed; its file's "use
 // Bash for reading only" didn't hold it (CristianCrane/.dotfiles#17). Its
 // tool calls carry `agent_type: "change-reviewer"` (seen live, for a repo's
-// copy of the agent too); every other caller's go through.
+// copy of the agent too); every caller whose agent_type isn't in HELD goes
+// through.
 //
 // Its Bash runs only when every command in it, substitutions included, is
 // a reader on READERS (built from the Bash calls of past reviewers), with
@@ -310,6 +312,19 @@ const HELD = {
     writes: "its review: the output path you were given, a plan-review or review file beside the survey in the git dir",
   },
   curator: { owns: ownOutput, writes: `its output: the path you were given, under ${CURATOR}` },
+  // a UX review of after-shots (agents/ux-reviewer.md), for a change or
+  // a prototype, which has no survey, so none is asked for beside it
+  "ux-reviewer": {
+    owns: (path) => {
+      try {
+        const file = resolve(path);
+        return /^ux-review-.+\.md$/.test(basename(file)) && inClaudeFolder(file);
+      } catch {
+        return false;
+      }
+    },
+    writes: "its review: the output path you were given, a ux-review-<branch>.md in the git dir's claude/ folder",
+  },
 };
 
 // what the turn-downs say to do instead
