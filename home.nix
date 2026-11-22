@@ -2,6 +2,11 @@
 
 let
   dotfiles = "${config.home.homeDirectory}/.dotfiles";
+  # the skill folders the flake holds (git-tracked), read at build time, so
+  # a skill added or removed changes the build and claudeSettings runs again
+  # on the next `rebuild`; a glob over ${dotfiles} left the build the same
+  skills = builtins.attrNames
+    (lib.filterAttrs (_: type: type == "directory") (builtins.readDir ./home/.claude/skills));
 in
 
 {
@@ -122,9 +127,9 @@ in
         run rm "$link"
       fi
     done
-    for skill in "${dotfiles}"/home/.claude/skills/*; do
-      run ln -sfn "$skill" "$HOME/.claude/skills/$(basename "$skill")"
-    done
+    ${lib.concatMapStrings (skill: ''
+      run ln -sfn ${lib.escapeShellArg "${dotfiles}/home/.claude/skills/${skill}"} "$HOME/.claude/skills/"${lib.escapeShellArg skill}
+    '') skills}
     # the repo's own git hooks, in .githooks (each one's header says what it
     # does); relative, so each worktree runs its own
     run ${pkgs.git}/bin/git -C "${dotfiles}" config core.hooksPath .githooks
