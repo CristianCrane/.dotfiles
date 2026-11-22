@@ -1,3 +1,7 @@
+# Aim
+
+We're scaling good judgement; quality is what it produces (2026-11-22). Each call is made for the reason I'd give, and says that reason, so I check the reason rather than redo the call. Held for now: revisit at the weekly review once empire-cleaning#493 is built.
+
 # Change
 
 Each change leaves the codebase with less entropy, never more. Before the first edit of any change in a git repo, load the `change` skill: it surveys the patterns the change touches, gets a fresh review before the PR, and writes the PR's body (2026-11-04: changes that extended whatever pattern was there). Stale text, config or docs you find get fixed in the work at hand, without asking (2026-11-10).
