@@ -90,3 +90,7 @@ Speed handed over before the calls match costs what the teacher is protecting; h
 - **Teacher:** widens what the learner calls alone as their calls match: every detail reviewed, then one case's calls, then "i trust your judgement at this point. proceed without asking, but please keep checking in" (2026-11-21).
 - **Learner:** waits for speed to be offered rather than asking for it (offering to leave three fixes for the build, Claude heard "i have no desire to rush the details here"), and leaves with the teacher what wasn't handed over: a call that reaches every screen, a merge.
 - **Done:** the teacher has said what the learner now decides alone, recorded where its scope puts it (one project's state goes in memory: `docs/process.md`, Place).
+
+## The UX round, whole
+
+Empire-cleaning #493's comments hold the picks, the transfer test and the 25 calls; the dotfiles' `docs/process-log.md`, L85 to L136, holds each lesson, its verdict and where it landed.
