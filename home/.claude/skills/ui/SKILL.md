@@ -64,7 +64,7 @@ Their budget is their attention: everything shown spends it, as everything in a 
 - **Draw a call before trusting it.** Read each shot against these mechanics at a phone's width, a laptop's, and each width where the frame changes, before anyone else sees it. Five of empire-cleaning's Office's Job calls, sound as written, failed once drawn, and the user still caught a side column, a timestamp out of place and a wrapped title row that the checks of the shots had missed (#493, 2026-11-21).
 - **Draw it at its edges:** none, one, many, the longest text, the reader alone. A crew of one read "Just you, … not confirmed yet" (empire-cleaning #490), and eight extras and a long door note showed where the Cleaner's Job needed its own section and a full-width row (#493, 2026-11-21).
 - **A call that reaches every screen** (the app's frame, the shared header) **is the user's**, put to them with what it does on each device before it's built. One screen's calls can be yours. Moving empire-cleaning's phone frame up to 1024 px gave a laptop window the phone's bar, and the report didn't say so (#493, 2026-11-21).
-- **A detail seen in review is settled on the prototype**, drawn and seen again before the next screen, not noted for the build: "ux is everything for a user facing product" (empire-cleaning #493, 2026-11-21). The measure is judgement that carries to the next screen, not screens done (the user: "im trying to scale quality, not quantity", 2026-11-21).
+- **A detail seen in review is settled on the prototype**, drawn and seen again before the next screen, not noted for the build: "ux is everything for a user facing product" (empire-cleaning #493, 2026-11-21).
 
 ## Reworking a screen
 
