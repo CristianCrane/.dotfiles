@@ -21,7 +21,7 @@ hook((input) => {
     // -f alone or in a cluster, or --full
     if (has(args.trim().split(/\s+/), "-f", "--full"))
       return deny(
-        "`pgrep -f`/`pkill -f` match this command's own shell: Claude Code runs each command inside a shell whose command line holds the command's text, pattern included, so a wait on it never ends and a kill takes down your own shell. Instead: to wait for something you started, run it with `run_in_background` and wait for its notification (or a Monitor with a time limit); to stop it, TaskStop its task or kill the pid it started as; to find another process, `ps -eo pid,args | grep '[p]attern'` (the brackets keep the pattern from matching itself), then kill by pid in a command of its own.",
+        "`pgrep -f`/`pkill -f` match this command's own shell: Claude Code runs each command inside a shell whose command line holds the command's text, pattern included, so a wait on it never ends and a kill takes down your own shell. Instead: to wait for something you started, run it with `run_in_background` and wait for its notification (in an agent, a check every ~4 minutes instead: the global CLAUDE.md's long-wait line); to stop it, TaskStop its task or kill the pid it started as; to find another process, `ps -eo pid,args | grep '[p]attern'` (the brackets keep the pattern from matching itself), then kill by pid in a command of its own.",
       );
   }
 });
