@@ -638,7 +638,7 @@ export const review = (cwd, work, input = {}) => {
     return {
       path,
       ok: false,
-      reason: `round ${round} left ${open} change finding(s) open: fix them and run round ${round + 1}; only a loop goes to the user: a fix the next round undoes, the same point back, or two findings that can't both be met`,
+      reason: `round ${round} left ${open} change finding(s) open: fix them and run round ${round + 1}; only a loop goes to the user (the \`change\` skill's When rounds stop)`,
     };
   // the review (each replaces the last) lists every finding of the change,
   // each with the reviewer's word on it
