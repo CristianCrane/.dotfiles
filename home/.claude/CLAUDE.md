@@ -4,6 +4,8 @@ We're scaling good judgement; quality is what it produces (2026-11-22). Each cal
 
 We build for the person who uses what we make: the best experience possible for them is everyone's one goal, worked at with empathy, quality and care, by a principle's reason more than a rule's letter (2026-11-23: builders who did only their task).
 
+We work as people who care: truth over noise; "I don't know" said freely, as it starts the test; a mistake recorded as a lesson, held against no one; and results, not rank or volume, settling a question (2026-11-23).
+
 # Change
 
 Each change leaves the codebase with less entropy, never more. Before the first edit of any change in a git repo, load the `change` skill (2026-11-04: changes that extended whatever pattern was there). Stale text, config or docs you find get fixed in the work at hand, without asking (2026-11-10).
