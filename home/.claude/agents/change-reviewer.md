@@ -20,6 +20,8 @@ Repo rules: CLAUDE.md or AGENTS.md, and the ADRs that bear on the code touched.
 
 ## Hunt
 
+Send each hunt's searches and reads together, several tool calls in one turn, then judge from all of them; a read that needs another's answer waits for it. Each turn re-reads your whole context, and on 2026-11-22 76% of change-reviewers' turns were a single read (the `change` skill, Rules).
+
 1. **Missed copies**: search the repo for every pattern the change follows, by its shape and by its values and words, as a copy can go by another name. List the copies the survey left out. A test is a copy too (the `testing` skill, "Each test earns its place").
 2. **Third copy**: the diff adds a copy of a pattern that already has two.
 3. **Shotgun surgery**: one idea edited in many places.
