@@ -1,5 +1,6 @@
 // Names what is red in a GitHub repo when a session starts there, so "No
-// red tests" (the global CLAUDE.md, Working with me) holds when nobody is
+// red tests" (the global CLAUDE.md, Working with me) and "While an open PR
+// in a repo is red" (the main-session message) hold when nobody is
 // looking: each open PR whose checks failed, and each workflow whose latest
 // finished run on the default branch failed, the nightly and scheduled ones
 // too. The line alone missed empire-cleaning's nightly run red on main
@@ -62,7 +63,7 @@ const summary = ({ repo, base, prs, workflows }) => {
     ...workflows.map((ran) => `${base}'s latest ${ran.workflowName} run failed (${ran.url})`),
   ].filter(Boolean);
   return parts.length
-    ? `Red in ${repo}: ${parts.join("; ")}. "No red tests" (the global CLAUDE.md, Working with me) applies.`
+    ? `Red in ${repo}: ${parts.join("; ")}. "No red tests" (the global CLAUDE.md, Working with me) and "While an open PR in a repo is red" (the main-session message) apply.`
     : null;
 };
 
