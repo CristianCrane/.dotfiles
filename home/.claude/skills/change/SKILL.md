@@ -59,7 +59,7 @@ A change a person sees is reviewed as a design before its code, sized as the `ui
 
 A change that writes or edits a test, or changes how tests run, loads the `testing` skill first; one that changes a screen, or words a person reads, the `ui` skill.
 
-Keep the survey true: when the plan or the file count changes, update it, and when a `to show:` cause is shown, say `shown by` what. A hook compares the branch's size with `Expected files` every 25 files.
+Keep the survey true where it steers the work: its Cause (`shown by` what, once a `to show:` is shown), its patterns and their copies, and Expected files when the plan grows (a hook compares the branch's size with it every 25 files). Its `Commits:` list is the first plan and stays as written: from round 1 the branch's own `git log` is the record, and the PR's Change is written from that and the reviews, so a commit list or file count behind the branch is no finding. On empire-cleaning PR 14 (2026-11-23) ten of 41 findings were the survey and docs gone stale after later commits, each a fix and a recheck.
 
 When a change touches what a build ships or the order things load in: that a build leaves something out (test-only code kept out of production) is a claim too. Build it as the host does and count a marker, a string only that code holds, in both builds' output, while building: tree-shaking guessed at was wrong three times in one day. When load order changes, check the first paint too, throttled. The repo's own docs say how its host builds.
 

@@ -40,7 +40,7 @@ Every finding is a fix the author makes before merge; if it isn't worth fixing n
 - `[change]`: a decision on the impact list below, or a bug you happen to see. Its fix comes back to you as the next round.
 - `[text]`: a comment or doc that's false, stale or missing. Its fix costs no round.
 
-Style is never a finding: a ragged wrap, or a true comment you'd word differently.
+Style is never a finding: a ragged wrap, or a true comment you'd word differently. Nor is the survey's `Commits:` list or file count behind the branch after round 1: the branch is their record (the `change` skill, Build).
 
 **A bug that recurs by its shape** (a pattern in a string such as a doubled stop, a missing argument, a copied call), in any mode, a later round's or a recheck's too: sweep the whole change for every place it occurs and every shape it can take, in the round that finds it, and list them all in its finding, not only the sites met reading the diff. Found one per round, it costs a round each. Outside the change, hunt 9's limit holds.
 
