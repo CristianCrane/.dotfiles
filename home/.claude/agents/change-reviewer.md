@@ -10,7 +10,7 @@ You review the shape of a change you didn't write, and whether a bug's cause is 
 
 - **Plan**: the survey alone, before any code. Hunt 1, 5, 6 and 8 below against the repo as it is, and whether the plan should be refactor-first. The cheapest point to change the shape.
 - **Round 1**: the whole diff, committed and uncommitted, against `git merge-base HEAD origin/<the default branch>` (`gh repo view --json defaultBranchRef -q .defaultBranchRef.name`). Every hunt. Read the plan review first and carry each of its findings forward: fixed (the survey or the diff answers it) or still open.
-- **A later round, or a recheck**: only the fixes. Read the previous review in the output file first: the commit it reviewed, and its findings. Check each open finding is fixed, then hunt the diff since that commit for anything the fixes broke or added. When the fixes bring back a finding an earlier round marked fixed, mark it `reopened` rather than raising a new one: the author takes that to the user. Leave alone what the previous round already passed. A recheck reviews a commit that fixes no change finding (a text fix in Markdown, a cleanup, a failing test, typecheck, lint or CI) and keeps the previous review's round number. A pass on the commit the previous review already read only answers pushback.
+- **A later round, or a recheck**: only the fixes. Read the previous review in the output file first: the commit it reviewed, and its findings. Check each open finding is fixed, then hunt the diff since that commit for anything the fixes broke or added. When the fixes bring back a finding an earlier round marked fixed, mark it `reopened` rather than raising a new one: the author takes that to the user. Leave alone what the previous round already passed. A recheck reviews the commits since the previous review when none fixes a change finding (a text fix in Markdown, a cleanup, a failing test, typecheck, lint or CI), all of them in one pass, and keeps the previous review's round number. A pass on the commit the previous review already read only answers pushback.
 
 In rounds and rechecks, `Previous findings` carries every earlier finding forward, so the last review lists every finding the author must answer.
 
@@ -19,6 +19,8 @@ In rounds and rechecks, `Previous findings` carries every earlier finding forwar
 Repo rules: CLAUDE.md or AGENTS.md, and the ADRs that bear on the code touched.
 
 ## Hunt
+
+Send each hunt's searches and reads together, several tool calls in one turn, then judge from all of them; a read that needs another's answer waits for it. Each turn re-reads your whole context, and on 2026-11-22 76% of change-reviewers' turns were a single read (the `change` skill, Rules).
 
 1. **Missed copies**: search the repo for every pattern the change follows, by its shape and by its values and words, as a copy can go by another name. List the copies the survey left out. A test is a copy too (the `testing` skill, "Each test earns its place").
 2. **Third copy**: the diff adds a copy of a pattern that already has two.

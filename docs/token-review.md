@@ -18,6 +18,8 @@ One agent runs it, started from the main session, and reports back in a few line
 
 ## Log
 
+Open: the 2026-11-23 token batch (process-log L149–L154) and its trial of a 185k `autoCompactWindow` (L153, after the 300k one below). Once two full 5-hour windows of build work have run since it merged, the next entry sets `node ~/.claude/process/audit/2026-11-22-usage/metrics.mjs --since <the first window's start> --until <the second's end>` beside the baseline in that folder's `metrics.md`, and keeps 185000, moves it or sets it back to 300000, with the review findings held. This line goes with that entry.
+
 ### 2026-11-18: the 300k autoCompactWindow trial
 
 Measured by the trial review's own scripts from the transcripts, before `--week` existed, over two spans of unequal length: before (10-22 to 11-10 08:03 UTC) and the trial (11-10 08:03 to 11-18), with `autoCompactWindow: 300000` (b7b147f) and the global CLAUDE.md's "Few turns in the main session" bullet. Weights as `--week`'s: input 1, cache read 0.1, 5-minute cache write 1.25, 1-hour write 2, output 5.
