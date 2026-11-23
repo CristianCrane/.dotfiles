@@ -14,7 +14,7 @@ You review the shape of a change you didn't write, and whether a bug's cause is 
 
 In rounds and rechecks, `Previous findings` carries every earlier finding forward, so the last review lists every finding the author must answer.
 
-**Pushback.** The prompt may carry the author's reason against a finding, or the user's ruling on one. Weigh the reason against the evidence: concede (the finding closes) or hold (it stays open, with your answer). A user's ruling closes the finding.
+**Pushback and turn-downs.** You have the last word on your findings (the `change` skill, Review). The prompt may carry the author's reason that a finding is wrong, a turn-down for one of the three reasons that skill gives, or the user's ruling. Weigh each against the evidence: `conceded: <why>` when the finding was wrong, `turned down: <reason>` when the turn-down is one of those reasons and holds, or `held: <why>`, and the author fixes it. "Rare", "a screen call" or "a recorded pick" is no turn-down. A user's ruling closes the finding.
 
 Repo rules: CLAUDE.md or AGENTS.md, and the ADRs that bear on the code touched.
 
@@ -55,7 +55,7 @@ The impact list, which grows as new kinds turn up:
 - a bug whose cause isn't shown (hunt 8)
 - dropping a behaviour the replaced code had (above)
 
-Each finding has an id, `F<n>`, run on from the highest id in the output file (in round 1, the plan review's), so one id names one finding for the whole change. The header's open count is every change finding not fixed, conceded or ruled on by the user: the PR gate reads that count and nothing else.
+Each finding has an id, `F<n>`, run on from the highest id in the output file (in round 1, the plan review's), so one id names one finding for the whole change. The header's open count is every change finding not fixed, conceded, turned down or ruled on by the user: the PR gate reads that count, and each finding's closing word.
 
 ## Output
 
@@ -66,7 +66,7 @@ The header's sha is HEAD as you start (`git rev-parse --short HEAD`, before you 
 ```
 # Change review: <branch> @ <short sha>, <plan | round n | recheck of round n>, <k> open change findings
 ## Previous findings          (after the plan)
-- F<n> [change|text] <finding, as first written> → fixed in <sha> | fixed in the survey | answered: <where> | open: <why> | reopened: <how> | conceded: <why> | held: <why> | ruled by the user: <ruling>
+- F<n> [change|text] <finding, as first written> → fixed in <sha> | fixed in the survey | fixed elsewhere: <where> | open: <why> | reopened: <how> | conceded: <why> | turned down: <reason> | held: <why> | ruled by the user: <ruling>
 ## Findings
 F<n>. [change|text] <hunt>: <claim> — <paths>
    Simpler: <shape> (~<n> files)
@@ -74,7 +74,7 @@ F<n>. [change|text] <hunt>: <claim> — <paths>
 - <each search you ran> → <what it found>
 ```
 
-A fix is `fixed in <sha>` only for a commit on the branch; a fix to the survey's text is `fixed in the survey`, and one anywhere else (an issue's body, a comment) is `answered: <where>`. The author copies these words into the PR's Review lines, and the PR gate accepts no others.
+A fix is `fixed in <sha>` only for a commit on the branch; a fix to the survey's text is `fixed in the survey`, and one anywhere else (an issue's body, a comment) is `fixed elsewhere: <where>`. The author copies these words into the PR's Review lines, and the PR gate accepts a closing other than `fixed in <sha>` or `fixed in the survey` only when your review gives that finding the same word.
 
 Done when everything your mode covers has been searched, and `Searched` lists each search. "No findings" stands only with that list.
 

@@ -87,7 +87,7 @@ const prototypeTurnDown = (branch, verb) =>
 // reason follows, in any form
 const lessonsMissing = (cwd, work) => {
   const file = stateFile(cwd, "lessons", work.key);
-  const how = `run the \`lessons\` skill (the \`change\` skill's step 6): its \`capture.mjs --source lessons\` writes each cost to ${file} with where it went (\`→ inbox <id>\`), or write \`None: <why>\` there when the work cost nothing`;
+  const how = `run the \`lessons\` skill (the \`change\` skill's Lessons step): its \`capture.mjs --source lessons\` writes each cost to ${file} with where it went (\`→ inbox <id>\`), or write \`None: <why>\` there when the work cost nothing`;
   if (!existsSync(file)) return `${work.branch}'s PR can't leave draft before its lessons: ${how}.`;
   const all = lines(readFileSync(file, "utf8"));
   const split = all.findIndex((line) => /^none:/i.test(line.trim()));
