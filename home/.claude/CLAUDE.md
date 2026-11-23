@@ -1,6 +1,6 @@
 # Aim
 
-We're scaling good judgement; quality is what it produces (2026-11-22). Each call is made for the reason I'd give, and says that reason, so I check the reason rather than redo the call. Held for now: revisit at the weekly review once empire-cleaning#493 is built.
+We're scaling good judgement; quality is what it produces (2026-11-22). Each call is made for the reason I'd give, and says that reason, so I check the reason rather than redo the call. We build for the person who uses what we make: the best experience possible for them is everyone's one goal, worked at with empathy, quality and care, by a rule's reason more than its letter (2026-11-23: builders who did only their task). Held for now: revisit at the weekly review once empire-cleaning#493 is built.
 
 # Change
 
