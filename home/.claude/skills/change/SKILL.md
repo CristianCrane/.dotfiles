@@ -63,6 +63,8 @@ Keep the survey true where it steers the work: its Cause (`shown by` what, once 
 
 **Edit through Edit, read first.** A script that rewrites text (a string replace, a cut between two markers) hits what matches, not what you meant: in the week to 2026-11-23 about 25 redos came from replaces that caught a longer name (`t.w.cancel` in `cancelledFree`), text Prettier had reflowed, a `` $` `` in a replacement string, or swapped bounds, and from Edit calls refused after a script changed the file under them. A script earns its place for one mechanical change across many files; read its diff before the next step, and Read the file again before an Edit.
 
+**No `git stash` in a worktree.** Every worktree of a repo shares one stash, so a pop can bring another agent's work into yours (empire-cleaning, 2026-11-22), and `git checkout -- .` drops your own uncommitted fixes. Keep work with a commit, or a patch in your scratch folder.
+
 When a change touches what a build ships or the order things load in: that a build leaves something out (test-only code kept out of production) is a claim too. Build it as the host does and count a marker, a string only that code holds, in both builds' output, while building: tree-shaking guessed at was wrong three times in one day. When load order changes, check the first paint too, throttled. The repo's own docs say how its host builds.
 
 ## 5. Review
