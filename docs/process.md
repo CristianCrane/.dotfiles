@@ -36,7 +36,7 @@ Each line of guidance holds four things, and a line missing one is a finding (D2
 
 Least machinery first (D11):
 
-1. **A rule line**, by default.
+1. **A line**, by default: a principle with its reason (principle 3). The log's kind of call `rule line` names it.
 2. **A hook**, when the same rule is broken twice despite its line.
 3. **A skill**, when 3 or more related rules or steps cluster on one kind of task.
 4. **An agent type**, only for a fresh view, limited tools, its own model or effort, or a role's stance that every brief would otherwise restate: the `builder`, after builders briefed with a change list answered real findings away (empire-cleaning #527, #536, #538, 2026-11-23).
