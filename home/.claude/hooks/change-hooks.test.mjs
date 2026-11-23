@@ -3,7 +3,7 @@
 // reviewer-gate), each fed to the hook as Claude Code runs it (`node
 // <hook>.mjs`, the tool call's JSON on stdin, with the input fields
 // MORE_INPUT adds, in a scratch repo), and below them plain tests of
-// scratch-gate at a subagent's start, reviewer-gate's other callers, the curator and the ux-reviewer, capture (the process layer's inbox), the
+// scratch-gate at a subagent's start, reviewer-gate's other callers, the curator and the ux-reviewer, capture (the process layer's inbox), user-words (the inbox's words for a ux-reviewer), the
 // survey gate on main (branch first where origin is on GitHub),
 // review-gate's merge rule, a dictated settings change, a prototype branch, lib's cwdFor and
 // substitutions, the
@@ -825,6 +825,40 @@ test("capture: one signal to the inbox, and nothing for a bad call", () => {
     assert.match(bad.stderr, /^capture: /);
   }
   assert.equal(readFileSync(inbox, "utf8").split("\n").filter(Boolean).length, 1);
+});
+
+// user-words.mjs gives a starting ux-reviewer the user's own words from
+// the inbox: this project's, of the last 14 days, correction, decision or
+// important, `said` alone, in a file its context names; other agents, other
+// projects, old signals and Claude's own fields stay out
+test("user-words: the user's recent words, said alone, for a ux-reviewer", () => {
+  const home = scratchDir();
+  const root = scratchDir();
+  const { repo } = scratchRepo();
+  const inbox = join(home, ".claude/process/inbox.jsonl");
+  mkdirSync(dirname(inbox), { recursive: true });
+  const now = new Date().toISOString();
+  const old = new Date(Date.now() - 20 * 86400000).toISOString();
+  const signal = (id, fields) => JSON.stringify({ id, at: now, session: "s", project: basename(repo), source: "capture", kind: "correction", said: `said ${id}`, proposed: "PROPOSED", note: "NOTE", ...fields });
+  writeFileSync(
+    inbox,
+    [
+      signal("a1", {}),
+      signal("a2", { kind: "decision", said: "two\nlines" }),
+      signal("b1", { project: "elsewhere" }),
+      signal("b2", { at: old }),
+      signal("b3", { kind: "cost" }),
+      signal("b4", { source: "lessons" }),
+      signal("b5", { said: "" }),
+      "not json",
+    ].join("\n") + "\n",
+  );
+  const run = (agent_type) => runHook("user-words", { hook_event_name: "SubagentStart", agent_id: AGENT, agent_type, scratchpad_dir: root, cwd: repo }, { env: { ...process.env, HOME: home } }).stdout;
+  assert.equal(run("change-reviewer"), "");
+  const said = JSON.parse(run("ux-reviewer")).hookSpecificOutput.additionalContext;
+  const file = join(root, "agents", AGENT, "user-words.txt");
+  assert.match(said, new RegExp(`2 signals, their own words only\\): ${file}\\.`));
+  assert.deepEqual(lines(readFileSync(file, "utf8")), [`a1 (${now.slice(0, 10)}, correction): said a1`, `a2 (${now.slice(0, 10)}, decision): two lines`]);
 });
 
 // from the lessons skill, capture also writes the cost's line to the

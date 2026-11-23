@@ -12,7 +12,7 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, isAbsolute, join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 
 export const git = (cwd, ...args) =>
@@ -21,6 +21,16 @@ export const git = (cwd, ...args) =>
     encoding: "utf8",
     stdio: ["ignore", "pipe", "ignore"],
   }).trim();
+
+// the project a signal is filed under: the checkout's folder, a
+// worktree's being its main checkout's; the cwd's name outside one
+export const projectOf = (cwd) => {
+  try {
+    return basename(dirname(git(cwd, "rev-parse", "--path-format=absolute", "--git-common-dir")));
+  } catch {
+    return basename(cwd);
+  }
+};
 
 export const lines = (text) => text.split("\n").filter(Boolean);
 
