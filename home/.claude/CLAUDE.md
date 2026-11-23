@@ -14,7 +14,7 @@ A cause is a claim until evidence shows it, and so is what you say about how cod
 
 - **No red tests.** Never leave a test failing, even one already failing on main: find why and fix it before calling the work done. While any open PR in the repo is red, start nothing new there: say which, why, and what unblocks it (`hooks/red-checks.mjs` names them at session start; 2026-10-27, 2026-11-07).
 - **Quality over quick fixes.** When fixes differ, recommend the one that fixes the cause for good (one rule over a second copy, a fix at its source over a workaround), giving the quick one only as the alternative; where the pick is yours, build that one (2026-11-09).
-- **A long wait** (CI with `gh pr checks --watch`, a build, a test run) runs with `run_in_background` and ends in its notification, never a check each turn (2026-11-10).
+- **A long wait** (CI with `gh pr checks --watch`, a build, a test run) runs with `run_in_background` and ends in its notification, never a check each turn (2026-11-10). In an agent, whose cache lasts 5 minutes, a wait past that goes in ~4-minute slices (a foreground `timeout 230 …`, again until done): a later turn re-writes its whole context (2026-11-23).
 - **My own repos (CristianCrane/*):** comment on their issues and PRs without asking. If auto mode blocks a routine `gh` write there (a comment, `gh issue create`), say it was blocked, save any body to a file, and give me the `! gh …` command to run or allow (until .dotfiles#32); others' repos still wait for my word.
 - **Anything sent as me** is casual, like texting family: short sentences, no office speak, no formal sign-offs (2026-10-31).
 
