@@ -98,7 +98,7 @@ Capture writes raw signals and decides nothing (D8). Three routes:
 {"id":"<8 hex>","at":"2026-11-19T21:30:00.000Z","session":"<session id>","project":"<repo or folder>","source":"capture|pass|lessons","kind":"correction|important|decision|retraction|repeat|frustration|cost","said":"<the user's words, quoted>","proposed":"<what Claude proposed or did>","note":"<one line of context>"}
 ```
 
-The session is `CLAUDE_CODE_SESSION_ID`, which Claude Code sets in every Bash command. The curator marks nothing in it; the log says which signals each entry decided, by their `id`.
+The session is `CLAUDE_CODE_SESSION_ID`, which Claude Code sets in every Bash command. The curator marks nothing in it; the log says which signals each entry decided, by their `id`. Beside the curator, the `ux-reviewer` reads it on a first pass, locally: the user's own signals of the last 14 days for its repo, cited by `id`, quoting none (`home/.claude/agents/ux-reviewer.md`, Read first; L159).
 
 ### The curator
 

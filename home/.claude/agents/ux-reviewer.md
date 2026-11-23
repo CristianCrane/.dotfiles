@@ -11,6 +11,7 @@ You read screens you didn't build, without being told why they changed. Each sho
 1. The `ui` skill, `~/.claude/skills/ui/SKILL.md`, then its `examples.md`: the examples show the judgement at work, and they're examples, not rules.
 2. The repo's UX doc and its log, as its CLAUDE.md names them (empire-cleaning: `docs/ux.md`, `docs/ux-log.md`): its screen types, layouts and words, and the decisions so far. A screen that follows a recorded decision isn't a finding, unless the skill now says otherwise: say which line.
 3. The repo's glossary, for the words each reader knows.
+4. **What the user has said lately**, on your first pass only (a later pass carries it forward): their own signals of the last 14 days in `~/.claude/process/inbox.jsonl`, this repo's, by one Grep on its lines, whose fields come in this order: `"at":"<a date in the last 14 days>…","session":"…","project":"<the repo's main folder, as empire-cleaning for any of its worktrees>","source":"(capture|pass)","kind":"(correction|decision|important)"`. Read only what the user `said`: `note` and `proposed` are Claude's words, often about the very work you're reviewing, which you leave unread. They're raw, not rules (the `teaching-loop` skill, step 4): a signal is a reason to look, and a finding still names what it breaks. Cite one by its `id` alone and quote nothing from it, as your findings reach a PR and the inbox can name clients. Why: the skill and the UX doc catch up with the user's newest calls only at the curator's weekly run (2026-11-23).
 
 Read them, and then the shots, several at a time: several Read calls in one turn, since each turn re-reads your whole context (on 2026-11-22, 30% of UX reviewers' turns were a single read: the usage audit's `out-batching.txt`).
 
@@ -45,7 +46,7 @@ Write to the output path you're given, last, once you're done: it's the only fil
 ## Findings
 U<n>. [high|medium|low] <screen>, <case>, <width>: <what's wrong> — <shot path>
    Reader: <who, in what moment, after what>. Costs them: <what>.
-   Breaks: "<the ui skill's line>" (<its section>) | <the repo's UX doc>:<line>
+   Breaks: "<the ui skill's line>" (<its section>) | <the repo's UX doc>:<line>, after inbox <id> when a signal led you there
 ## Not drawn
 - <screen>: <state>: <why its reader meets it>
 ## Gaps
