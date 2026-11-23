@@ -30,8 +30,8 @@
 import { randomBytes } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, dirname, join } from "node:path";
-import { flagsOf, git, stateFile, workOf } from "./lib.mjs";
+import { dirname, join } from "node:path";
+import { flagsOf, projectOf, stateFile, workOf } from "./lib.mjs";
 
 const KINDS = ["correction", "important", "decision", "retraction", "repeat", "frustration", "cost"];
 const SOURCES = ["capture", "lessons"];
@@ -79,23 +79,13 @@ if (wrong.length) {
   process.exit(1);
 }
 
-// the checkout's folder, a worktree's being its main checkout's; the cwd's
-// name outside one
-const project = () => {
-  try {
-    return basename(dirname(git(process.cwd(), "rev-parse", "--path-format=absolute", "--git-common-dir")));
-  } catch {
-    return basename(process.cwd());
-  }
-};
-
 const inbox = join(homedir(), ".claude/process/inbox.jsonl");
 mkdirSync(dirname(inbox), { recursive: true });
 const signal = {
   id: randomBytes(4).toString("hex"),
   at: new Date().toISOString(),
   session: process.env.CLAUDE_CODE_SESSION_ID ?? "",
-  project: project(),
+  project: projectOf(process.cwd()),
   source: values.source,
   kind: values.kind,
   ...text,

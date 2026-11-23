@@ -36,10 +36,10 @@ Each line of guidance holds four things, and a line missing one is a finding (D2
 
 Least machinery first (D11):
 
-1. **A rule line**, by default.
+1. **A line**, by default: a principle with its reason (principle 3). The log's kind of call `rule line` names it.
 2. **A hook**, when the same rule is broken twice despite its line.
 3. **A skill**, when 3 or more related rules or steps cluster on one kind of task.
-4. **An agent type**, only for a fresh view, limited tools, or its own model or effort.
+4. **An agent type**, only for a fresh view, limited tools, its own model or effort, or a role's stance that every brief would otherwise restate: the `builder`, after builders briefed with a change list answered real findings away (empire-cleaning #527, #536, #538, 2026-11-23).
 5. **Removal**, when a line is stale or was never needed.
 
 A **snag** (a refused command, a gate that misreads, a missing tool) is no rule at all: it's fixed at its source (the config, the hook, the package), never written down as a workaround. A workaround line that must stay meanwhile names the issue that holds the fix ("until <issue>") and goes when it lands; one whose source isn't ours says so. Before calling a snag in how Claude Code behaves not ours, check what hooks can see and do (code.claude.com/docs/en/hooks.md: `agent_id`, `agent_type`, `updatedInput`, SubagentStart's context): a gate on them fixes it at the source. A miss the review should have caught is a line for the change reviewer (`home/.claude/agents/change-reviewer.md`).
@@ -53,7 +53,7 @@ The user's verdicts tune these thresholds; a new threshold is a policy change.
 | the global CLAUDE.md | 1,200 tokens |
 | each repo's CLAUDE.md | 1,000 tokens |
 | each memory index (`MEMORY.md`) | 400 tokens |
-| the main-session message | 600 tokens |
+| the main-session message | 1,000 tokens |
 
 Over budget is an item on the weekly list: trim, move, or raise. Raising a budget is a policy change (D22). Until step 2's size measure, a file's tokens are estimated as its characters over 4, and the list says so.
 
@@ -67,7 +67,7 @@ Each is a reason the user gave when they overrode a call, written here once they
 
 1. **Scope comes from what a rule is about, not from where it has come up so far.** A rule first met in one repo is global when it is about something every repo meets. On 2026-11-19 the context audit moved the vendor-guide check (a third-party setup plan is checked against the vendor's own guide) and the mergeable check into empire-cleaning's CLAUDE.md (f4e8764b), because they had come up there; the user moved them back the same day (2f6d152a): the vendor-guide check is about any third-party service, so global, and the mergeable check is about a dotfiles hook (`pr-conflict.mjs`).
 2. **Background upkeep scales with activity, not with how many things exist.** A recurring sweep (of tests, or of guidance lines) picks its work by what changed since it last looked, under one budget that doesn't grow with the count, so a repo nobody touches costs nothing. On 2026-11-20 a weekly test sweep was proposed that rotated through a repo's whole suite; the user asked how it would hold a year on, ten projects later, and chose about 2 slices a week in all, picked by recent change across repos (the `test-sweep` skill).
-3. **A line states its rule as a strong default with its reason, not as an absolute.** A case can come up where a rule bends or breaks, and its reason is what lets an agent tell that case apart: an absolute with no reason breaks silently, or is obeyed where it shouldn't be. An absolute stays only where breaking it does real harm, with that harm beside it. The user's caution on the 2026-11-21 UX batch; the screen audit the same day bent three of the ui skill's firm lines. Older lines get the same treatment when each is next touched, with no sweep through them all (principle 2).
+3. **A line is a guiding principle with its reason, written so the reader thinks it through, not a rule to obey.** A rule stifles the judgement this layer exists to grow, and a case can come up where it bends or breaks: its reason is what lets an agent tell that case apart, while an absolute with no reason breaks silently, or is obeyed where it shouldn't be. A hard rule is the last resort, kept for what has no grey area (the inbox is never committed, browsers run headless), with its harm beside it. The user's caution on the 2026-11-21 UX batch, when the screen audit the same day bent three of the ui skill's firm lines, and their words on 2026-11-23: "I honestly hate rules. They stifle critical thinking. I want to encourage guiding principles" (L165). Older lines get the same treatment when each is next touched, with no sweep through them all (principle 2).
 
 ## Design
 
@@ -98,7 +98,7 @@ Capture writes raw signals and decides nothing (D8). Three routes:
 {"id":"<8 hex>","at":"2026-11-19T21:30:00.000Z","session":"<session id>","project":"<repo or folder>","source":"capture|pass|lessons","kind":"correction|important|decision|retraction|repeat|frustration|cost","said":"<the user's words, quoted>","proposed":"<what Claude proposed or did>","note":"<one line of context>"}
 ```
 
-The session is `CLAUDE_CODE_SESSION_ID`, which Claude Code sets in every Bash command. The curator marks nothing in it; the log says which signals each entry decided, by their `id`.
+The session is `CLAUDE_CODE_SESSION_ID`, which Claude Code sets in every Bash command. The curator marks nothing in it; the log says which signals each entry decided, by their `id`. Beside the curator, the `ux-reviewer` reads the user's own words from it, those of the last 14 days for its repo, which `hooks/user-words.mjs` gives it at its start, locally, citing each by `id` and quoting none (L159).
 
 ### The curator
 
