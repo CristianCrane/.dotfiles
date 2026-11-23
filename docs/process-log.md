@@ -9,11 +9,11 @@ An entry, under its run's heading (`### <date>: weekly | fast path | history | a
 ```
 - L<n> <verdict> · <kind of call> · <reach> · recommended <yes|no>
   <the proposal, in a line> · signals <the inbox `id`s it decided> · caught by <the rule that should have, or "no rule"> · repeat of <L<m>, or "—">
-  <the user's words, when they said more than yes or no> · landed in <repo>@<sha>, or "—"
+  <the user's words, when they said more than yes or no>
 ```
 
 - **verdict:** yes, no, or edit (the user's own words follow).
-- **kind of call:** the form and the place, as the policy names them: `rule line → global CLAUDE.md`, `hook → dotfiles`, `remove → repo CLAUDE.md`, `place → memory`.
+- **kind of call:** the form and the place, written as process.md's Form and Place name them: `rule line → global CLAUDE.md`, `hook → dotfiles`, `remove → repo CLAUDE.md`, `place → memory`.
 - **reach:** `global` (the global CLAUDE.md, this policy, a hook that gates every session: never automatic), or `repo`, `skill`, `memory` (D19b).
 - **matched:** the verdict equals the recommendation. Graduation counts matching verdicts in a row per kind of call and reach (D19d).
 

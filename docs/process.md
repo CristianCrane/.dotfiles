@@ -102,7 +102,7 @@ The session is `CLAUDE_CODE_SESSION_ID`, which Claude Code sets in every Bash co
 
 ### The curator
 
-The `curator` agent type (D9): a fresh view, never the session that made the mistake; it reads the guidance (below) and runs at high effort. It writes only its output, under `~/.claude/process/curator/`: the proposals, and once the verdicts are in, the log's entries. `hooks/reviewer-gate.mjs` holds it there, and to commands that read, as it holds the change reviewer. It never edits guidance or the log: an approved change is applied by an ordinary agent through the `change` skill, which commits the curator's log entries as the batch's first commit. For each signal it decides, with the inbox, this policy and every guidance file in view (D8): the global files and the guidance of the repos its signals come from read whole, every other repo's searched for each lesson's words (principle 2):
+The `curator` agent type (D9): a fresh view, never the session that made the mistake; it reads the guidance (below) and runs at high effort. It writes only its output, under `~/.claude/process/curator/`: the proposals, and once the verdicts are in, the log's entries. `hooks/reviewer-gate.mjs` holds it there, and to commands that read, as it holds the change reviewer. It never edits guidance or the log: an approved change is applied by an ordinary agent through the `change` skill, which commits the run's log entries as the batch's first commit. For each signal it decides, with the inbox, this policy and every guidance file in view (D8): the global files and the guidance of the repos its signals come from read whole, every other repo's searched for each lesson's words (principle 2):
 
 - whether it teaches anything, and which signals are the same lesson (a **repeat**);
 - the rule that should have caught it, or "no rule" (D23);
@@ -120,7 +120,7 @@ A signal teaches a **lesson** only when all four hold:
 
 ### Verdicts
 
-- **The fast path** (D10, D17): a lesson the user explicitly agrees to make a rule is applied then. The curator shows its place in one line ("→ global CLAUDE.md, Evidence") for the user's OK, and the change lands as a batch of one.
+- **The fast path** (D10, D17): a lesson the user explicitly agrees to make a rule is applied then. Whoever put it to the user, the curator or the main session, shows its place in one line ("→ global CLAUDE.md, Evidence") for their OK, and the change lands as a batch of one; the batch's agent writes its log entries, and the batch's change reviewer is its fresh view (One gate for every route).
 - **The weekly list** (D18): everything else waits for the weekly review, one review with cost and PR quality (D6; [token-review.md](token-review.md) folds in at step 3). The list is short and numbered; each item says what was seen (a short quote), the proposal, a recommendation, and the rule that should have caught it or "no rule". The user answers in one line ("1 yes, 2 no: …, 3 edit: …"). A section "done without asking" lists the automatic changes (D19c).
 
 ### Landing
