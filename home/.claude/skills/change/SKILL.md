@@ -120,7 +120,7 @@ A PR body says what a reader needs to check the change, and nothing else, writte
 - UX review: U<n> <finding> → fixed in <sha> | the UX review's own word on it: conceded: <why> | turned down: <reason> | ruled by the user: <ruling>
 - Critical review: C<n> <finding> → fixed in <sha> | the critical review's own word on it: fixed in the survey | conceded: <why> | turned down: <reason> | ruled by the user: <ruling>
 - Seen nearby: <problem> → fixed in <sha>
-- Rework: <n> rounds after round 1, <n> UX passes after the first; late catches: <each: what, who caught it, the step that let it in> | none
+- Rework: <n> rounds after round 1, <n> rechecks, <n> UX passes after the first; late catches: <each by its id (F3, C2), or what and who caught it where it has none, then the step that let it in> | none
 - Harder to change: <what, or nothing>
 
 </details>
@@ -132,7 +132,7 @@ A PR body says what a reader needs to check the change, and nothing else, writte
 - **Check these**: 3 to 5 links to the lines that matter most, each a permalink at HEAD's full sha as the body is written, with a few words on why.
 - **Before / after**: only for a change a person sees, and then always: screenshots of each screen it changes, before and after side by side, made as the repo's CLAUDE.md says.
 - **Tests**: only for a change to the server or other code a person doesn't see: permalinks to the most relevant tests, at HEAD's full sha too, saying which one was red on the old code.
-- **Change**, collapsed: the blank line after `</summary>` lets GitHub draw the heading. One line per pattern, per review finding and per `Seen nearby:` item. `Rework:` counts what the change took twice: its rounds after round 1 (only change-finding fixes count, as Review says, not rechecks or CI fixes), its UX passes after the first, and each late catch as the `lessons` skill defines it; a fix of merged work counts its own bug as one, naming the PR it came in with. The weekly review reads it there, as the review files go with the worktree (the dotfiles' `docs/token-review.md`). When the PR has refactor commits, Change names what they retired and says how behaviour was shown unchanged.
+- **Change**, collapsed: the blank line after `</summary>` lets GitHub draw the heading. One line per pattern, per review finding and per `Seen nearby:` item. `Rework:` counts what the change took twice: its rounds after round 1 (only change-finding fixes count, as Review says), its rechecks, its UX passes after the first, and each late catch as the `lessons` skill defines it. The weekly review reads it there, as the review files go with the worktree (the dotfiles' `docs/token-review.md`). When the PR has refactor commits, Change names what they retired and says how behaviour was shown unchanged.
 
 No other headings or labels (a line led by bold is a label): no summary of runs, no list of commits. The gate turns the PR down until the body has Problem and Fix with their sentences, Check these with 3 to 5 permalinks, every permalink at a commit on the branch, and Change in its closed `<details>`, with no other heading or label, and until Change closes every finding of the last review by id, as fixed or in the review's own word on it (`answered:` closes nothing). A body with Before / after also waits for a UX review whose last pass, of a commit on the branch, leaves no finding open, its findings closed the same way, and `gh pr ready` waits for it again.
 
