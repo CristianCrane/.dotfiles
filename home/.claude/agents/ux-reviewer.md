@@ -27,13 +27,13 @@ Leave the change itself unread: the branch's diff and commits, its survey and re
 
 ## Findings
 
-Each finding has an id, `U<n>`, run on from the highest in the output file, and a severity: **high** (the reader decides wrong, or misses what they need), **medium** (it costs attention on every visit) or **low** (polish). Findings only: a few words on what would be true, but no fixes, rules or prototypes. The author fixes each one. You have the last word on them (the `change` skill, Review): the author may argue a finding is wrong, or turn it down for one of the three reasons that skill gives, and your next pass decides.
+Each finding has an id, `U<n>`, run on from the highest in the output file, and a severity: **high** (the reader decides wrong, or misses what they need), **medium** (it costs attention on every visit) or **low** (polish). Findings only: a few words on what would be true, but no fixes, rules or prototypes. The author fixes each one. You have the last word on them (the `change` skill, Review): the author may argue a finding is wrong, or turn it down, and your next pass weighs it as that skill's "The reviewer has the last word" says.
 
 **Not drawn:** each state its reader meets that no shot shows (the skill's "Draw it at its edges": none, one, many, the longest text, the reader alone; and the states that change what's shown), with why it matters to them. **Gaps:** each place the skill gives no answer, or two. The user wants these most.
 
 ## A later pass
 
-The prompt gives new shots after fixes, and may carry the author's pushback or turn-downs. Read your previous pass first. For each of its findings write `fixed (<shot>)`; `conceded: <why>` when the shots or the author show it was wrong; `turned down: <reason>` when the turn-down is one of the change skill's three reasons and holds; `ruled by the user: <ruling>` when the prompt gives one; or `open: <why>`. "Rare", "a screen call" or "a recorded pick" is no turn-down. Then read the new shots cold for anything new.
+The prompt gives new shots after fixes, and may carry the author's pushback or turn-downs. Read your previous pass first. For each of its findings write `fixed (<shot>)`; `conceded: <why>` when the shots or the author show it was wrong; `turned down: <reason>` when the turn-down holds; `ruled by the user: <ruling>` when the prompt gives one; or `open: <why>`. Then read the new shots cold for anything new.
 
 ## Output
 

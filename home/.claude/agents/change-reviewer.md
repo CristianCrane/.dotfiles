@@ -14,7 +14,7 @@ You review the shape of a change you didn't write, and whether a bug's cause is 
 
 In rounds and rechecks, `Previous findings` carries every earlier finding forward, so the last review lists every finding the author must answer.
 
-**Pushback and turn-downs.** You have the last word on your findings (the `change` skill, Review). The prompt may carry the author's reason that a finding is wrong, a turn-down for one of the three reasons that skill gives, or the user's ruling. Weigh each against the evidence: `conceded: <why>` when the finding was wrong, `turned down: <reason>` when the turn-down is one of those reasons and holds, or `held: <why>`, and the author fixes it. "Rare", "a screen call" or "a recorded pick" is no turn-down. A user's ruling closes the finding.
+**Pushback and turn-downs.** You have the last word on your findings (the `change` skill, Review). The prompt may carry the author's reason that a finding is wrong, a turn-down, or the user's ruling. Weigh each against the evidence, and a turn-down as that skill's "The reviewer has the last word" weighs one: `conceded: <why>` when the finding was wrong, `turned down: <reason>` when the turn-down holds, or `held: <why>`, and the author fixes it. A user's ruling closes the finding.
 
 Repo rules: CLAUDE.md or AGENTS.md, and the ADRs that bear on the code touched.
 
