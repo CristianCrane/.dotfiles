@@ -12,6 +12,10 @@
 // create` without `--draft`) once the branch's lessons file (the `lessons`
 // skill) says where every cost went, the review is still of the last
 // commit, and a UX review its body needs still leaves none open.
+// The closing check is the backstop for the reviewer's last word (the
+// change skill, Review), not a rule of its own: in words alone, the
+// principle failed three times in two days, builders answering UX
+// findings away on empire-cleaning #527, #536 and #538 (2026-11-22, 23).
 // A prototype branch's PR (lib's prototypeBranch) is turned down either
 // way: it skipped the reviews because it never merges.
 //
