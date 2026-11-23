@@ -62,6 +62,9 @@ The user's verdict, 2026-11-23 (inbox b3092286): "I think yes, we need a builder
 - L164 yes · rule line → global CLAUDE.md · global · recommended yes
   Aim gains the goal and the culture every agent works in: the best experience possible for the person who uses what we make is everyone's one goal, carried with empathy, quality and care, by a rule's reason rather than its letter. In the Aim, which every agent and the main session read first, so builder.md, the reviewers and main-session.md don't restate it · signals 6f623e5a, e481a216 · caught by no rule · repeat of —
   The user: "Everyone working on this project should have one goal in mind: how can we provide the best user experience possible", and "building a shared culture of empathy, quality, and care". Global though said of one project (principle 1): it's about anything a person uses · landed in —
+- L165 yes · rule line → process.md · global · recommended yes
+  Curation principle 3 becomes: a line is a guiding principle with its reason, written so the reader thinks it through, not a rule to obey; a hard rule is the last resort, for what has no grey area, with its harm beside it. It builds on principle 3's "strong default with its reason" rather than adding a second copy; the rest of it (older lines treated when next touched, no sweep) stays · signals d1548ec1, c310661e · caught by no rule · repeat of —
+  The user: "I honestly hate rules. They stifle critical thinking. I want to encourage guiding principles. Rules should be a last resort or for very obvious clear cut things where there's no grey area" (d1548ec1); to the wording put to them, "Yep, agreed." (c310661e). Added after the batch's first commit, so review-gate's batch merge, which reads approvals from that commit, won't take this PR: the user merges it · landed in —
 
 ### 2026-11-23: fast path, tokens
 
