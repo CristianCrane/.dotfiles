@@ -53,7 +53,7 @@ The user's verdicts tune these thresholds; a new threshold is a policy change.
 | the global CLAUDE.md | 1,200 tokens |
 | each repo's CLAUDE.md | 1,000 tokens |
 | each memory index (`MEMORY.md`) | 400 tokens |
-| the main-session message | 600 tokens |
+| the main-session message | 1,000 tokens |
 
 Over budget is an item on the weekly list: trim, move, or raise. Raising a budget is a policy change (D22). Until step 2's size measure, a file's tokens are estimated as its characters over 4, and the list says so.
 
