@@ -53,7 +53,7 @@ Post the survey in chat, then go on, unless it has Big work to ask about, or dep
 
 ## 3. Design review
 
-A change a person sees is reviewed as a design before its code, sized as the `ui` skill's Settling a screen says (a new flow, a change to how one behaves, a wording change), once the plan review is in and before the screen's code is written. Run the `ux-reviewer` on the design as on after-shots, its output `ux-review-design-…` beside the survey (a prototype's lives on its own branch), so the after-shots' review in Review starts a file of its own. Fix its findings on the design, with a later pass, as Review's "The reviewer has the last word" says; a new flow then goes to the user with its versions, and Build starts from their pick. A change no person sees skips this step.
+A change a person sees is reviewed as a design before its code, sized as the `ui` skill's Settling a screen says (a new flow or look, a change to how a flow behaves, a wording change), once the plan review is in and before the screen's code is written. Run the `ux-reviewer` on the design as on after-shots, its output `ux-review-design-…` beside the survey (a prototype's lives on its own branch), so the after-shots' review in Review starts a file of its own. Fix its findings on the design, with a later pass, as Review's "The reviewer has the last word" says; a new flow or look then goes to the user with its versions, and Build starts from their pick. A change no person sees skips this step.
 
 ## 4. Build
 

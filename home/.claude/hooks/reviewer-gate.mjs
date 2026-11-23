@@ -312,8 +312,9 @@ const HELD = {
     writes: "its review: the output path you were given, a plan-review or review file beside the survey in the git dir",
   },
   curator: { owns: ownOutput, writes: `its output: the path you were given, under ${CURATOR}` },
-  // a UX review of after-shots (agents/ux-reviewer.md), for a change or
-  // a prototype, which has no survey, so none is asked for beside it
+  // a UX review (agents/ux-reviewer.md): of a change's design or
+  // after-shots, or of a prototype, which has no survey, so none is asked
+  // for beside it
   "ux-reviewer": {
     owns: (path) => {
       try {
