@@ -61,6 +61,8 @@ A change that writes or edits a test, or changes how tests run, loads the `testi
 
 Keep the survey true where it steers the work: its Cause (`shown by` what, once a `to show:` is shown), its patterns and their copies, and Expected files when the plan grows (a hook compares the branch's size with it every 25 files). Its `Commits:` list is the first plan and stays as written: from round 1 the branch's own `git log` is the record, and the PR's Change is written from that and the reviews, so a commit list or file count behind the branch is no finding. On empire-cleaning PR 14 (2026-11-23) ten of 41 findings were the survey and docs gone stale after later commits, each a fix and a recheck.
 
+**Edit through Edit, read first.** A script that rewrites text (a string replace, a cut between two markers) hits what matches, not what you meant: in the week to 2026-11-23 about 25 redos came from replaces that caught a longer name (`t.w.cancel` in `cancelledFree`), text Prettier had reflowed, a `` $` `` in a replacement string, or swapped bounds, and from Edit calls refused after a script changed the file under them. A script earns its place for one mechanical change across many files; read its diff before the next step, and Read the file again before an Edit.
+
 When a change touches what a build ships or the order things load in: that a build leaves something out (test-only code kept out of production) is a claim too. Build it as the host does and count a marker, a string only that code holds, in both builds' output, while building: tree-shaking guessed at was wrong three times in one day. When load order changes, check the first paint too, throttled. The repo's own docs say how its host builds.
 
 ## 5. Review
