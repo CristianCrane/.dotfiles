@@ -51,7 +51,11 @@ Run the `change-reviewer` agent in **plan** mode, with the survey's path and the
 
 Post the survey in chat, then go on, unless it has Big work to ask about, or departs from what the user picked (a prototype, an option they chose): put each departure to them then, not at the PR (empire-cleaning #435: three waited from the plan review to the PR, and held it there).
 
-## 3. Build
+## 3. Design review
+
+A change a person sees is reviewed as a design before its code, sized as the `ui` skill's Settling a screen says (a new flow, a change to how one behaves, a wording change), once the plan review is in and before the screen's code is written. Run the `ux-reviewer` on the design as on after-shots, its output `ux-review-design-…` beside the survey (a prototype's lives on its own branch), so the after-shots' review in Review starts a file of its own. Fix its findings on the design, with a later pass, as Review's "The reviewer has the last word" says; a new flow then goes to the user with its versions, and Build starts from their pick. A change no person sees skips this step.
+
+## 4. Build
 
 A change that writes or edits a test, or changes how tests run, loads the `testing` skill first; one that changes a screen, or words a person reads, the `ui` skill.
 
@@ -59,7 +63,7 @@ Keep the survey true: when the plan or the file count changes, update it, and wh
 
 When a change touches what a build ships or the order things load in: that a build leaves something out (test-only code kept out of production) is a claim too. Build it as the host does and count a marker, a string only that code holds, in both builds' output, while building: tree-shaking guessed at was wrong three times in one day. When load order changes, check the first paint too, throttled. The repo's own docs say how its host builds.
 
-## 4. Review
+## 5. Review
 
 Once the change is committed, before opening the PR (`gh pr create` is turned down until the review is of the last commit, or of one before it with only comment lines changed since, and, before round 5 (until .dotfiles#45), has no open change findings), run the `change-reviewer` agent: **round 1**, with the branch, the repo root, which commits are refactors (the survey's `Commits:`), the survey's and plan review's paths, and the review's path (`review-…` beside the survey).
 
@@ -76,7 +80,7 @@ A round is the reviewer and you arguing about shape, and about a bug's evidence.
 - **Done** when the last review leaves no change finding open, every text finding is closed, and the full suite has passed, and, for a change a person sees, the last UX pass leaves no finding open.
 - **When rounds stop.** Rounds, and UX passes, go on while each finds something real: a defect a user, a reader or the next builder would hit. They stop when a round finds nothing real, only preferences that change nothing true. A loop is what reaches the user: a fix undone by the next round, the same point back in new words, or two findings that can't both be met. Put that to them, with its paths. A long run isn't a reason to stop, but the report says how many rounds it took and what the last ones found, so its cost is seen.
 
-## 5. PR body
+## 6. PR body
 
 A PR body says what a reader needs to check the change, and nothing else. Write it to `pr-body-…` beside the review (the gate names it) and open the PR with `gh pr create --body-file <that path>`. This shape replaces any other PR template, such as `mattpocock-skills:pr`'s. In this order:
 
@@ -117,7 +121,7 @@ A PR body says what a reader needs to check the change, and nothing else. Write 
 
 No other headings or labels (a line led by bold is a label): no summary of runs, no list of commits. The gate turns the PR down until the body has Problem and Fix with their sentences, Check these with 3 to 5 permalinks, every permalink at a commit on the branch, and Change in its closed `<details>`, with no other heading or label, and until Change closes every finding of the last review by id, as fixed or in the review's own word on it (`answered:` closes nothing). A body with Before / after also waits for a UX review whose last pass, of a commit on the branch, leaves no finding open, its findings closed the same way, and `gh pr ready` waits for it again.
 
-## 6. Lessons
+## 7. Lessons
 
 Once the full suite has passed, run the `lessons` skill: before the PR leaves draft (`gh pr ready`, or `gh pr create` without `--draft`). It writes what the work cost to the process layer's inbox and commits nothing: the curator places every lesson (the dotfiles' `docs/process.md`). The gate holds a PR in draft until its lessons file says where every cost went and the review is of the last commit.
 

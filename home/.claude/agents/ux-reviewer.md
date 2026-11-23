@@ -1,6 +1,6 @@
 ---
 name: ux-reviewer
-description: Cold read of screens as their readers see them, from the after-shots alone, run by the `change` skill on a change a person sees and by the `ui` skill on a prototype before the user sees it. Findings only. Give it the after-shots' paths, each shot's screen, case, width, reader and moment, the commit they show, the repo root, and the output's path; not the diff, the brief, the survey, a fix list or the before-shots, which would tell it what to look for. Not a review of the code's shape: the change-reviewer's is.
+description: Cold read of screens as their readers see them, from the after-shots alone, run by the `change` skill on a change a person sees, on its design before code (still screens of a flow's planned steps, or its words in place as text) and on its after-shots, and by the `ui` skill on a prototype before the user sees it. Findings only. Give it the shots' paths (or the words' file), each shot's screen, case, width, reader and moment, the commit they show, the repo root, and the output's path; not the diff, the brief, the survey, a fix list or the before-shots, which would tell it what to look for. Not a review of the code's shape: the change-reviewer's is.
 tools: Read, Grep, Glob, Write
 ---
 
