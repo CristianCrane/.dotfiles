@@ -1,8 +1,8 @@
 // `gh pr create` waits for the branch's change review (the `change` skill):
 // it is turned down until the review exists (a dictated change that holds
 // has none: lib's dictatedHolds), is of the last commit (or
-// of one before it with only comment lines changed since) and, before
-// round 5, leaves no change finding open, and until the PR body, read
+// of one before it with only comment lines changed since) and leaves no
+// change finding open, and until the PR body, read
 // from its file, is in the skill's shape (its parts, Check these's
 // permalinks, Change collapsed, nothing else) and closes every finding of
 // that review in its Change section, as fixed or in the review's own word
@@ -403,7 +403,8 @@ const batchUnapproved = (cwd, input) => {
   const work = workOf(cwd, input);
   const found = review(cwd, work, input);
   if (!found.ok) return `its review isn't ready (${found.reason})`;
-  if (found.open !== 0) return found.open ? `its review leaves ${found.open} change finding(s) open` : "it has no review of its own";
+  // a dictated change passes review() with no review file
+  if (!existsSync(found.path)) return "it has no review of its own";
   const commits = lines(git(cwd, "rev-list", "--reverse", "--no-merges", `${base(cwd)}..HEAD`));
   if (!commits.length) return "it has no commits";
   const [first, ...changes] = commits;

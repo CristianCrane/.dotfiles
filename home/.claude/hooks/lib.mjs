@@ -604,15 +604,10 @@ const commentOnly = (cwd, sha) => {
   }
 };
 
-// the round from which the gate lets open change findings through: a cap
-// the `change` skill no longer has (its rounds stop on what they find),
-// kept until .dotfiles#45
-const LAST_ROUND = 5;
-
 // the reviewer's read of the diff: it must be of the last commit (written
 // after it isn't enough: a round runs while fixes may land), or of one
-// before it with only comment lines changed since; and before round 5
-// it must leave no change finding open (LAST_ROUND, until .dotfiles#45). The
+// before it with only comment lines changed since; and it must leave no
+// change finding open, in any round (.dotfiles#45). The
 // reviewer's header line says all three: "… @ <sha>, round <n>, <k> open
 // change findings", where a recheck says "recheck of round <n>", keeping
 // the number. A dictated change that holds (dictatedHolds) has no review,
@@ -639,16 +634,16 @@ export const review = (cwd, work, input = {}) => {
   if (!headSha(cwd).startsWith(sha) && !commentOnly(cwd, sha))
     return { path, ok: false, reason: `it reviewed ${sha}, and the commits since change more than comment lines` };
   const [round, open] = counts.map(Number);
-  if (open && round < LAST_ROUND)
+  if (open)
     return {
       path,
       ok: false,
-      reason: `round ${round} left ${open} change finding(s) open: fix them and run round ${round + 1}, but take a reopened finding, or one the reviewer holds against your pushback, to the user`,
+      reason: `round ${round} left ${open} change finding(s) open: fix them and run round ${round + 1}; only a loop goes to the user: a fix the next round undoes, the same point back, or two findings that can't both be met`,
     };
   // the review (each replaces the last) lists every finding of the change,
   // each with the reviewer's word on it
   const ids = [...new Set([...text.matchAll(/^(?:- )?(F\d+)\b/gm)].map((id) => id[1]))];
-  return { path, ok: true, ids, open, text };
+  return { path, ok: true, ids, text };
 };
 
 // whether `sha` names a commit the branch adds to its base
