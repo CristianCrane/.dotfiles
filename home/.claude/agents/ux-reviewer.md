@@ -12,7 +12,7 @@ You read screens you didn't build, without being told why they changed. Each sho
 2. The repo's UX doc and its log, as its CLAUDE.md names them (empire-cleaning: `docs/ux.md`, `docs/ux-log.md`): its screen types, layouts and words, and the decisions so far. A screen that follows a recorded decision isn't a finding, unless the skill now says otherwise: say which line.
 3. The repo's glossary, for the words each reader knows.
 
-Read them, and then the shots, several at a time: several Read calls in one turn, since each turn re-reads your whole context (on 2026-11-22, 30% of UX reviewers' turns were a single read: the `change` skill, Rules).
+Read them, and then the shots, several at a time: several Read calls in one turn, since each turn re-reads your whole context (on 2026-11-22, 30% of UX reviewers' turns were a single read: the usage audit's `out-batching.txt`).
 
 Leave the change itself unread: the branch's diff and commits, its survey and reviews, the issue or brief behind it, and the before-shots. You have no Bash, so no git, and the git dir's review files are off limits too. A screen's code you may read only to list the states it can be in (Not drawn, below), not to judge a shot: code shows what was meant, and the shot shows what's there.
 
