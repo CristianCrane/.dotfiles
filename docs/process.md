@@ -39,7 +39,7 @@ Least machinery first (D11):
 1. **A rule line**, by default.
 2. **A hook**, when the same rule is broken twice despite its line.
 3. **A skill**, when 3 or more related rules or steps cluster on one kind of task.
-4. **An agent type**, only for a fresh view, limited tools, or its own model or effort.
+4. **An agent type**, only for a fresh view, limited tools, its own model or effort, or a role's stance that every brief would otherwise restate: the `builder`, after builders briefed with a change list answered real findings away (empire-cleaning #527, #536, #538, 2026-11-23).
 5. **Removal**, when a line is stale or was never needed.
 
 A **snag** (a refused command, a gate that misreads, a missing tool) is no rule at all: it's fixed at its source (the config, the hook, the package), never written down as a workaround. A workaround line that must stay meanwhile names the issue that holds the fix ("until <issue>") and goes when it lands; one whose source isn't ours says so. Before calling a snag in how Claude Code behaves not ours, check what hooks can see and do (code.claude.com/docs/en/hooks.md: `agent_id`, `agent_type`, `updatedInput`, SubagentStart's context): a gate on them fixes it at the source. A miss the review should have caught is a line for the change reviewer (`home/.claude/agents/change-reviewer.md`).
