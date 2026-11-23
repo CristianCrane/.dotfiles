@@ -103,7 +103,7 @@ A PR body says what a reader needs to check the change, and nothing else, writte
 ## Change
 - Extended | Retired | New: <pattern> — <paths>
 - Simpler shape considered: <a real shape>; <why not, or "done in <sha>">
-- Review: F<n> <finding> → fixed in <sha> | fixed in the survey | the review's own word on it: fixed elsewhere: <where> | conceded: <why> | turned down: <reason> | ruled by the user: <ruling>
+- Review: F<n> <finding> → fixed in <sha> | the review's own word on it: fixed in the survey | fixed elsewhere: <where> | conceded: <why> | turned down: <reason> | ruled by the user: <ruling>
 - UX review: U<n> <finding> → fixed in <sha> | the UX review's own word on it: conceded: <why> | turned down: <reason> | ruled by the user: <ruling>
 - Seen nearby: <problem> → fixed in <sha>
 - Harder to change: <what, or nothing>

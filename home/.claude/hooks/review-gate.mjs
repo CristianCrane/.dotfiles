@@ -204,7 +204,7 @@ const unclosed = (cwd, section, id, text) => {
     if (/\bfixed\b/.test(line))
       return "it says fixed, but in no commit on this branch: a fix to the survey's text is `fixed in the survey`, one anywhere else (an issue, a comment) is `fixed elsewhere: <where>`, as the review says";
     if (/\banswered\b/.test(line))
-      return "`answered` closes nothing: a finding is `fixed in <sha>`, or takes the review's own word on it (`conceded:`, `turned down:`, `fixed elsewhere:`, `ruled by the user:`)";
+      return "`answered` closes nothing: a finding is `fixed in <sha>`, or takes the review's own word on it (`fixed in the survey`, `fixed elsewhere:`, `conceded:`, `turned down:`, `ruled by the user:`)";
     return "its line says neither `fixed in` nor the review's own word on it";
   });
   return whys.includes(null) ? null : whys[0];
