@@ -169,25 +169,32 @@ const shapeOf = (text, cwd) => {
 
 // the words that close a finding with no fix on the branch: the reviewer's
 // own, as it has the last word (the `change` skill, Review), so a PR body's
-// line passes with one only when the review gives the finding it too
-const REVIEWERS_WORDS = ["fixed elsewhere", "conceded", "turned down", "ruled by the user"];
+// line passes with one only when the review gives the finding it too, as
+// the word after the last → of its own line for the finding. Both lines
+// are read after their last →, as a finding's text before it can quote
+// one of the words (dotfiles review F13, 2026-11-23)
+const REVIEWERS_WORDS = ["fixed in the survey", "fixed elsewhere", "conceded", "turned down", "ruled by the user"];
+const closingOf = (line) => line.split("→").at(-1).trim();
+const wordOf = (line) => REVIEWERS_WORDS.find((word) => closingOf(line).startsWith(word));
 
 // why no line of the Change section closes finding `id` of the review
 // `text`, or null when one does: `fixed in <sha>` (a commit on this
-// branch), `fixed in the survey` (its text, never committed), or the
-// review's own word on it. `answered:` closed one until 2026-11-23, when
+// branch), or the review's own word on it (`fixed in the survey` among
+// them). `answered:` closed one until 2026-11-23, when
 // builders answered real findings away (empire-cleaning #527, #536, #538)
 const unclosed = (cwd, section, id, text) => {
   const named = section.filter((line) => new RegExp(`\\b${id}\\b`).test(line));
   if (!named.length) return "no line names it";
-  const reviewed = lines(text).filter((line) => new RegExp(`^(?:- )?${id}\\b`).test(line));
-  const whys = named.map((line) => {
-    if (/fixed in the survey\b/.test(line)) return null;
-    const word = REVIEWERS_WORDS.find((said) => new RegExp(`\\b${said}:\\s*\\S`).test(line));
+  const words = lines(text)
+    .filter((line) => line.includes("→") && new RegExp(`^(?:- )?${id}\\b`).test(line))
+    .map(wordOf);
+  const whys = named.map((named) => {
+    const line = closingOf(named);
+    const word = wordOf(line);
     if (word)
-      return reviewed.some((own) => own.includes(`${word}:`))
+      return words.includes(word)
         ? null
-        : `it says \`${word}:\`, but the review's own line for it doesn't: the reviewer has the last word, so put your case in its next pass`;
+        : `it says \`${word}\`, but the review's own word on it doesn't: the reviewer has the last word, so put your case in its next pass`;
     const sha = line.match(/fixed in ([0-9a-f]{7,40})\b/)?.[1];
     if (sha) return onBranch(cwd, sha) ? null : `\`fixed in ${sha}\` is no commit on this branch: after a rebase or an amend, give the new sha; a fix that landed elsewhere (main, another PR) is \`fixed elsewhere: <where>\`, as the review says`;
     if (/\bfixed\b/.test(line))

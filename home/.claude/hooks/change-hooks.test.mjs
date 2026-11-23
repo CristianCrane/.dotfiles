@@ -203,7 +203,7 @@ const STATES = {
     () =>
       scratchRepo({
         review:
-          "## Previous findings\n- F3 [change] c → ruled by the user: keep it\n- F4 [text] d → fixed elsewhere: #313's body\n- F5 [change] e → conceded: a misread\n- F6 [text] f → turned down: the owner's call\n## Findings\nF1. [change] a\nF2. [text] b\n",
+          "## Previous findings\n- F2 [change] b → fixed in the survey\n- F3 [change] c → ruled by the user: keep it\n- F4 [text] d → fixed elsewhere: #313's body\n- F5 [change] e → conceded: a misread\n- F6 [text] f → turned down: the owner's call\n## Findings\nF1. [change] a\n",
         body: (head) =>
           prBody(
             head,
@@ -211,17 +211,19 @@ const STATES = {
           ),
       }),
   ],
-  // each kind of line that doesn't close its finding, F1 to F6: F5's word
-  // isn't the review's, and F6's `answered:` closed one until 2026-11-23
+  // each kind of line that doesn't close its finding, F1 to F8: F5's word
+  // isn't the review's, F6's `answered:` closed one until 2026-11-23, F7's
+  // word is in its finding's text but not the review's word on it, and F8
+  // is fixed in the survey by the body alone (the old gate took F7 and F8)
   unanswered: [
     "review-gate",
     () =>
       scratchRepo({
-        review: "## Previous findings\n- F5 [text] e → held: it's real\n## Findings\nF1. [change] a\nF2. [text] b\nF3. [change] c\nF4. [change] d\nF6. [text] f\n",
+        review: "## Previous findings\n- F5 [text] e → held: it's real\n- F7 [text] the gate takes `conceded:` anywhere → open: still wrong\n## Findings\nF1. [change] a\nF2. [text] b\nF3. [change] c\nF4. [change] d\nF6. [text] f\nF8. [text] h\n",
         body: (head) =>
           prBody(
             head,
-            "- Review: F1 a → fixed in deadbee0\n- Review: F2 b → fixed: #313's body revised\n- Review: F3 c → answered on #266\n- Review: F5 e → turned down: rare\n- Review: F6 f → answered: a rare state\n",
+            "- Review: F1 a → fixed in deadbee0\n- Review: F2 b → fixed: #313's body revised\n- Review: F3 c → answered on #266\n- Review: F5 e → turned down: rare\n- Review: F6 f → answered: a rare state\n- Review: F7 the gate takes `conceded:` anywhere → conceded: x\n- Review: F8 h → fixed in the survey\n",
           ),
       }),
   ],
@@ -428,7 +430,9 @@ const CASES = [
   ["unanswered", "gh pr create --draft --body-file <body>", /F4: no line names it/],
   // the reviewer has the last word (red on the old gate, which took any
   // `answered:` and read no reviewer's word)
-  ["unanswered", "gh pr create --draft --body-file <body>", /F5: it says `turned down:`, but the review's own line for it doesn't/],
+  ["unanswered", "gh pr create --draft --body-file <body>", /F5: it says `turned down`, but the review's own word on it doesn't/],
+  ["unanswered", "gh pr create --draft --body-file <body>", /F7: it says `conceded`, but the review's own word on it doesn't/],
+  ["unanswered", "gh pr create --draft --body-file <body>", /F8: it says `fixed in the survey`, but the review's own word on it doesn't/],
   ["unanswered", "gh pr create --draft --body-file <body>", /F6: `answered` closes nothing/],
   // a body with Before / after needs a UX review that leaves none open,
   // its findings closed as the change review's (red on the old gate,
