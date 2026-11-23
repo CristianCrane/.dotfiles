@@ -275,11 +275,13 @@ const STATES = {
       return state;
     },
   ],
-  // review headers the gate must read (dotfiles#12), and one it can't
+  // review headers the gate must read (dotfiles#12), and one it can't;
+  // headerLateOpen: an open finding holds the PR in any round (dotfiles#45)
   ...Object.fromEntries(
     Object.entries({
       headerAside: "round 2 (with a recheck of 037bf37), 0 open change findings",
       headerAsideOpen: "round 2 (with a recheck of 037bf37), 1 open change findings",
+      headerLateOpen: "round 6, 1 open change findings",
       headerRecheck: "recheck of round 2, 0 open change findings",
       headerNoRound: "plan, 0 open change findings",
     }).map(([name, header]) => [name, ["review-gate", () => scratchRepo({ review: true, header, body: BODY })]]),
@@ -501,6 +503,7 @@ const CASES = [
   ["headerAside", "gh pr create --draft --body-file <body>", THROUGH],
   ["headerAside", "gh pr create --body-file <body>", NO_LESSONS],
   ["headerAsideOpen", "gh pr create --draft --body-file <body>", /round 2 left 1 change finding\(s\) open/],
+  ["headerLateOpen", "gh pr create --draft --body-file <body>", /round 6 left 1 change finding\(s\) open: fix them and run round 7/],
   ["headerRecheck", "gh pr create --draft --body-file <body>", THROUGH],
   ["headerRecheck", "gh pr create --body-file <body>", NO_LESSONS],
   ["headerNoRound", "gh pr create --draft --body-file <body>", /its first line reads `# Change review: <branch> @ <short sha>, round <n>, <k> open change findings`/],
@@ -1064,7 +1067,6 @@ test("review-gate: a process batch merges by the agent once its log approves eve
   // the log commit alone: a repo's batch, whose changes are in the repo
   assert.equal(merge(batch({ changes: [] })), null);
   assert.match(merge(batch({ header: "round 1, 2 open change findings" })) ?? "", NOT_APPROVED("its review isn't ready"));
-  assert.match(merge(batch({ header: "round 5, 1 open change findings" })) ?? "", NOT_APPROVED(String.raw`its review leaves 1 change finding\(s\) open`));
   // a first commit that does more than add the log's entries
   const mixed = batch();
   git(mixed, "reset", "-q", "--soft", "HEAD~2");
