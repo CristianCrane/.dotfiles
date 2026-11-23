@@ -54,6 +54,8 @@ U<n>. [high|medium|low] <screen>, <case>, <width>: <what's wrong> — <shot path
 - <screen, case>: <one line on why>
 ```
 
+The header's open count is every finding not fixed, conceded, turned down or ruled on by the user: the PR gate holds the PR until it's 0, and takes a closing other than a fix only when your pass gives the finding that word.
+
 Plain words: the user reads this, and a repo's terms come from its glossary. Reply with the output's path, the count of findings by severity, and how many states weren't drawn.
 
 An audit of a whole app is this review run per area, on each area's shots drawn first (empire-cleaning's screen audit, 2026-11-21; #502, "Audits use it too").

@@ -115,7 +115,7 @@ A PR body says what a reader needs to check the change, and nothing else. Write 
 - **Tests**: only for a change to the server or other code a person doesn't see: permalinks to the most relevant tests, at HEAD's full sha too, saying which one was red on the old code.
 - **Change**, collapsed: the blank line after `</summary>` lets GitHub draw the heading. One line per pattern, per review finding and per `Seen nearby:` item. When the PR has refactor commits, Change names what they retired and says how behaviour was shown unchanged.
 
-No other headings or labels (a line led by bold is a label): no summary of runs, no list of commits. The gate turns the PR down until the body has Problem and Fix with their sentences, Check these with 3 to 5 permalinks, every permalink at a commit on the branch, and Change in its closed `<details>`, with no other heading or label, and until Change answers every finding of the last review, by id.
+No other headings or labels (a line led by bold is a label): no summary of runs, no list of commits. The gate turns the PR down until the body has Problem and Fix with their sentences, Check these with 3 to 5 permalinks, every permalink at a commit on the branch, and Change in its closed `<details>`, with no other heading or label, and until Change closes every finding of the last review by id, as fixed or in the review's own word on it (`answered:` closes nothing). A body with Before / after also waits for a UX review whose last pass, of a commit on the branch, leaves no finding open, its findings closed the same way, and `gh pr ready` waits for it again.
 
 ## 6. Lessons
 

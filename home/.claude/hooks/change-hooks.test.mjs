@@ -129,9 +129,10 @@ const write = (repo, kind, text) => {
 
 // a repo on BRANCH, one commit past main, with the change skill's files
 // given: `review` writes one of HEAD (a string: its findings, after the
-// header; `header` replaces the header's words after the sha), `lessons`
-// and `body` their text (`body` may take HEAD's full sha)
-const scratchRepo = ({ review = false, header = "round 1, 0 open change findings", lessons, body } = {}) => {
+// header; `header` replaces the header's words after the sha), `ux` a UX
+// review (it may take HEAD's short sha), `lessons` and `body` their text
+// (`body` may take HEAD's full sha)
+const scratchRepo = ({ review = false, header = "round 1, 0 open change findings", ux, lessons, body } = {}) => {
   const repo = scratchDir();
   git(repo, "init", "-qb", "main");
   commit(repo, "a.txt", "a\n");
@@ -140,12 +141,20 @@ const scratchRepo = ({ review = false, header = "round 1, 0 open change findings
   const head = git(repo, "rev-parse", "--short", "HEAD");
   if (review)
     write(repo, "review", `# Change review: ${BRANCH} @ ${head}, ${header}\n${review === true ? "" : review}`);
+  if (ux !== undefined) write(repo, "ux-review", typeof ux === "function" ? ux(head) : ux);
   if (lessons !== undefined) write(repo, "lessons", lessons);
   if (typeof body === "function") body = body(git(repo, "rev-parse", "HEAD"));
   return { repo, body: body === undefined ? undefined : write(repo, "pr-body", body) };
 };
 
 const ROUTED = "Signals for feature:\n- A cost → inbox 1a2b3c4d\n";
+const BEFORE = "**Before / after:**\n| Before | After |\n| --- | --- |\n| a | b |\n";
+// a UX review of HEAD with no findings, for a body with Before / after
+const CLEAN_UX = (head) => `# UX review: ${BRANCH} @ ${head}, first pass, 0 open findings (0 high)\n`;
+// a UX review of HEAD whose last pass leaves nothing open, U1 fixed and U2
+// turned down
+const CLOSED_UX = (head) =>
+  `# UX review: ${BRANCH} @ ${head}, pass 2, 0 open findings (0 high)\n## Previous findings\n- U1 [high] a → fixed (a.png)\n- U2 [low] b → turned down: the owner's call\n`;
 // a PR body in the change skill's shape, its permalinks at `head`, with
 // `change` as its Change section's lines; `parts` replaces a part's text,
 // or leaves it out (null)
@@ -187,27 +196,48 @@ const STATES = {
   // ready to open as a draft: a review and a PR body, no lessons
   createDraft: ["review-gate", () => scratchRepo({ review: true, body: BODY })],
   noReview: ["review-gate", () => scratchRepo({ lessons: ROUTED, body: BODY })],
-  // a review with findings, and a PR body answering them in each form the
-  // reviewer's template has
+  // a review with findings, and a PR body closing them in each form the
+  // reviewer's template has: a fix, or the review's own word on it
   answered: [
     "review-gate",
     () =>
       scratchRepo({
-        review: "## Findings\nF1. [change] a\nF2. [text] b\nF3. [change] c\n",
+        review:
+          "## Previous findings\n- F3 [change] c → ruled by the user: keep it\n- F4 [text] d → fixed elsewhere: #313's body\n- F5 [change] e → conceded: a misread\n- F6 [text] f → turned down: the owner's call\n## Findings\nF1. [change] a\nF2. [text] b\n",
         body: (head) =>
-          prBody(head, `- Review: F1 a → fixed in ${head.slice(0, 7)}\n- Review: F2 b → fixed in the survey\n- Review: F3 c → answered: the user ruled\n`),
+          prBody(
+            head,
+            `- Review: F1 a → fixed in ${head.slice(0, 7)}\n- Review: F2 b → fixed in the survey\n- Review: F3 c → ruled by the user: keep it\n- Review: F4 d → fixed elsewhere: #313's body\n- Review: F5 e → conceded: a misread\n- Review: F6 f → turned down: the owner's call\n`,
+          ),
       }),
   ],
-  // each kind of line that doesn't answer its finding, F1 to F4
+  // each kind of line that doesn't close its finding, F1 to F6: F5's word
+  // isn't the review's, and F6's `answered:` closed one until 2026-11-23
   unanswered: [
     "review-gate",
     () =>
       scratchRepo({
-        review: "## Findings\nF1. [change] a\nF2. [text] b\nF3. [change] c\nF4. [change] d\n",
+        review: "## Previous findings\n- F5 [text] e → held: it's real\n## Findings\nF1. [change] a\nF2. [text] b\nF3. [change] c\nF4. [change] d\nF6. [text] f\n",
         body: (head) =>
-          prBody(head, "- Review: F1 a → fixed in deadbee0\n- Review: F2 b → fixed: #313's body revised\n- Review: F3 c → answered on #266\n"),
+          prBody(
+            head,
+            "- Review: F1 a → fixed in deadbee0\n- Review: F2 b → fixed: #313's body revised\n- Review: F3 c → answered on #266\n- Review: F5 e → turned down: rare\n- Review: F6 f → answered: a rare state\n",
+          ),
       }),
   ],
+  // a PR body with Before / after, and the UX review it then needs
+  ...Object.fromEntries(
+    Object.entries({
+      uxClosed: [CLOSED_UX, (head) => `- UX review: U1 a → fixed in ${head.slice(0, 7)}\n- UX review: U2 b → turned down: the owner's call\n`],
+      uxUnclosed: [CLOSED_UX, () => "- UX review: U1 a → answered: rare\n"],
+      uxOpen: [(head) => `# UX review: ${BRANCH} @ ${head}, first pass, 1 open findings (1 high)\n## Findings\nU1. [high] a\n`, () => ""],
+      uxElsewhere: [() => `# UX review: ${BRANCH} @ 0000000, first pass, 0 open findings (0 high)\n`, () => ""],
+      uxMissing: [undefined, () => ""],
+    }).map(([name, [ux, change]]) => [
+      name,
+      ["review-gate", () => scratchRepo({ review: true, ux, lessons: ROUTED, body: (head) => prBody(head, `- New: nothing\n${change(head)}`, { before: BEFORE }) })],
+    ]),
+  ),
   // a survey that names its file by a short name only, and one that
   // names no file at all
   shortNames: [
@@ -275,7 +305,7 @@ const STATES = {
       bodyNoBlank: () => ({ change: "<details><summary>Change</summary>\n## Change\n- New: nothing\n</details>\n" }),
       bodyUnclosed: () => ({ change: "<details><summary>Change</summary>\n\n## Change\n- New: nothing\n" }),
       bodyShown: () => ({ change: "<details open><summary>Change</summary>\n\n## Change\n- New: nothing\n</details>\n" }),
-    }).map(([name, parts]) => [name, ["review-gate", () => scratchRepo({ review: true, body: (head) => prBody(head, undefined, parts(head)) })]]),
+    }).map(([name, parts]) => [name, ["review-gate", () => scratchRepo({ review: true, ux: CLEAN_UX, body: (head) => prBody(head, undefined, parts(head)) })]]),
   ),
   // a prototype branch's checkout (lib's prototypeBranch), and a detached
   // one: neither has work to gate, but neither opens a PR unchecked
@@ -392,10 +422,26 @@ const CASES = [
   ["answered", "gh pr create --draft --body-file <body>", THROUGH],
   ["answered", "gh pr create --body-file <body>", NO_LESSONS],
   // dotfiles#9: each says what's wrong with its line
-  ["unanswered", "gh pr create --draft --body-file <body>", /F1: `fixed in deadbee0` is no commit on this branch: after a rebase or an amend, give the new sha; a fix that landed elsewhere \(main, another PR\) is `answered: <where>`/],
+  ["unanswered", "gh pr create --draft --body-file <body>", /F1: `fixed in deadbee0` is no commit on this branch: after a rebase or an amend, give the new sha; a fix that landed elsewhere \(main, another PR\) is `fixed elsewhere: <where>`/],
   ["unanswered", "gh pr create --draft --body-file <body>", /F2: it says fixed, but in no commit on this branch: a fix to the survey's text is `fixed in the survey`/],
-  ["unanswered", "gh pr create --draft --body-file <body>", /F3: `answered` takes a colon/],
+  ["unanswered", "gh pr create --draft --body-file <body>", /F3: `answered` closes nothing/],
   ["unanswered", "gh pr create --draft --body-file <body>", /F4: no line names it/],
+  // the reviewer has the last word (red on the old gate, which took any
+  // `answered:` and read no reviewer's word)
+  ["unanswered", "gh pr create --draft --body-file <body>", /F5: it says `turned down:`, but the review's own line for it doesn't/],
+  ["unanswered", "gh pr create --draft --body-file <body>", /F6: `answered` closes nothing/],
+  // a body with Before / after needs a UX review that leaves none open,
+  // its findings closed as the change review's (red on the old gate,
+  // which read no UX review)
+  ["uxClosed", "gh pr create --draft --body-file <body>", THROUGH],
+  ["uxClosed", "gh pr ready", THROUGH],
+  ["uxClosed", "gh pr create --draft --body-file <body> --head other", /--head other runs from feature's checkout/],
+  ["uxUnclosed", "gh pr create --draft --body-file <body>", /U1: `answered` closes nothing: .*; U2: no line names it/],
+  ["uxOpen", "gh pr create --draft --body-file <body>", /needs a UX review .*isn't ready \(its last pass leaves 1 finding\(s\) open/],
+  ["uxOpen", "gh pr ready", /needs a UX review .*isn't ready \(its last pass leaves 1 finding\(s\) open/],
+  ["uxElsewhere", "gh pr create --draft --body-file <body>", /its shots are of 0000000, no commit on this branch/],
+  ["uxMissing", "gh pr create --draft --body-file <body>", /needs a UX review .*isn't ready \(missing\)/],
+  ["uxMissing", "gh pr ready", /needs a UX review .*isn't ready \(missing\)/],
 
   // what runs before gh: a prefix or wrapper is gated, a mention isn't
   ...[`FOO="a b"`, `FOO='a b'`, "env", "command", "time", "nohup", "exec"].map((prefix) => [

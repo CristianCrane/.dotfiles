@@ -4,10 +4,14 @@
 // of one before it with only comment lines changed since) and, before
 // round 5, leaves no change finding open, and until the PR body, read
 // from its file, is in the skill's shape (its parts, Check these's
-// permalinks, Change collapsed, nothing else) and answers every finding of
-// that review in its Change section. A PR leaves draft (`gh pr ready`, or `gh pr create` without
-// `--draft`) once the branch's lessons file (the `lessons` skill) says
-// where every cost went, and the review is still of the last commit.
+// permalinks, Change collapsed, nothing else) and closes every finding of
+// that review in its Change section, as fixed or in the review's own word
+// on it. A body with Before / after also needs the branch's UX review, its
+// last pass of a commit on the branch leaving no finding open, and closes
+// its findings the same way. A PR leaves draft (`gh pr ready`, or `gh pr
+// create` without `--draft`) once the branch's lessons file (the `lessons`
+// skill) says where every cost went, the review is still of the last
+// commit, and a UX review its body needs still leaves none open.
 // A prototype branch's PR (lib's prototypeBranch) is turned down either
 // way: it skipped the reviews because it never merges.
 //
@@ -160,8 +164,64 @@ const shapeOf = (text, cwd) => {
     problems.push(
       "no `## Change` collapsed as `<details><summary>Change</summary>`, a blank line, `## Change` and its lines, then `</details>`",
     );
-  return { problems, section: collapsed ? lines(collapsed[1]) : null };
+  return { problems, section: collapsed ? lines(collapsed[1]) : null, seen: blocks.has("Before / after") };
 };
+
+// the words that close a finding with no fix on the branch: the reviewer's
+// own, as it has the last word (the `change` skill, Review), so a PR body's
+// line passes with one only when the review gives the finding it too
+const REVIEWERS_WORDS = ["fixed elsewhere", "conceded", "turned down", "ruled by the user"];
+
+// why no line of the Change section closes finding `id` of the review
+// `text`, or null when one does: `fixed in <sha>` (a commit on this
+// branch), `fixed in the survey` (its text, never committed), or the
+// review's own word on it. `answered:` closed one until 2026-11-23, when
+// builders answered real findings away (empire-cleaning #527, #536, #538)
+const unclosed = (cwd, section, id, text) => {
+  const named = section.filter((line) => new RegExp(`\\b${id}\\b`).test(line));
+  if (!named.length) return "no line names it";
+  const reviewed = lines(text).filter((line) => new RegExp(`^(?:- )?${id}\\b`).test(line));
+  const whys = named.map((line) => {
+    if (/fixed in the survey\b/.test(line)) return null;
+    const word = REVIEWERS_WORDS.find((said) => new RegExp(`\\b${said}:\\s*\\S`).test(line));
+    if (word)
+      return reviewed.some((own) => own.includes(`${word}:`))
+        ? null
+        : `it says \`${word}:\`, but the review's own line for it doesn't: the reviewer has the last word, so put your case in its next pass`;
+    const sha = line.match(/fixed in ([0-9a-f]{7,40})\b/)?.[1];
+    if (sha) return onBranch(cwd, sha) ? null : `\`fixed in ${sha}\` is no commit on this branch: after a rebase or an amend, give the new sha; a fix that landed elsewhere (main, another PR) is \`fixed elsewhere: <where>\`, as the review says`;
+    if (/\bfixed\b/.test(line))
+      return "it says fixed, but in no commit on this branch: a fix to the survey's text is `fixed in the survey`, one anywhere else (an issue, a comment) is `fixed elsewhere: <where>`, as the review says";
+    if (/\banswered\b/.test(line))
+      return "`answered` closes nothing: a finding is `fixed in <sha>`, or takes the review's own word on it (`conceded:`, `turned down:`, `fixed elsewhere:`, `ruled by the user:`)";
+    return "its line says neither `fixed in` nor the review's own word on it";
+  });
+  return whys.includes(null) ? null : whys[0];
+};
+
+// the branch's UX review (the `change` skill, Review), which a PR body
+// with Before / after needs: its last pass of a commit on the branch, and
+// leaving no finding open. Not of HEAD: a pass per commit that changes no
+// screen (a test, a type) would re-read the ui skill and the repo's UX docs
+const uxReview = (cwd, work) => {
+  const path = stateFile(cwd, "ux-review", work.key);
+  if (!existsSync(path)) return { path, reason: "missing" };
+  const text = readFileSync(path, "utf8");
+  const header = text.match(/^# UX review:.* @ ([0-9a-f]{7,40}),.*?\b(\d+) open finding/m);
+  if (!header)
+    return {
+      path,
+      reason: "its header has no commit and open count: its first line reads `# UX review: <branch> @ <the shots' commit>, <first pass | pass n>, <k> open findings (<h> high)`",
+    };
+  if (!onBranch(cwd, header[1])) return { path, reason: `its shots are of ${header[1]}, no commit on this branch` };
+  if (Number(header[2]))
+    return { path, reason: `its last pass leaves ${header[2]} finding(s) open: fix them, take new shots and run a later pass` };
+  return { path, ok: true, text, ids: [...new Set([...text.matchAll(/^(?:- )?(U\d+)\b/gm)].map((id) => id[1]))] };
+};
+
+// a UX review not ready, in words for a turn-down
+const uxNotReady = (ux, branch) =>
+  `The PR body has **Before / after:**, so ${branch} needs a UX review whose last pass leaves no finding open, and it isn't ready (${ux.reason}), with output ${ux.path}: run the \`ux-reviewer\` agent as the \`change\` skill's Review step says.`;
 
 // gh pr create: the PR's branch (not a prototype, and the one checked
 // out), then the review, the body's shape and its Change section, and its
@@ -197,35 +257,22 @@ const createGate = (command, hidden, match, input) => {
     return turnDownCreate(
       `Write the PR body for ${work.branch} to ${body} and open the PR with \`--body-file ${body}\`, as the \`change\` skill's PR body step says.`,
     );
-  const { problems, section } = shapeOf(readFileSync(body, "utf8"), cwd);
+  const { problems, section, seen } = shapeOf(readFileSync(body, "utf8"), cwd);
   if (problems.length)
     return turnDownCreate(
       `The PR body (${body}) isn't in the shape the \`change\` skill's PR body step gives: ${problems.join("; ")}.`,
     );
-  // why no line answers a finding, or null when one does, in the words of
-  // the reviewer's template: `fixed in <sha>` (a commit on this branch),
-  // `fixed in the survey` (its text, never committed) or `answered: <why>`
-  const unanswered = (id) => {
-    const named = section.filter((line) => new RegExp(`\\b${id}\\b`).test(line));
-    if (!named.length) return "no line names it";
-    const whys = named.map((line) => {
-      if (/fixed in the survey\b|answered:\s*\S/.test(line)) return null;
-      const sha = line.match(/fixed in ([0-9a-f]{7,40})\b/)?.[1];
-      if (sha) return onBranch(cwd, sha) ? null : `\`fixed in ${sha}\` is no commit on this branch: after a rebase or an amend, give the new sha; a fix that landed elsewhere (main, another PR) is \`answered: <where>\``;
-      if (/\bfixed\b/.test(line))
-        return "it says fixed, but in no commit on this branch: a fix to the survey's text is `fixed in the survey`, one anywhere else (an issue, a comment) is `answered: <where>`";
-      if (/\banswered\b/.test(line)) return "`answered` takes a colon: `answered: <why>`";
-      return "its line says neither `fixed in` nor `answered:`";
-    });
-    return whys.includes(null) ? null : whys[0];
-  };
-  const open = found.ids.flatMap((id) => {
-    const why = unanswered(id);
-    return why ? [`${id}: ${why}`] : [];
-  });
+  // each finding closed: the change review's, and with Before / after the
+  // UX review's, which must leave none open
+  const ux = seen ? uxReview(cwd, work) : null;
+  if (ux && !ux.ok) return turnDownCreate(uxNotReady(ux, work.branch));
+  const open = [
+    ...found.ids.map((id) => [id, unclosed(cwd, section, id, found.text)]),
+    ...(ux?.ids ?? []).map((id) => [id, unclosed(cwd, section, id, ux.text)]),
+  ].flatMap(([id, why]) => (why ? [`${id}: ${why}`] : []));
   if (open.length)
     return turnDownCreate(
-      `The PR body's Change section (${body}) doesn't answer every finding of the last change review (${found.path}): ${open.join("; ")}. Each finding gets its own Review line ending \`fixed in <sha>\` (a commit on this branch), \`fixed in the survey\` (a fix to the survey's text, which isn't committed) or \`answered: <why>\`.`,
+      `The PR body's Change section (${body}) doesn't close every finding of the last change review (${found.path})${ux ? ` and UX review (${ux.path})` : ""}: ${open.join("; ")}. Each finding gets its own line ending \`fixed in <sha>\` (a commit on this branch), \`fixed in the survey\` (a fix to the survey's text, which isn't committed) or the review's own word on it (\`fixed elsewhere:\`, \`conceded:\`, \`turned down:\`, \`ruled by the user:\`).`,
     );
 
   if (/(?:^|\s)(?:--draft|-d)(?=\s|=|$)/.test(argsOf(hidden, end))) return;
@@ -273,6 +320,13 @@ const readyGate = (command, hidden, match, input) => {
       `The change review for ${work.branch} isn't ready (${found.reason}), with output ${found.path}: finish it as the \`change\` skill's Review step says (after a commit since the review, that's its recheck), then mark the PR ready.`,
       "ready",
     );
+
+  // a later UX pass may have found more since the PR opened
+  const body = stateFile(cwd, "pr-body", work.key);
+  if (existsSync(body) && shapeOf(readFileSync(body, "utf8"), cwd).seen) {
+    const ux = uxReview(cwd, work);
+    if (!ux.ok) return turnDown(uxNotReady(ux, work.branch), "ready");
+  }
 
   const missing = lessonsMissing(cwd, work);
   if (missing) return turnDown(missing, "ready");

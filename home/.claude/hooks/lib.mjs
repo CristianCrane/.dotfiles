@@ -611,7 +611,7 @@ export const review = (cwd, work, input = {}) => {
   const path = stateFile(cwd, "review", work.key);
   if (!existsSync(path)) {
     const dictated = dictatedHolds(cwd, work, input, null);
-    if (dictated?.holds) return { path, ok: true, ids: [] };
+    if (dictated?.holds) return { path, ok: true, ids: [], text: "" };
     return { path, ok: false, reason: dictated ? `missing: its survey is dictated, but ${dictated.why}, so it takes the full flow` : "missing" };
   }
   const text = readFileSync(path, "utf8");
@@ -635,9 +635,10 @@ export const review = (cwd, work, input = {}) => {
       ok: false,
       reason: `round ${round} left ${open} change finding(s) open: fix them and run round ${round + 1}, but take a reopened finding, or one the reviewer holds against your pushback, to the user`,
     };
-  // the review (each replaces the last) lists every finding of the change
+  // the review (each replaces the last) lists every finding of the change,
+  // each with the reviewer's word on it
   const ids = [...new Set([...text.matchAll(/^(?:- )?(F\d+)\b/gm)].map((id) => id[1]))];
-  return { path, ok: true, ids, open };
+  return { path, ok: true, ids, open, text };
 };
 
 // whether `sha` names a commit the branch adds to its base
