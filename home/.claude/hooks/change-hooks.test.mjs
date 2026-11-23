@@ -1925,7 +1925,7 @@ describe("usage", () => {
   });
 
   // a resumed session's transcript repeats the earlier one's messages
-  // a main session's cache write is weighed as 1-hour, an agent's as 5-minute: 116 = 700 × 0.1 + 10 × 2 + 5 × 5 + 1
+  // a main session's cache write is weighed as 1-hour, an agent's as 5-minute: 81 = 700 × 0.05 + 10 × 2 + 5 × 5 + 1
   test("--since: each workstream and main session, weighted, a message in two transcripts counted once", () => {
     const { run, agent, session } = scratch();
     session("s1", said("m1", 500));
@@ -1936,10 +1936,10 @@ describe("usage", () => {
     assert.equal(ran.status, 0, ran.stderr);
     const table = ran.stdout.split("\n").map((line) => line.split(/\s{2,}/));
     assert.deepEqual(table[1], ["", "turns", "cache read", "cache write", "output", "input", "weighted", "agents"]);
-    assert.deepEqual(table[2], ["main s2 repo", "1", "700", "10", "5", "1", "116", ""]);
-    assert.deepEqual(table[3], ["main s1 repo", "1", "500", "10", "5", "1", "96", ""]);
-    assert.deepEqual(table[4], ["Fix issue 1", "2", "150", "20", "10", "2", "92", "2"]);
-    assert.deepEqual(table[5], ["total", "4", "1k", "40", "20", "4", "304", ""]);
+    assert.deepEqual(table[2], ["Fix issue 1", "2", "150", "20", "10", "2", "84.5", "2"]);
+    assert.deepEqual(table[3], ["main s2 repo", "1", "700", "10", "5", "1", "81", ""]);
+    assert.deepEqual(table[4], ["main s1 repo", "1", "500", "10", "5", "1", "71", ""]);
+    assert.deepEqual(table[5], ["total", "4", "1k", "40", "20", "4", "236.5", ""]);
     assert.match(run(["--since", "2999-01-01"]).stdout, /^total {2,}0 /m);
   });
 
@@ -1999,7 +1999,7 @@ describe("usage", () => {
 
   test("--week: the week's measures beside the week before's, each message weighed by its cache", () => {
     const { agent, session, windows, gh, home } = scratch();
-    // main: 1M cache read and 100k 1-hour writes, 300k weighted; a1 225k with 5-minute writes; b1's row
+    // main: 1M cache read and 100k 1-hour writes, 250k weighted; a1 175k with 5-minute writes; b1's row
     // has no split (recorded before it), so as an agent's its writes are 5-minute: 125k
     session("s1", [wrote("m1", { cacheRead: 1_000_000, oneHour: 100_000 }), compacted("c1", "manual", 100_000)]);
     session("s2", [compacted("c1", "manual", 100_000)]);
@@ -2010,18 +2010,18 @@ describe("usage", () => {
     const ran = week(["--week", "--since", day(-6)]);
     assert.equal(ran.status, 0, ran.stderr);
     const cells = Object.fromEntries(ran.stdout.split("\n").map((line) => line.trim().split(/\s{2,}/)).filter((cells) => cells.length === 3).map(([name, ...rest]) => [name, rest]));
-    assert.deepEqual(cells["weighted tokens"], ["650k", "0"]);
-    assert.deepEqual(cells["main sessions' share"], ["46.2%", "-"]);
+    assert.deepEqual(cells["weighted tokens"], ["550k", "0"]);
+    assert.deepEqual(cells["main sessions' share"], ["45.5%", "-"]);
     assert.deepEqual(cells["main context per turn: mean"], ["1.1M", "-"]);
     assert.deepEqual(cells["agents per active day"], ["2.0", "-"]);
     assert.deepEqual(cells["auto-compactions (in agents)"], ["2 (2)", "0 (0)"]);
     assert.deepEqual(cells["context compacted, median"], ["270k", "-"]);
     assert.deepEqual(cells["merged PRs"], ["3", "3"]);
-    assert.deepEqual(cells["weighted per merged PR"], ["217k", "0"]);
+    assert.deepEqual(cells["weighted per merged PR"], ["183k", "0"]);
     assert.match(ran.stdout, /^Merged PRs: o\/a 2, o\/b 1$/m);
-    assert.match(ran.stdout, /^ {2}main s1 repo {2,}300k {2,}46\.2%$/m);
-    assert.match(ran.stdout, /^ {2}change-reviewer {2,}225k {2,}34\.6% {2,}1$/m);
-    assert.match(ran.stdout, /^ {2}to .*: 50% at .*; 650k weighted by then, about 13k per 1% \(began before the ledger: reads low\)$/m);
+    assert.match(ran.stdout, /^ {2}main s1 repo {2,}250k {2,}45\.5%$/m);
+    assert.match(ran.stdout, /^ {2}change-reviewer {2,}175k {2,}31\.8% {2,}1$/m);
+    assert.match(ran.stdout, /^ {2}to .*: 50% at .*; 550k weighted by then, about 11k per 1% \(began before the ledger: reads low\)$/m);
     // gh asked for the account's PRs merged in each week, to the second before it ends
     const from = new Date(`${day(-6)}T00:00`);
     const at = (date) => date.toISOString().replace(/\.\d+Z$/, "Z");

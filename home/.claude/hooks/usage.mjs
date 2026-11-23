@@ -102,8 +102,12 @@ const LEDGER = join(USAGE, "ledger.jsonl");
 const COUNTS = ["cacheRead", "cacheWrite", "output", "input"];
 // what a token of each kind costs beside an input token, at API prices: a
 // cache write at the 5-minute cache's rate, and its 1-hour part at that
-// cache's
-const WEIGHTS = { cacheRead: 0.1, cacheWrite: 1.25, cacheWrite1h: 2, output: 5, input: 1 };
+// cache's. A cache read is 0.05 on Opus 5.5 (platform.claude.com/docs/en/about-claude/pricing:
+// "Cache hits and refreshes on Claude Opus 5.5 and Claude Sonnet 5.5 are priced at
+// 0.05x the base input price"), and the plan's own readings fit it best: used %
+// against weighted tokens over 77 half-hour bins on 10 days, rms 0.95 at 0.05
+// against 1.18 at 0.1 (the 2026-11-22 usage audit; process-log L152)
+const WEIGHTS = { cacheRead: 0.05, cacheWrite: 1.25, cacheWrite1h: 2, output: 5, input: 1 };
 const READINGS = join(USAGE, "windows.jsonl");
 // ~/.claude, the dotfiles' home/.claude
 const CLAUDE = join(dirname(fileURLToPath(import.meta.url)), "..");
