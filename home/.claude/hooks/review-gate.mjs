@@ -279,7 +279,7 @@ const createGate = (command, hidden, match, input) => {
   ].flatMap(([id, why]) => (why ? [`${id}: ${why}`] : []));
   if (open.length)
     return turnDownCreate(
-      `The PR body's Change section (${body}) doesn't close every finding of the last change review (${found.path})${ux ? ` and UX review (${ux.path})` : ""}: ${open.join("; ")}. Each finding gets its own line ending \`fixed in <sha>\` (a commit on this branch), \`fixed in the survey\` (a fix to the survey's text, which isn't committed) or the review's own word on it (\`fixed elsewhere:\`, \`conceded:\`, \`turned down:\`, \`ruled by the user:\`).`,
+      `The PR body's Change section (${body}) doesn't close every finding of the last change review (${found.path})${ux ? ` and UX review (${ux.path})` : ""}: ${open.join("; ")}. Each finding gets its own line ending \`fixed in <sha>\` (a commit on this branch) or the review's own word on it, after its line's last → (\`fixed in the survey\`, \`fixed elsewhere:\`, \`conceded:\`, \`turned down:\`, \`ruled by the user:\`).`,
     );
 
   if (/(?:^|\s)(?:--draft|-d)(?=\s|=|$)/.test(argsOf(hidden, end))) return;
