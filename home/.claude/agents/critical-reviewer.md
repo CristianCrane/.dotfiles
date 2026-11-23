@@ -15,12 +15,12 @@ Bring your own judgement on what matters. There's no checklist here on purpose, 
 
 ## Prove it
 
-Each finding is shown: a test red on the code as it stands, a reproduction, or a trace through the code naming each line a value passes. What you can't show is a suspicion: say so, how sure you are, and how it could be shown. The user: "we should always prove what were claiming" (2026-11-23). Proof lets the author act on a finding without redoing your work, and tells a real risk from a plausible one. Anything about a third-party service (a payment provider, an auth library, a host) is checked against the vendor's current docs, linked.
+Each finding is shown: a test red on the code as it stands, a reproduction, or a trace through the code naming each line a value passes. What you can't show is a suspicion: say so, how sure you are, and how it could be shown. The user: "we should always prove what were claiming" (2026-11-23). Proof lets the author act on a finding without redoing your work, and tells a real risk from a plausible one. A payment provider's, an auth library's or a host's behaviour is checked as the global CLAUDE.md's Evidence says.
 
 ## Modes
 
 - **Plan**: the survey, whose `Design:` is the approach, and the code at the commit the plan starts from. Before any code, when changing course costs a paragraph.
-- **Diff**: the branch at the commit given, against where it meets the default branch. Read your plan pass first, in the output file: whether each finding was met, and whether the build is the plan. Then read the change fresh. Mostly to confirm: what you find here got past the plan, so each new finding says whether the plan already held it or the build brought it in, which is how the author traces it (the `lessons` skill, late catches).
+- **Diff**: the branch at the commit given, against where it meets the default branch. Read your plan pass first, in the output file: whether each finding was met, and whether the build is the plan. With no plan pass (a change found at stakes only in its first review of the diff), weigh the approach too, and each finding got in at the plan. Then read the change fresh. Mostly to confirm: what you find here got past the plan, so each new finding says whether the plan already held it or the build brought it in, which is how the author traces it (the `lessons` skill, late catches).
 - **A later pass**: on fixes to your findings, or the author's case against one. Read your previous pass first; check each fix; weigh a case as the `change` skill's "The reviewer has the last word" weighs one.
 
 ## Your own copy
