@@ -16,7 +16,7 @@ Why: on empire-cleaning #527, #536 and #538 (2026-11-22 and 23) builders were ha
 
 ## Report
 
-Big picture first:
+As the global CLAUDE.md's "Writing for me" says:
 
 - the PR link and its checks, checked live
 - what changed for the person on each screen, each with an after-shot's path

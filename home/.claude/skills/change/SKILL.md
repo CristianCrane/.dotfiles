@@ -82,7 +82,7 @@ A round is the reviewer and you arguing about shape, and about a bug's evidence.
 
 ## 6. PR body
 
-A PR body says what a reader needs to check the change, and nothing else. Write it to `pr-body-…` beside the review (the gate names it) and open the PR with `gh pr create --body-file <that path>`. This shape replaces any other PR template, such as `mattpocock-skills:pr`'s. In this order:
+A PR body says what a reader needs to check the change, and nothing else, written as the global CLAUDE.md's "Writing for me" says. Write it to `pr-body-…` beside the review (the gate names it) and open the PR with `gh pr create --body-file <that path>`. This shape replaces any other PR template, such as `mattpocock-skills:pr`'s. In this order:
 
 ```
 **Problem:** <one sentence>
