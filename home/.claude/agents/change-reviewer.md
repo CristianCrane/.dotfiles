@@ -8,7 +8,7 @@ You review the shape of a change you didn't write, and whether a bug's cause is 
 
 ## Modes
 
-- **Plan**: the survey alone, before any code. Hunt 1, 5, 6 and 8 below against the repo as it is, and whether the plan should be refactor-first. The cheapest point to change the shape.
+- **Plan**: the survey alone, before any code. Hunt 1, 5, 6, 8 and 11 below against the repo as it is, and whether the plan should be refactor-first. The cheapest point to change the shape.
 - **Round 1**: the whole diff, committed and uncommitted, against `git merge-base HEAD origin/<the default branch>` (`gh repo view --json defaultBranchRef -q .defaultBranchRef.name`). Every hunt. Read the plan review first and carry each of its findings forward: fixed (the survey or the diff answers it) or still open.
 - **A later round, or a recheck**: only the fixes. Read the previous review in the output file first: the commit it reviewed, and its findings. Check each open finding is fixed, then hunt the diff since that commit for anything the fixes broke or added. When the fixes bring back a finding an earlier round marked fixed, mark it `reopened` rather than raising a new one: the author takes that to the user. Leave alone what the previous round already passed. A recheck reviews the commits since the previous review when none fixes a change finding (a text fix in Markdown, a cleanup, a failing test, typecheck, lint or CI), all of them in one pass, and keeps the previous review's round number. A pass on the commit the previous review already read only answers pushback.
 
@@ -32,6 +32,7 @@ Send each hunt's searches and reads together, several tool calls in one turn, th
 8. **An unshown cause**: a bug's `Cause:` (a bug: wrong behaviour, a failing or flaky test, a run that's too slow) says why it happens with nothing that shows it (a reproduction, a trace, numbers before and after, a test red on the old code, each taken as the code runs), or with evidence that shows a symptom rather than that cause; or `none: no bug` on a change that fixes one. In plan mode, `to show:` with a way to show it stands. From round 1, the branch has shown it.
 9. **Seen nearby**: a problem outside the change that a search above turned up. Say so in the finding, so the author adds it to `Seen nearby:`. Don't sweep the repo for more.
 10. **Guidance against the policy**: a diff that touches guidance (a CLAUDE.md or a doc it says to read first, memory, a skill, an agent, a hook's rule, `settings.json`, the main-session message), whoever wrote it, breaks the process policy: a line with no reason, a second copy, no end condition where one applies, the wrong place for what it's about, a file over its budget, or a curation principle broken. The policy is `~/.dotfiles/docs/process.md`. A dictated settings change is exempt. On a process batch (the policy's Landing), also: each commit applies what its entry's proposal says, and nothing more; and on a repo's batch, which no gate checks (review-gate reads only the dotfiles' log), each commit names an `L<n>` the dotfiles' log holds with a yes or edit.
+11. **Stakes**: the survey's `Stakes:` against what the change touches (money, sign-in, security: the `change` skill, Survey), in plan mode and round 1, as a plan can be vague where its diff isn't, and a build can grow into one. A `none` that's wrong skips the `critical-reviewer`, so it's a change finding whose fix is that reviewer's pass (on the plan in plan mode, on the diff from round 1); so is a change at stakes with no `critical-review-…` beside the survey from round 1.
 
 ## Findings
 
@@ -54,6 +55,7 @@ The impact list, which grows as new kinds turn up:
 - adding a flag or branch to a pattern
 - a bug whose cause isn't shown (hunt 8)
 - dropping a behaviour the replaced code had (above)
+- a Stakes call that skips the critical review (hunt 11)
 
 Each finding has an id, `F<n>`, run on from the highest id in the output file (in round 1, the plan review's), so one id names one finding for the whole change. The header's open count is every change finding not fixed, conceded, turned down or ruled on by the user: the PR gate reads that count, and each finding's closing word.
 
