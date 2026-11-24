@@ -28,6 +28,14 @@
 // HEAD unmoved, which the next run's staging finds equal and finishes. Two
 // runs at once (SessionStart fires on startup, resume, clear and compact):
 // the second leaves it to the first (lib's lock).
+//
+// A machine stop (the WSL VM shut down hard) is worse than a kill: Linux
+// holds written data in memory for about 30 s before it writes it back,
+// and git flushes no working file, so a stop then can leave the merged
+// files empty or full of null bytes, with HEAD moved and no index.lock
+// (2026-11-23: the global CLAUDE.md came back empty, and every session
+// after ran without it). So once the merge is done, `sync -f` writes the
+// filesystem's data back, ~10 ms most runs.
 import { existsSync, lstatSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -96,6 +104,11 @@ const catchUp = (dir, branch, theirs, done) => {
   } catch (error) {
     return `git merge --ff-only refused: ${error.message}`;
   }
+  // the merge's files, index, ref and reflogs onto the disk (the header's
+  // machine stop); best effort, as the merge is done either way
+  try {
+    run(top, "sync", "-f", top);
+  } catch {}
   return null;
 };
 

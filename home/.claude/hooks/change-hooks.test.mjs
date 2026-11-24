@@ -1619,11 +1619,11 @@ describe("red-checks", () => {
 
 // catch-up.mjs at a session's start, in a scratch HOME (live())
 describe("catch-up", () => {
-  // the hook's run from a session in another folder; what it said (its
-  // systemMessage, or "")
-  const start = ({ home }) => {
+  // the hook's run from a session in another folder, with `env` over the
+  // test's; what it said (its systemMessage, or "")
+  const start = ({ home }, env = {}) => {
     const ran = runHook("catch-up", { hook_event_name: "SessionStart", session_id: "s", cwd: scratchDir(), source: "startup" }, {
-      env: { ...process.env, HOME: home },
+      env: { ...process.env, HOME: home, ...env },
     });
     assert.equal(ran.status, 0, ran.stderr);
     return ran.stdout.trim() ? JSON.parse(ran.stdout).systemMessage : "";
@@ -1643,6 +1643,24 @@ describe("catch-up", () => {
     assert.equal(read(state.repo, "c.txt"), "c\n");
     assert.equal(status(state.repo), "");
     assert.equal(start(state), "", "nothing more to do");
+  });
+
+  // a machine stop soon after a merge left its files empty (2026-11-23),
+  // as git flushes no working file: the merge's filesystem is synced once
+  // it's done, and a sync that fails changes nothing else
+  test("a merge is synced to disk (`sync -f` on ~/.dotfiles); nothing to do: no sync; a failing sync: still caught up", () => {
+    const state = live();
+    const { bin, log } = fakeCommand("sync", "");
+    const PATH = `${bin}:${process.env.PATH}`;
+    assert.equal(start(state, { PATH }), "");
+    assert.ok(!existsSync(log), "nothing merged, nothing synced");
+    state.merged("c.txt", "c\n");
+    assert.match(start(state, { PATH }), /^~\/\.dotfiles caught up with origin\/main: 1 commit, /);
+    assert.equal(readFileSync(log, "utf8"), `-f ${git(state.repo, "rev-parse", "--show-toplevel")}\n`);
+    const tip = state.merged("d.txt", "d\n");
+    const failing = fakeCommand("sync", "echo 'sync: error syncing' >&2; exit 1");
+    assert.match(start(state, { PATH: `${failing.bin}:${process.env.PATH}` }), /^~\/\.dotfiles caught up with origin\/main: 1 commit, /);
+    assert.equal(head(state.repo), tip);
   });
 
   // the catch-up makes home/.claude live, but a change to the Nix config
