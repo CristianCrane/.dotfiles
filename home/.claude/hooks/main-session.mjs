@@ -50,8 +50,9 @@ const git = (dir, args, encoding = "utf8") => {
   throw new Error(said ?? ran.error?.message ?? "git failed");
 };
 
-// "a", "a and b", "a, b and c"
-const list = (items) => (items.length < 2 ? items.join("") : `${items.slice(0, -1).join(", ")} and ${items.at(-1)}`);
+// "a", "a and b", "a, b and c" ("or" for `and`: "a or b")
+const list = (items, and = "and") =>
+  items.length < 2 ? items.join("") : `${items.slice(0, -1).join(", ")} ${and} ${items.at(-1)}`;
 
 // how `mine` (a working copy) is damaged against `theirs` (the last
 // commit's), or null when it isn't: empty or holding a null byte, where
@@ -76,13 +77,13 @@ const shown = (path) => (path.startsWith(LIVE) ? `~/.claude/${path.slice(LIVE.le
 const check = () => {
   const dir = join(homedir(), ".dotfiles");
   if (!existsSync(dir)) return null;
+  let index = null;
   try {
-    let index = null;
-    try {
-      git(dir, ["ls-files", "-z"]);
-    } catch (error) {
-      index = error.message;
-    }
+    git(dir, ["ls-files", "-z"]);
+  } catch (error) {
+    index = error.message;
+  }
+  try {
     const top = git(dir, ["rev-parse", "--show-toplevel"]).trim();
     const found = [];
     for (const entry of git(dir, ["ls-tree", "-r", "-z", "HEAD"]).split("\0").filter(Boolean)) {
@@ -101,71 +102,89 @@ const check = () => {
       try {
         theirs = git(dir, ["cat-file", "blob", sha], "buffer");
       } catch (error) {
-        throw Object.assign(error, { copy: { path, kind: mine.length ? "holding null bytes" : "empty" } });
+        // no good copy here to compare or restore from: damaged all the
+        // same, as a fetch's loose objects go unflushed too, and the check
+        // goes on to the rest
+        found.push({ path, kind: mine.length ? "holding null bytes" : "empty", unreadable: error.message });
+        continue;
       }
       const hit = damage(mine, theirs);
       if (hit) found.push({ path, ...hit });
     }
     return (index || found.length) && words(index, found);
   } catch (error) {
-    const said = `(git says: ${error.message})`;
-    if (!error.copy)
-      return (
-        `WARNING: git can't read the last commit in ~/.dotfiles, likely from a crash ${said}, so ${UNCHECKED}. ` +
-        `Claude can help repair it from GitHub's copy. To see what's broken:${FSCK}` +
-        restart("If the repair changes a file under ~/.claude,", "it")
-      );
-    // a damaged file whose stored copy is unreadable too: the check stops
-    // there, so the file leads as in words(), and the rest is unchecked
-    const { path, kind } = error.copy;
-    const live = path.startsWith(LIVE);
+    // HEAD or a tree unreadable: nothing could be checked
+    const also = index ? `, and git's index there is damaged too (git says: ${index})` : "";
     return (
-      `WARNING: ${live ? `this session started with ${shown(path)} ${kind}` : `${shown(path)} is ${kind}`}, likely from ` +
-      `a crash, and git can't read the last commit's copy of it ${said}, so there's no good copy here, and ` +
-      `${live ? "the rest of " : ""}${UNCHECKED}. Claude can help restore it from GitHub's copy. ` +
-      `To see what else is broken:${FSCK}` +
-      (live ? restart("Once it's restored,", "the restored file") : "")
+      `WARNING: git can't read the last commit in ~/.dotfiles, likely from a crash (git says: ${error.message}), so ` +
+      `${UNCHECKED}${also}. Claude can help repair ${index ? "them" : "it"} from GitHub's copy. To see what's broken:` +
+      FSCK +
+      restart("If the repair changes a file under ~/.claude,", "it")
     );
   }
 };
 
-// the warning's words for a damaged index (git's line, or null) and files
+// the warning's words for a damaged index (git's line, or null) and the
+// damaged files (`unreadable`: git's line, for one whose stored copy git
+// can't read). The lead names each file this session started without,
+// those under ~/.claude, and counts the rest, as the commands name each
 const words = (index, found) => {
   const live = found.filter(({ path }) => path.startsWith(LIVE));
   const other = found.filter(({ path }) => !path.startsWith(LIVE));
-  // a file and how it's damaged ("~/.claude/CLAUDE.md empty"); `is` puts
-  // the verb in ("~/.dotfiles/docs/x.md is empty")
-  const named = (is) => ({ path, kind }) => `${shown(path)}${is ? " is" : ""} ${kind}`;
+  const good = [...live, ...other].filter(({ unreadable }) => !unreadable);
+  const lost = found.filter(({ unreadable }) => unreadable);
+  const many = (items, one, more) => (items.length > 1 ? more : one);
+  // the rest, as "another file in ~/.dotfiles is empty", "2 files in
+  // ~/.dotfiles are empty or all null bytes"
+  const counted =
+    other.length > 1 ? `${other.length} ${live.length ? "other " : ""}files` : live.length ? "another file" : "a file";
+  const kinds = list([...new Set(other.map(({ kind }) => kind))], "or");
   // each fact: what's damaged, then what follows from it; "likely from a
   // crash" goes between the first's two. What costs this session leads
   const facts = [
-    live.length && [`this session started with ${list(live.map(named(false)))}`, ""],
-    other.length && [list(other.map(named(true))), ""],
+    live.length && [`this session started with ${list(live.map(({ path, kind }) => `${shown(path)} ${kind}`))}`, ""],
+    other.length && [`${counted} in ~/.dotfiles ${many(other, "is", "are")} ${kinds}`, ""],
     index && [
       "git's index in ~/.dotfiles is damaged",
       ` (git says: ${index}), so git status and restore fail there and it stops catching up with GitHub`,
     ],
   ].filter(Boolean);
   const said = facts.map(([what, after], at) => `${what}${at ? "" : ", likely from a crash"}${after}`).join(", and ");
-  const edits = found
-    .filter(({ edited }) => edited)
-    .map(({ path }) => ` The text left in ${shown(path)} isn't the last commit's: copy out any edits of yours first.`);
-  const files = found.length;
-  const commands = [
-    ...(index ? ["read-tree HEAD"] : []),
-    ...[...live, ...other].map(({ path }) => `checkout HEAD -- ${path}`),
-  ].map((command) => `\n  git -C ~/.dotfiles ${command}`);
-  // run from inside the session (restart's comment), by Claude or by him
-  const run = ` (Claude can run ${commands.length > 1 ? "these" : "this"} for you):`;
-  const restore = files > 1 ? "the files from the last commit's good copies" : "the file from the last commit's good copy";
+  // a file by name, or "that file" when the lead named it alone
+  const name = ({ path }) => (found.length === 1 && live.length ? "that file" : shown(path));
+  const edited = good.filter(({ edited }) => edited);
+  const edits = edited.length
+    ? ` The text left in ${list(edited.map(name))} isn't the last commit's: copy out any edits of yours first.`
+    : "";
+  const unread = lost.length
+    ? ` git can't read the last commit's copy of ${list(lost.map(name))} (git says: ` +
+      `${lost.map(({ unreadable }) => unreadable).join("; ")}), so there's no good copy here: Claude can help ` +
+      `restore ${many(lost, "it", "them")} from GitHub's copy. To see what else is broken:${FSCK}`
+    : "";
+  const commands = [...(index ? ["read-tree HEAD"] : []), ...good.map(({ path }) => `checkout HEAD -- ${path}`)];
+  // the good ones, after any unreadable: "the other file"
+  const files = `${lost.length ? "other " : ""}file${many(good, "", "s")}`;
   const steps = index
-    ? files
-      ? ` Rebuild the index first (every file stays as it is), then restore ${restore}${run}`
-      : ` Rebuild it from the last commit, every file staying as it is${run}`
-    : ` The last commit has a good copy${files > 1 ? " of each" : ""}. Restore ${files > 1 ? "them" : "it"}${run}`;
-  // a live file restored reaches this session once Claude Code starts again
-  const after = live.length ? restart("Then", `the restored file${files > 1 ? "s" : ""}`) : "";
-  return `WARNING: ${said}.${edits.join("")}${steps}${commands.join("")}${after}`;
+    ? good.length
+      ? `Rebuild the index first (every file stays as it is), then restore the ${files} from the last commit's good ${many(good, "copy", "copies")}`
+      : "Rebuild the index from the last commit, every file staying as it is"
+    : good.length
+      ? `The last commit has a good copy${lost.length ? ` of the ${files}` : many(good, "", " of each")}. Restore ${many(good, "it", "them")}`
+      : "";
+  // run from inside the session (restart's comment), by Claude or by him
+  const run =
+    steps &&
+    `${lost.length ? "\n" : " "}${steps} (Claude can run ${many(commands, "this", "these")} for you):` +
+      commands.map((command) => `\n  git -C ~/.dotfiles ${command}`).join("");
+  // a file under ~/.claude reaches this session once Claude Code starts
+  // again, after GitHub's copy when the last commit's is unreadable
+  const after = live.length
+    ? restart(
+        live.some(({ unreadable }) => unreadable) ? `Once ${many(live, "it's", "they're")} restored,` : "Then",
+        `the restored ~/.claude ${many(live, "file", "files")}`,
+      )
+    : "";
+  return `WARNING: ${said}.${edits}${unread}${run}${after}`;
 };
 
 // the line, for Claude alone, that leads the warning in its context
