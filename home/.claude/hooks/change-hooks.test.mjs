@@ -2186,12 +2186,174 @@ describe("usage", () => {
   });
 });
 
-test("main-session: prints main-session.md at session start, whatever the source", () => {
-  const text = readFileSync(join(HOOKS, "main-session.md"), "utf8");
-  for (const source of ["startup", "resume", "clear", "compact"]) {
-    const ran = runHook("main-session", { hook_event_name: "SessionStart", session_id: "s", cwd: HOOKS, source });
-    assert.deepEqual(JSON.parse(ran.stdout).hookSpecificOutput, { hookEventName: "SessionStart", additionalContext: text }, source);
-  }
+// main-session.mjs at a session's start, in a scratch HOME (live()) whose
+// ~/.dotfiles has a file of each kind the check tells apart
+describe("main-session", () => {
+  const RULES = readFileSync(join(HOOKS, "main-session.md"), "utf8");
+  const FOR_CLAUDE =
+    "The session-start check of ~/.dotfiles found the damage below. Tell the user first in your next reply, before " +
+    "anything else, and offer to run its git commands, saving any text it says to copy out first. A file restored " +
+    "under ~/.claude takes effect once Claude Code restarts; quitting prints the command that reopens this conversation.";
+  // how a live file's warning ends, its restores run from inside the session
+  const RUN = (n) => ` (Claude can run ${n > 1 ? "these" : "this"} for you):`;
+  const RESTART = "\nThen quit Claude Code and start it again, so it reads the restored file";
+
+  // live()'s HOME, its ~/.dotfiles holding the rules file and a skill (live
+  // in sessions), a doc (not), a binary file and one empty in the commit
+  const dotfiles = () => {
+    const state = live();
+    mkdirSync(join(state.repo, "home/.claude/skills/change"), { recursive: true });
+    mkdirSync(join(state.repo, "docs"));
+    commit(state.repo, "home/.claude/CLAUDE.md", "rules\nmore rules\n");
+    commit(state.repo, "home/.claude/skills/change/SKILL.md", "skill text\n");
+    commit(state.repo, "docs/log.md", "log\n");
+    commit(state.repo, "logo.png", "\x89PNG\0\0\x01");
+    commit(state.repo, ".keep", "");
+    return state;
+  };
+
+  // the hook's output at a session start in `home`: the warning the user
+  // sees (null when none), and what Claude gets
+  const start = (home) => {
+    const ran = runHook("main-session", { hook_event_name: "SessionStart", session_id: "s", cwd: home, source: "startup" }, { env: { ...process.env, HOME: home } });
+    assert.equal(ran.status, 0, ran.stderr);
+    const { systemMessage = null, hookSpecificOutput } = JSON.parse(ran.stdout);
+    assert.equal(hookSpecificOutput.hookEventName, "SessionStart");
+    return { warning: systemMessage, context: hookSpecificOutput.additionalContext };
+  };
+
+  // the warning's git commands, each run as the user or Claude would
+  const runCommands = (home, warning) => {
+    const commands = warning.split("\n").filter((line) => line.startsWith("  git "));
+    assert.ok(commands.length, warning);
+    for (const command of commands) execFileSync("sh", ["-c", command], { env: { ...process.env, HOME: home }, stdio: "ignore" });
+  };
+
+  test("no ~/.dotfiles, or a sound one: main-session.md alone", () => {
+    for (const home of [live({ dotfiles: false }).home, dotfiles().home]) assert.deepEqual(start(home), { warning: null, context: RULES });
+  });
+
+  test("the user's edits are no damage: text changed, a file removed, a binary or empty-in-the-commit file emptied or nulled", () => {
+    const { repo, home } = dotfiles();
+    appendFileSync(join(repo, "home/.claude/CLAUDE.md"), "a rule of mine\n");
+    rmSync(join(repo, "docs/log.md"));
+    writeFileSync(join(repo, "home/.claude/skills/change/SKILL.md"), "rewritten\n");
+    writeFileSync(join(repo, "logo.png"), "");
+    writeFileSync(join(repo, ".keep"), "\0\0");
+    assert.deepEqual(start(home), { warning: null, context: RULES });
+  });
+
+  test("a live file empty and another all null bytes (2026-11-23): one warning, to both readers, whose commands restore them", () => {
+    const { repo, home } = dotfiles();
+    writeFileSync(join(repo, "home/.claude/CLAUDE.md"), "");
+    writeFileSync(join(repo, "docs/log.md"), "\0".repeat(4096));
+    const warning =
+      "WARNING: this session started with ~/.claude/CLAUDE.md empty, likely from a crash, and ~/.dotfiles/docs/log.md is all null bytes. " +
+      `The last commit has a good copy of each. Restore them${RUN(2)}\n` +
+      "  git -C ~/.dotfiles checkout HEAD -- home/.claude/CLAUDE.md\n" +
+      `  git -C ~/.dotfiles checkout HEAD -- docs/log.md${RESTART}s.`;
+    assert.deepEqual(start(home), { warning, context: `${FOR_CLAUDE}\n\n${warning}\n\n${RULES}` });
+    runCommands(home, warning);
+    assert.equal(readFileSync(join(repo, "home/.claude/CLAUDE.md"), "utf8"), "rules\nmore rules\n");
+    assert.deepEqual(start(home), { warning: null, context: RULES });
+  });
+
+  test("only a file no session reads: no restart asked; damage already staged: restored all the same", () => {
+    const { repo, home } = dotfiles();
+    writeFileSync(join(repo, "docs/log.md"), "");
+    git(repo, "add", "docs/log.md");
+    const { warning } = start(home);
+    assert.equal(
+      warning,
+      `WARNING: ~/.dotfiles/docs/log.md is empty, likely from a crash. The last commit has a good copy. Restore it${RUN(1)}\n` +
+        "  git -C ~/.dotfiles checkout HEAD -- docs/log.md",
+    );
+    runCommands(home, warning);
+    assert.equal(git(repo, "status", "--porcelain"), "");
+  });
+
+  test("a file cut off by null bytes: what's left is the commit's, nothing more said; anything else, copy out his edits first", () => {
+    const { repo, home } = dotfiles();
+    const skill = join(repo, "home/.claude/skills/change/SKILL.md");
+    const damaged = "WARNING: this session started with ~/.claude/skills/change/SKILL.md cut off by null bytes, likely from a crash.";
+    const fix =
+      ` The last commit has a good copy. Restore it${RUN(1)}\n` +
+      `  git -C ~/.dotfiles checkout HEAD -- home/.claude/skills/change/SKILL.md${RESTART}.`;
+    writeFileSync(skill, "skill\0\0\0\0\0\0");
+    assert.equal(start(home).warning, damaged + fix);
+    for (const mine of ["MINE\0\0\0", "skill text\n\0\0more of mine\n"]) {
+      writeFileSync(skill, mine);
+      const copy = " The text left in ~/.claude/skills/change/SKILL.md isn't the last commit's: copy out any edits of yours first.";
+      assert.equal(start(home).warning, damaged + copy + fix, JSON.stringify(mine));
+    }
+  });
+
+  test("git's index damaged, alone or with a file: rebuilt first, then restored, each command working", () => {
+    const { repo, home } = dotfiles();
+    writeFileSync(join(repo, ".git/index"), "\0".repeat(64));
+    const why = "(git says: fatal: index file corrupt), so git status and restore fail there and it stops catching up with GitHub";
+    assert.equal(
+      start(home).warning,
+      `WARNING: git's index in ~/.dotfiles is damaged, likely from a crash ${why}. ` +
+        `Rebuild it from the last commit, every file staying as it is${RUN(1)}\n  git -C ~/.dotfiles read-tree HEAD`,
+    );
+    writeFileSync(join(repo, "home/.claude/CLAUDE.md"), "");
+    const { warning } = start(home);
+    assert.equal(
+      warning,
+      `WARNING: this session started with ~/.claude/CLAUDE.md empty, likely from a crash, and git's index in ~/.dotfiles is damaged ${why}. ` +
+        `Rebuild the index first (every file stays as it is), then restore the file from the last commit's good copy${RUN(2)}\n` +
+        "  git -C ~/.dotfiles read-tree HEAD\n" +
+        `  git -C ~/.dotfiles checkout HEAD -- home/.claude/CLAUDE.md${RESTART}.`,
+    );
+    runCommands(home, warning);
+    assert.equal(git(repo, "status", "--porcelain"), "");
+    assert.deepEqual(start(home), { warning: null, context: RULES });
+  });
+
+  test("git can't read the last commit, or a damaged file's stored copy: says which, and main-session.md still goes", () => {
+    const fsck = "\n  git -C ~/.dotfiles fsck";
+    const head = dotfiles();
+    writeFileSync(join(head.repo, ".git/refs/heads/main"), `${"0".repeat(39)}1\n`);
+    const warning =
+      "WARNING: git can't read the last commit in ~/.dotfiles, likely from a crash (git says: fatal: not a tree object), so this session's rules, " +
+      `hooks and skills under ~/.claude weren't checked for damage. Claude can help repair it from GitHub's copy. To see what's broken:${fsck}` +
+      "\nIf the repair changes a file under ~/.claude, quit Claude Code and start it again, so it reads it.";
+    assert.deepEqual(start(head.home), { warning, context: `${FOR_CLAUDE}\n\n${warning}\n\n${RULES}` });
+    // a damaged file leads as when its copy can be read, and a live one asks
+    // for the restart
+    const lose = (path, mine) => {
+      const { repo, home } = dotfiles();
+      const sha = git(repo, "rev-parse", `HEAD:${path}`);
+      rmSync(join(repo, ".git/objects", sha.slice(0, 2), sha.slice(2)));
+      writeFileSync(join(repo, path), mine);
+      return { home, why: `(git says: fatal: git cat-file ${sha}: bad file), so there's no good copy here, and` };
+    };
+    const unchecked = "this session's rules, hooks and skills under ~/.claude weren't checked for damage. Claude can help restore it from GitHub's copy.";
+    const doc = lose("docs/log.md", "");
+    assert.equal(
+      start(doc.home).warning,
+      `WARNING: ~/.dotfiles/docs/log.md is empty, likely from a crash, and git can't read the last commit's copy of it ${doc.why} ` +
+        `${unchecked} To see what else is broken:${fsck}`,
+    );
+    const rules = lose("home/.claude/CLAUDE.md", "rules\0\0");
+    assert.equal(
+      start(rules.home).warning,
+      "WARNING: this session started with ~/.claude/CLAUDE.md holding null bytes, likely from a crash, and git can't read the last commit's copy " +
+        `of it ${rules.why} the rest of ${unchecked} To see what else is broken:${fsck}` +
+        "\nOnce it's restored, quit Claude Code and start it again, so it reads the restored file.",
+    );
+  });
+
+  test("runs beside an emptied lib.mjs (a stop can empty any file in ~/.claude/hooks)", () => {
+    const hooks = scratchDir();
+    for (const file of ["main-session.mjs", "main-session.md"]) copyFileSync(join(HOOKS, file), join(hooks, file));
+    writeFileSync(join(hooks, "lib.mjs"), "");
+    const { repo, home } = dotfiles();
+    writeFileSync(join(repo, "home/.claude/CLAUDE.md"), "");
+    const ran = spawnSync(process.execPath, [join(hooks, "main-session.mjs")], { input: "{}", encoding: "utf8", env: { ...process.env, HOME: home } });
+    assert.match(JSON.parse(ran.stdout).systemMessage, /^WARNING: this session started with ~\/\.claude\/CLAUDE\.md empty, /);
+  });
 });
 
 // pr-conflict.mjs, fed a Bash call as Claude Code runs it, with a fake gh

@@ -35,7 +35,9 @@
 // files empty or full of null bytes, with HEAD moved and no index.lock
 // (2026-11-23: the global CLAUDE.md came back empty, and every session
 // after ran without it). So once the merge is done, `sync -f` writes the
-// filesystem's data back, ~10 ms most runs.
+// filesystem's data back, ~10 ms most runs; what a stop still damages
+// (one before the sync, or another writer's file), main-session.mjs warns
+// of at the next session start.
 import { existsSync, lstatSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
