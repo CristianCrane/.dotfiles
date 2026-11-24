@@ -93,13 +93,13 @@ const runHook = (name, input, { args = [], ...options } = {}) =>
     ...options,
   });
 
-// a fake gh, for a folder (`bin`, its own unless given) put first on
-// PATH: an sh script that logs each run's arguments, a line each, to
-// gh-args beside it, then runs `body`; that folder and log
-const fakeGh = (body, bin = scratchDir()) => {
+// a fake `name` (gh, sync), for a folder (`bin`, its own unless given)
+// put first on PATH: an sh script that logs each run's arguments, a line
+// each, to <name>-args beside it, then runs `body`; that folder and log
+const fakeCommand = (name, body, bin = scratchDir()) => {
   mkdirSync(bin, { recursive: true });
-  const log = join(bin, "gh-args");
-  writeFileSync(join(bin, "gh"), `#!/bin/sh\necho "$*" >> "${log}"\n${body}\n`, { mode: 0o755 });
+  const log = join(bin, `${name}-args`);
+  writeFileSync(join(bin, name), `#!/bin/sh\necho "$*" >> "${log}"\n${body}\n`, { mode: 0o755 });
   return { bin, log };
 };
 
@@ -118,6 +118,36 @@ const commit = (repo, file, text) => {
   writeFileSync(join(repo, file), text);
   git(repo, "add", file);
   git(repo, "commit", "-qm", file);
+};
+
+// a scratch HOME whose .dotfiles links to a clone of a bare origin (as
+// ~/.dotfiles links to the main checkout), never the real one: the live
+// clone, its HOME, and `merged(file, text)`, which lands a commit on
+// origin's main from a second clone, standing for a PR merged on GitHub;
+// with `dotfiles` false, HOME has no .dotfiles
+const live = ({ dotfiles = true } = {}) => {
+  const dir = scratchDir();
+  const origin = join(dir, "origin.git");
+  git(dir, "init", "-q", "--bare", "-b", "main", origin);
+  const repo = join(dir, "live");
+  git(dir, "clone", "-q", origin, repo);
+  commit(repo, "a.txt", "a\n");
+  commit(repo, "b.txt", "b\n");
+  git(repo, "push", "-q", "origin", "main");
+  const other = join(dir, "other");
+  git(dir, "clone", "-q", origin, other);
+  const home = join(dir, "home");
+  mkdirSync(home);
+  if (dotfiles) symlinkSync(repo, join(home, ".dotfiles"));
+  const merged = (file, text) => {
+    if (text === null) git(other, "rm", "-q", file);
+    else writeFileSync(join(other, file), text);
+    git(other, "add", "-A");
+    git(other, "commit", "-qm", file);
+    git(other, "push", "-q", "origin", "main");
+    return git(other, "rev-parse", "HEAD");
+  };
+  return { dir, origin, repo, home, merged };
 };
 
 // one of the change skill's files for BRANCH, where lib looks for it
@@ -1255,7 +1285,8 @@ describe("prune-merged", () => {
     const bin = scratchDir();
     writeFileSync(join(bin, "prs.json"), JSON.stringify(prs));
     const repo = JSON.stringify({ data: { viewer: { login: "me" }, repository: { defaultBranchRef: { name: "main" } } } });
-    return fakeGh(
+    return fakeCommand(
+      "gh",
       down ? `echo "error connecting to api.github.com" >&2; exit 1` : `if [ "$1" = api ]; then echo '${repo}'; else cat "${join(bin, "prs.json")}"; fi`,
       bin,
     ).bin;
@@ -1521,7 +1552,8 @@ describe("red-checks", () => {
     };
     writeFileSync(join(bin, "api.json"), JSON.stringify({ data: { repository } }));
     writeFileSync(join(bin, "runs.json"), JSON.stringify(runs.map(([workflowName, conclusion]) => ({ workflowName, conclusion, url: `https://github.com/o/r/actions/runs/${workflowName}-${conclusion}` }))));
-    return fakeGh(
+    return fakeCommand(
+      "gh",
       down
         ? `echo "error connecting to api.github.com" >&2; exit 1`
         : `if [ "$1" = api ]; then cat "${join(bin, "api.json")}"; else cat "${join(bin, "runs.json")}"; fi`,
@@ -1585,38 +1617,8 @@ describe("red-checks", () => {
   });
 });
 
-// catch-up.mjs at a session's start, in a scratch HOME whose .dotfiles
-// links to a clone of a bare origin (as ~/.dotfiles links to the main
-// checkout), never the real one; a second clone pushes, standing for a PR
-// merged on GitHub
+// catch-up.mjs at a session's start, in a scratch HOME (live())
 describe("catch-up", () => {
-  // the live clone, its HOME, and `merged(file, text)`, which lands a
-  // commit on origin's main from elsewhere; with `dotfiles` false, HOME
-  // has no .dotfiles
-  const live = ({ dotfiles = true } = {}) => {
-    const dir = scratchDir();
-    const origin = join(dir, "origin.git");
-    git(dir, "init", "-q", "--bare", "-b", "main", origin);
-    const repo = join(dir, "live");
-    git(dir, "clone", "-q", origin, repo);
-    commit(repo, "a.txt", "a\n");
-    commit(repo, "b.txt", "b\n");
-    git(repo, "push", "-q", "origin", "main");
-    const other = join(dir, "other");
-    git(dir, "clone", "-q", origin, other);
-    const home = join(dir, "home");
-    mkdirSync(home);
-    if (dotfiles) symlinkSync(repo, join(home, ".dotfiles"));
-    const merged = (file, text) => {
-      if (text === null) git(other, "rm", "-q", file);
-      else writeFileSync(join(other, file), text);
-      git(other, "add", "-A");
-      git(other, "commit", "-qm", file);
-      git(other, "push", "-q", "origin", "main");
-      return git(other, "rev-parse", "HEAD");
-    };
-    return { dir, origin, repo, home, merged };
-  };
   // the hook's run from a session in another folder; what it said (its
   // systemMessage, or "")
   const start = ({ home }) => {
@@ -1853,9 +1855,9 @@ describe("usage", () => {
       const file = join(home, ".claude/usage/windows.jsonl");
       return existsSync(file) ? lines(readFileSync(file, "utf8")).map((line) => JSON.parse(line)) : [];
     };
-    // gh on PATH (fakeGh, in HOME/bin), then a run of usage
+    // gh on PATH (fakeCommand, in HOME/bin), then a run of usage
     const gh = (body) => {
-      const { bin } = fakeGh(body, join(home, "bin"));
+      const { bin } = fakeCommand("gh", body, join(home, "bin"));
       return (args) => run(args, undefined, { env: { ...process.env, HOME: home, PATH: `${bin}:${process.env.PATH}` } });
     };
     return { home, run, ledger, agent, session, windows, readings, gh };
@@ -2188,7 +2190,8 @@ describe("pr-conflict", () => {
     const bin = scratchDir();
     answers.forEach((answer, at) => writeFileSync(join(bin, `answer-${at + 1}`), answer ? JSON.stringify(answer) : ""));
     copyFileSync(join(bin, `answer-${answers.length}`), join(bin, "answer-last"));
-    const { log } = fakeGh(
+    const { log } = fakeCommand(
+      "gh",
       [
         `pwd >> "${join(bin, "gh-cwd")}"`,
         `f="${bin}/answer-$(wc -l < "${join(bin, "gh-args")}" | tr -d ' ')"`,
