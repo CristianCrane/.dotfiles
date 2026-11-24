@@ -2360,17 +2360,18 @@ describe("main-session", () => {
     writeFileSync(join(both.repo, "home/.claude/CLAUDE.md"), "");
     writeFileSync(join(both.repo, "home/.claude/skills/change/SKILL.md"), "");
     const lead = "WARNING: this session started with ~/.claude/CLAUDE.md empty and ~/.claude/skills/change/SKILL.md empty, likely from a crash";
-    const lost = ` git can't read the last commit's copy of ~/.claude/skills/change/SKILL.md (git says: ${skillLost}), ${help}\n`;
+    // the one-line restore leads, by its command, then the one git can't read
     const restore = "\n  git -C ~/.dotfiles checkout HEAD -- home/.claude/CLAUDE.md";
+    const lost = `\ngit can't read the last commit's copy of ~/.claude/skills/change/SKILL.md (git says: ${skillLost}), ${help}`;
     const after = "\nOnce they're restored, quit Claude Code and start it again, so it reads the restored ~/.claude files.";
-    assert.equal(start(both.home).warning, `${lead}.${lost}The last commit has a good copy of the other file. Restore it${RUN(1)}${restore}${after}`);
+    assert.equal(start(both.home).warning, `${lead}. The last commit has a good copy of the file below. Restore it${RUN(1)}${restore}${lost}${after}`);
     writeFileSync(join(both.repo, ".git/index"), "\0".repeat(64));
     const { warning } = start(both.home);
     assert.equal(
       warning,
       `${lead}, and git's index in ~/.dotfiles is damaged (git says: fatal: index file corrupt), so git status and restore fail there and it ` +
-        `stops catching up with GitHub.${lost}Rebuild the index first (every file stays as it is), then restore the other file from the last ` +
-        `commit's good copy${RUN(2)}\n  git -C ~/.dotfiles read-tree HEAD${restore}${after}`,
+        "stops catching up with GitHub. Rebuild the index first (every file stays as it is), then restore the file below from the last " +
+        `commit's good copy${RUN(2)}\n  git -C ~/.dotfiles read-tree HEAD${restore}${lost}${after}`,
     );
     runCommands(both.home, warning.replace(/\n {2}git -C ~\/\.dotfiles fsck/, ""));
     assert.equal(readFileSync(join(both.repo, "home/.claude/CLAUDE.md"), "utf8"), "rules\nmore rules\n");

@@ -157,13 +157,13 @@ const words = (index, found) => {
     ? ` The text left in ${list(edited.map(name))} isn't the last commit's: copy out any edits of yours first.`
     : "";
   const unread = lost.length
-    ? ` git can't read the last commit's copy of ${list(lost.map(name))} (git says: ` +
+    ? `git can't read the last commit's copy of ${list(lost.map(name))} (git says: ` +
       `${lost.map(({ unreadable }) => unreadable).join("; ")}), so there's no good copy here: Claude can help ` +
       `restore ${many(lost, "it", "them")} from GitHub's copy. To see what else is broken:${FSCK}`
     : "";
   const commands = [...(index ? ["read-tree HEAD"] : []), ...good.map(({ path }) => `checkout HEAD -- ${path}`)];
-  // the good ones, after any unreadable: "the other file"
-  const files = `${lost.length ? "other " : ""}file${many(good, "", "s")}`;
+  // the good ones, by their commands when an unreadable one is named too
+  const files = `file${many(good, "", "s")}${lost.length ? " below" : ""}`;
   const steps = index
     ? good.length
       ? `Rebuild the index first (every file stays as it is), then restore the ${files} from the last commit's good ${many(good, "copy", "copies")}`
@@ -171,10 +171,11 @@ const words = (index, found) => {
     : good.length
       ? `The last commit has a good copy${lost.length ? ` of the ${files}` : many(good, "", " of each")}. Restore ${many(good, "it", "them")}`
       : "";
-  // run from inside the session (restart's comment), by Claude or by him
+  // run from inside the session (restart's comment), by Claude or by him;
+  // the one-line restores lead, before the unreadable ones' longer repair
   const run =
     steps &&
-    `${lost.length ? "\n" : " "}${steps} (Claude can run ${many(commands, "this", "these")} for you):` +
+    ` ${steps} (Claude can run ${many(commands, "this", "these")} for you):` +
       commands.map((command) => `\n  git -C ~/.dotfiles ${command}`).join("");
   // a file under ~/.claude reaches this session once Claude Code starts
   // again, after GitHub's copy when the last commit's is unreadable
@@ -184,7 +185,9 @@ const words = (index, found) => {
         `the restored ~/.claude ${many(live, "file", "files")}`,
       )
     : "";
-  return `WARNING: ${said}.${edits}${unread}${run}${after}`;
+  // the unreadable ones on a line of their own after any commands
+  const lostAfter = unread && `${run ? "\n" : " "}${unread}`;
+  return `WARNING: ${said}.${edits}${run}${lostAfter}${after}`;
 };
 
 // the line, for Claude alone, that leads the warning in its context
