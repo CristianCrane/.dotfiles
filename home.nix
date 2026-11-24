@@ -120,17 +120,21 @@ in
           [[ $f == settings.json || ! -L $link ]] && cost="any of your hooks"
         done
         (( $#restore + $#unlinked )) || { command claude "$@"; return }
-        # each a list of paths: "a is" or "a and b are"
-        local crash=() said=()
+        # each a list of paths: "a is" or "a and b are"; with one path in
+        # all, "it" once the first line has named it
+        local -a fix=($empty $nul $deleted)
+        local -aU all=($fix $unlinked)
+        local crash=() said=() it=
+        (( $#all == 1 )) && it=it
         (( $#empty )) && crash+=("''${(j: and :)empty} ''${''${empty[2]:+are}:-is} empty")
         (( $#nul )) && crash+=("''${(j: and :)nul} ''${''${nul[2]:+hold}:-holds} null bytes")
         (( $#crash )) && said+=("''${(j: and :)crash}, likely from a crash")
         (( $#deleted )) && said+=("''${(j: and :)deleted} ''${''${deleted[2]:+are}:-is} deleted in ~/.dotfiles")
-        (( $#unlinked )) && said+=("''${(j: and :)unlinked} ''${''${unlinked[2]:+aren't}:-isn't} linked")
+        (( $#unlinked )) && said+=("''${''${said:+$it}:-''${(j: and :)unlinked}} ''${''${unlinked[2]:+aren't}:-isn't} linked")
         print -u2 -r "Claude Code didn't start: ''${(j:, and :)said}, so it would run without ''${cost:-main-session.md's rules or its check for other damaged files}."
-        (( $#kept )) && print -u2 -r "''${(j: and :)kept} still ''${''${kept[2]:+hold}:-holds} some text: copy out any edits of yours first."
-        (( $#restore )) && print -u2 -r "Restore ''${''${restore[2]:+them}:-it} from the last commit''${deleted:+ (unless you deleted ''${(j: and :)deleted} on purpose)}:"$'\n'"  git -C ~/.dotfiles checkout HEAD -- $restore"
-        (( $#unlinked )) && print -u2 -r "Run rebuild to link ''${(j: and :)unlinked} again."
+        (( $#kept )) && print -u2 -r "Copy out any edits of yours first: ''${it:-''${(j: and :)kept}} still ''${''${kept[2]:+hold}:-holds} some text."
+        (( $#restore )) && print -u2 -r "Restore ''${it:-''${''${fix[2]:+them}:-$fix}} from the last commit''${deleted:+ (unless you deleted ''${it:-''${(j: and :)deleted}} on purpose)}:"$'\n'"  git -C ~/.dotfiles checkout HEAD -- $restore"
+        (( $#unlinked )) && print -u2 -r "Run rebuild to link ''${it:-''${(j: and :)unlinked}} again."
         print -u2 -r "Then run claude again, or start it anyway with:" command claude ''${(q)@}
         return 1
       }
