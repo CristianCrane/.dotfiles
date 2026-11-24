@@ -91,6 +91,40 @@ in
     initContent = ''
       unset DISPLAY WAYLAND_DISPLAY
       gui() { DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 "$@" }
+
+      # Claude Code runs no hook when ~/.claude/settings.json is damaged
+      # (empty or holding null bytes, as a machine stop leaves a file) or
+      # gone, and a damaged hooks/main-session.mjs can't warn of itself, so
+      # this checks both first. It won't start Claude Code then, as its full
+      # screen would hide a warning; `command claude` starts it anyway. Not
+      # for nvim's claudecode, which runs claude with no shell.
+      claude() {
+        local f crash=() other=() restore=() relink=() cost on=
+        for f in settings.json hooks/main-session.mjs; do
+          if [[ ! -e ~/.dotfiles/home/.claude/$f ]]; then
+            other+=("~/.claude/$f is deleted in ~/.dotfiles") restore+=(home/.claude/$f) on=1
+          elif [[ ! -e ~/.claude/$f ]]; then
+            other+=("~/.claude/$f isn't linked") relink+=("~/.claude/$f")
+          elif [[ ! -s ~/.claude/$f ]]; then
+            crash+=("~/.claude/$f is empty") restore+=(home/.claude/$f)
+          elif [[ $(<~/.claude/$f) == *$'\0'* ]]; then
+            crash+=("~/.claude/$f holds null bytes") restore+=(home/.claude/$f)
+          else
+            continue
+          fi
+          [[ $f == settings.json ]] && cost="any of your hooks"
+        done
+        (( $#crash + $#other )) || { command claude "$@"; return }
+        local said=() it=it
+        (( $#crash )) && said+=("''${(j: and :)crash}, likely from a crash")
+        (( $#other )) && said+=("''${(j: and :)other}")
+        print -u2 -r "Claude Code didn't start: ''${(j:, and :)said}, so it would run without ''${cost:-main-session.md's rules or its check for other damaged files}."
+        (( $#restore > 1 )) && it=them
+        (( $#restore )) && print -u2 -r "Restore $it from the last commit''${on:+, unless you deleted $it on purpose}:"$'\n'"  git -C ~/.dotfiles checkout HEAD -- $restore"
+        (( $#relink )) && print -u2 -r "Run rebuild to link ''${(j: and :)relink} again."
+        print -u2 -r "Then run claude again, or start it anyway with:" command claude ''${(q)@}
+        return 1
+      }
     '';
   };
 
