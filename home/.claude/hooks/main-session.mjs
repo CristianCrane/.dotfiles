@@ -17,8 +17,10 @@
 //
 // It imports nothing of ours (lib.mjs is a file a stop can empty too) and
 // checks in a try of its own, so main-session.md goes out whatever the
-// check met. Its blind spots: an empty ~/.claude/settings.json runs no
-// hook, and an empty copy of this file says nothing.
+// check met. What it can't see, as it never runs: a damaged
+// ~/.claude/settings.json runs no hook, and a damaged copy of this file
+// says nothing. home.nix's zsh `claude()` checks both before Claude Code
+// starts (from zsh, after a rebuild; not from nvim's claudecode).
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";

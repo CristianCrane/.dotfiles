@@ -91,6 +91,53 @@ in
     initContent = ''
       unset DISPLAY WAYLAND_DISPLAY
       gui() { DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 "$@" }
+
+      # Claude Code runs no hook when ~/.claude/settings.json is damaged
+      # (empty or holding null bytes, as a machine stop leaves a file, the
+      # rule hooks/main-session.mjs's damage() keeps), gone or unlinked, and
+      # a damaged hooks/main-session.mjs can't warn of itself, so this checks
+      # both first. It won't start Claude Code then, as its full screen would
+      # hide a warning; `command claude` starts it anyway. Not for nvim's
+      # claudecode, which runs claude with no shell.
+      claude() {
+        local f link file empty=() nul=() kept=() deleted=() unlinked=() restore=() cost
+        for f in settings.json hooks/main-session.mjs; do
+          # rebuild links ~/.claude/settings.json and the hooks folder into ~/.dotfiles
+          link=~/.claude/''${f%%/*} file=~/.dotfiles/home/.claude/$f
+          [[ -L $link ]] || unlinked+=("~/.claude/''${f%%/*}")
+          if [[ ! -e $file ]]; then
+            deleted+=("~/.claude/$f") restore+=(home/.claude/$f)
+          elif [[ ! -s $file ]]; then
+            empty+=("~/.claude/$f") restore+=(home/.claude/$f)
+          elif [[ $(<$file) == *$'\0'* ]]; then
+            nul+=("~/.claude/$f") restore+=(home/.claude/$f)
+            # text left besides the null bytes may hold an edit not yet
+            # committed (quoted: unquoted, the null bytes stay in)
+            [[ -n "''${$(<$file)//$'\0'}" ]] && kept+=("~/.claude/$f")
+          elif [[ -L $link ]]; then
+            continue
+          fi
+          [[ $f == settings.json || ! -L $link ]] && cost="any of your hooks"
+        done
+        (( $#restore + $#unlinked )) || { command claude "$@"; return }
+        # each a list of paths: "a is" or "a and b are"; with one path in
+        # all, "it" once the first line has named it
+        local -a fix=($empty $nul $deleted)
+        local -aU all=($fix $unlinked)
+        local crash=() said=() it=
+        (( $#all == 1 )) && it=it
+        (( $#empty )) && crash+=("''${(j: and :)empty} ''${''${empty[2]:+are}:-is} empty")
+        (( $#nul )) && crash+=("''${(j: and :)nul} ''${''${nul[2]:+hold}:-holds} null bytes")
+        (( $#crash )) && said+=("''${(j: and :)crash}, likely from a crash")
+        (( $#deleted )) && said+=("''${(j: and :)deleted} ''${''${deleted[2]:+are}:-is} deleted in ~/.dotfiles")
+        (( $#unlinked )) && said+=("''${''${said:+$it}:-''${(j: and :)unlinked}} ''${''${unlinked[2]:+aren't}:-isn't} linked")
+        print -u2 -r "Claude Code didn't start: ''${(j:, and :)said}, so it would run without ''${cost:-main-session.md's rules or its check for other damaged files}."
+        (( $#kept )) && print -u2 -r "Copy out any edits of yours first: ''${it:-''${(j: and :)kept}} still ''${''${kept[2]:+hold}:-holds} some text."
+        (( $#restore )) && print -u2 -r "Restore ''${it:-''${''${fix[2]:+them}:-$fix}} from the last commit''${deleted:+ (unless you deleted ''${it:-''${(j: and :)deleted}} on purpose)}:"$'\n'"  git -C ~/.dotfiles checkout HEAD -- $restore"
+        (( $#unlinked )) && print -u2 -r "Run rebuild to link ''${it:-''${(j: and :)unlinked}} again."
+        print -u2 -r "Then run claude again, or start it anyway with:" command claude ''${(q)@}
+        return 1
+      }
     '';
   };
 
