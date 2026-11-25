@@ -30,7 +30,8 @@
 // - A single read is a step whose one call reads (`reads`): the change
 //   skill asks for a step's reads in one turn.
 import { readFileSync } from "node:fs";
-import { jsonLines, reviewFiles } from "./lib.mjs";
+import { jsonLines } from "./lib.mjs";
+import { reviewFiles } from "./lib.mjs";
 
 const GAP = 5 * 60 * 1000;
 
