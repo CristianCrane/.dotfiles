@@ -48,9 +48,11 @@
 // From UserPromptSubmit and PostToolUse on Agent (`--hook` too), in a main
 // session only, it brings a finished agent's Tokens line and where its
 // time and tokens went into the main session's context, so the update to
-// the user carries them with nobody asking (a node start on every prompt
-// and every Agent return, ~30 ms; on a finished agent, the ledger's parse
-// too, ~0.3 s for a 15 MB ledger, 2026-11-25): a background agent's on the
+// the user carries them with nobody asking (~40 ms on every prompt and
+// every Agent return, node's start most of it; on every task notification,
+// a background shell's too, the ledger's parse as well, ~0.22 s for a
+// 15 MB ledger; medians of 7 at a load of 0.2 to 0.5 on 12 cores,
+// 2026-11-25): a background agent's on the
 // prompt that is its `<task-notification>` (each `<task-id>` with rows),
 // a foreground one's on its Agent call's return (`status: "completed"`
 // and its `agentId`). The agent's last stop is recorded before either

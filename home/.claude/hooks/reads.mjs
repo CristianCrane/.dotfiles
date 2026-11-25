@@ -16,7 +16,7 @@
 // Claude Code writes the transcript behind the run (live 2026-11-25, a
 // step's PostToolUse read the file without that step once in four), and
 // one line per call: a call not written yet leaves its step unknown, so it
-// stays silent, and the nudge comes at a later call, a step late at most.
+// stays silent, and only a later read whose step is written can nudge.
 // It says so at most once in an agent's 10 steps (the step before the
 // nudge, kept in the temp dir).
 //
