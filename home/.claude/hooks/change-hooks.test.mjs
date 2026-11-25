@@ -11,7 +11,8 @@
 // work), red-checks (the SessionStart hook that names what is red),
 // catch-up (the SessionStart hook that fast-forwards ~/.dotfiles),
 // usage (the ledger of tokens spent, its reports, and the
-// SessionStart check that the weekly review is due), main-session (the
+// SessionStart check that the weekly review is due), steps (one agent's
+// profile from its transcript), main-session (the
 // main session's SessionStart message), pr-conflict (the note that a PR
 // conflicting with its base runs no CI), settings-format, and the repo's
 // .githooks (pre-commit, which runs settings-format, and post-commit). Run
@@ -49,12 +50,13 @@ import {
   utimesSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
+import { availableParallelism, tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { after, describe, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { cwdFor, lines, stateFile, substitutions, workOf } from "./lib.mjs";
 import { formatSettings } from "./settings-format.mjs";
+import * as steps from "./steps.mjs";
 
 const HOOKS = dirname(fileURLToPath(import.meta.url));
 const BRANCH = "feature";
@@ -1841,6 +1843,8 @@ describe("usage", () => {
     mkdirSync(join(project, "s1/subagents"), { recursive: true });
     const run = (args, input, options) => runHook("usage", input, { args, env: { ...process.env, HOME: home }, ...options });
     const ledger = () => lines(readFileSync(join(home, ".claude/usage/ledger.jsonl"), "utf8")).map((line) => JSON.parse(line));
+    // --agent's first line; the breakdown after it has a test of its own
+    const tokensOf = (id) => run(["--agent", id]).stdout.split("\n")[0];
     // an agent's transcript and meta.json, and its stop
     const agent = (id, entries, meta, type = "general-purpose") => {
       const transcript = join(project, `s1/subagents/agent-${id}.jsonl`);
@@ -1859,7 +1863,7 @@ describe("usage", () => {
     };
     const session = (id, entries) => {
       const transcript = join(project, `${id}.jsonl`);
-      appendFileSync(transcript, jsonl(entries));
+      appendFileSync(transcript, typeof entries === "string" ? entries : jsonl(entries));
       return run(["--hook"], { hook_event_name: "Stop", session_id: id, cwd: "/w/repo", transcript_path: transcript });
     };
     // the plan's windows as a status line's input gives them: each window's
@@ -1878,7 +1882,7 @@ describe("usage", () => {
       const { bin } = fakeCommand("gh", body, join(home, "bin"));
       return (args) => run(args, undefined, { env: { ...process.env, HOME: home, PATH: `${bin}:${process.env.PATH}` } });
     };
-    return { home, run, ledger, agent, session, windows, readings, gh };
+    return { home, run, ledger, tokensOf, agent, session, windows, readings, gh };
   };
 
   test("--hook: a row per message once, only what's new at each stop, and the agent's place", () => {
@@ -1898,10 +1902,117 @@ describe("usage", () => {
     const stops = rows.filter((row) => row.kind === "agent");
     assert.equal(stops.length, 3);
     assert.deepEqual(
-      { ...stops[0], at: undefined },
-      { kind: "agent", at: undefined, session: "s1", agent: "a1", parent: null, depth: 1, type: "general-purpose", description: "Fix issue 1", effort: "high", cwd: "/w/repo" },
+      { ...stops[0], at: undefined, load: undefined },
+      { kind: "agent", at: undefined, session: "s1", agent: "a1", parent: null, depth: 1, type: "general-purpose", description: "Fix issue 1", effort: "high", cwd: "/w/repo", load: undefined },
+    );
+    // the machine's load at each stop, and the agent's whole profile so far
+    assert.ok(stops.every((stop) => typeof stop.load === "number"));
+    assert.deepEqual(
+      rows.filter((row) => row.kind === "steps").map((row) => [row.agent, row.steps]),
+      [["a1", 1], ["a1", 2], ["a1", 3]],
     );
     assert.doesNotMatch(JSON.stringify(rows), /never keeps/);
+  });
+
+  // plan review F10: session 3d4158ee's transcript gained a line of 2,030
+  // NULs (2026-11-23), and every stop after it failed on that line
+  test("--hook: a line it can't read is skipped and counted, and the stops after it record", () => {
+    const { ledger, agent, session } = scratch();
+    session("s1", said("m1", 100));
+    const nul = "\0".repeat(2030) + "\n";
+    session("s1", nul + jsonl(said("m2", 200)));
+    session("s1", said("m3", 300));
+    agent("a1", nul + jsonl(said("m4", 400)), { description: "Fix issue 1", spawnDepth: 1 });
+    const rows = ledger();
+    assert.deepEqual(rows.filter((row) => row.kind === "message").map((row) => row.id), ["m1", "m2", "m3", "m4"]);
+    assert.deepEqual(
+      rows.filter((row) => row.kind === "agent" || row.kind === "session").map((row) => [row.kind, row.unreadable]),
+      [["session", undefined], ["session", 1], ["session", undefined], ["agent", 1]],
+    );
+  });
+
+  // a builder's tree: its steps `minutes` from now, each rereading
+  // `cacheRead` tokens and calling one tool; its stops come after them all
+  const minutes = (n) => new Date(Date.now() + n * 60_000).toISOString();
+  const stepped = (id, minute, cacheRead, call) => ({
+    type: "assistant",
+    timestamp: minutes(minute),
+    message: {
+      id,
+      model: "claude-opus-5-5",
+      usage: { input_tokens: 0, cache_read_input_tokens: cacheRead, cache_creation_input_tokens: 0, output_tokens: 0 },
+      content: call ? [{ type: "tool_use", id: `${id}-0`, name: call[0], input: call[1] }] : [{ type: "text", text: "done" }],
+    },
+  });
+  // a1 at 5k a step: a read, a plan review, an edit, round 1, its reply;
+  // r1 (10k) began in its plan review and r2 (20k) in its review; x1 has
+  // no steps row
+  const tree = () => {
+    const ran = scratch();
+    const reviewer = { subagent_type: "change-reviewer" };
+    ran.agent("r1", [stepped("r1m", -28, 200_000)], { description: "Plan review", spawnDepth: 2, parentAgentId: "a1" }, "change-reviewer");
+    ran.agent("r2", [stepped("r2m", -9, 400_000)], { description: "Round 1 review", spawnDepth: 2, parentAgentId: "a1" }, "change-reviewer");
+    ran.agent(
+      "a1",
+      [
+        stepped("m1", -30, 100_000, ["Read", { file_path: "/a" }]),
+        stepped("m2", -29, 100_000, ["Agent", reviewer]),
+        stepped("m3", -20, 100_000, ["Edit", { file_path: "/repo/x.ts" }]),
+        stepped("m4", -10, 100_000, ["Agent", reviewer]),
+        stepped("m5", -1, 100_000),
+      ],
+      { description: "Fix issue 1", spawnDepth: 1 },
+      "builder",
+    );
+    appendFileSync(join(ran.home, ".claude/usage/ledger.jsonl"), JSON.stringify({ kind: "agent", at: now, session: "s1", agent: "x1", parent: "a1", type: "Explore" }) + "\n");
+    return ran;
+  };
+
+  test("--agent: the Tokens line, then where it went by stage, agent and kind, with the load at its stops", () => {
+    const { run } = tree();
+    const ran = run(["--agent", "a1"]);
+    assert.equal(ran.status, 0, ran.stderr);
+    const [tokens, ...where] = ran.stdout.trimEnd().split("\n");
+    assert.match(tokens, /^Tokens: .*\(this agent and the 2 it started\)/);
+    assert.equal(where[0], "Where it went (this agent and the 3 below it; weighted tokens, as usage.mjs's header says):");
+    assert.match(where[1], new RegExp(`^- Time: 29m start to end: the model 1m, tools 0s, waiting 0s, 0 compactions 0s\\. Machine load [\\d.]+ on average, [\\d.]+ at most, on ${availableParallelism()} cores \\(3 stops sampled\\)\\.$`));
+    // of 55k: survey 5k, plan review 5k + r1's 10k, build 5k, review 10k + r2's 20k
+    assert.deepEqual(where.slice(2), [
+      "- By stage: survey 9%, plan review 27%, build 9%, review 55%.",
+      "- By agent: itself 45% (5 steps), change-reviewer ×2 55%.",
+      "- Its own steps by kind, share of its cost (steps): agents 40% (2), reading 20% (1), edits 20% (1), replies 20% (1).",
+      "- Its cost by what it reread or wrote: its start 100%.",
+      "- Single reads: 20% of its steps (one call that reads; builders were 47% in the 2026-11-22 usage audit, before the change skill asked for a step's reads in one turn).",
+      "- Not counted: 1 agent below it with no steps recorded (x1).",
+    ]);
+  });
+
+  // a finished agent's report reaches the main session by itself: a
+  // background agent's on its notification, a foreground one's on its
+  // call's return (plan review F5)
+  test("--hook in the main session: a finished agent's report on its notification or its call's return, and nothing else", () => {
+    const { run } = tree();
+    const said = (input) => {
+      const ran = run(["--hook"], { session_id: "s1", cwd: "/w/repo", ...input });
+      assert.equal(ran.status, 0, ran.stderr);
+      return ran.stdout ? JSON.parse(ran.stdout).hookSpecificOutput : null;
+    };
+    const notified = said({ hook_event_name: "UserPromptSubmit", prompt: "<task-notification>\n<task-id>a1</task-id>\n<status>completed</status>\n</task-notification>" });
+    assert.equal(notified.hookEventName, "UserPromptSubmit");
+    assert.match(notified.additionalContext, /^Agent a1 finished \(Fix issue 1\)\. Measured by the usage\.mjs hook from its ledger, for the update \(nothing to run\):\nTokens: .*\nWhere it went \(this agent and the 3 below it/);
+    const returned = said({ hook_event_name: "PostToolUse", tool_name: "Agent", tool_response: { status: "completed", agentId: "r2", content: [] } });
+    assert.equal(returned.hookEventName, "PostToolUse");
+    assert.match(returned.additionalContext, /^Agent r2 finished \(Round 1 review\)\. Measured by the usage\.mjs hook from its ledger, for the update \(nothing to run\):\nTokens: .*\nWhere it went \(this agent;/);
+    for (const input of [
+      // in an agent: its reviewers' reports would sit in its context
+      { hook_event_name: "PostToolUse", agent_id: "a1", tool_name: "Agent", tool_response: { status: "completed", agentId: "r2" } },
+      // a background agent's launch, and a typed prompt
+      { hook_event_name: "PostToolUse", tool_name: "Agent", tool_response: { status: "async_launched", agentId: "r2" } },
+      { hook_event_name: "UserPromptSubmit", prompt: "what did <task-id>a1</task-id> cost?" },
+      // a shell's notification: no agent of that id
+      { hook_event_name: "UserPromptSubmit", prompt: "<task-notification><task-id>b7</task-id></task-notification>" },
+    ])
+      assert.equal(said(input), null, JSON.stringify(input));
   });
 
   // each line is what settings.json's jq one-liner printed for that input,
@@ -1974,7 +2085,7 @@ describe("usage", () => {
   });
 
   test("--agent: the Tokens line is the workstream's share of each window, by what its tokens cost", () => {
-    const { run, agent, windows } = scratch();
+    const { agent, windows, tokensOf } = scratch();
     // a1's workstream: 6M of the 15M cache read, the rest alike message by message
     agent("a1", said("m1", 1_000_000), { description: "Fix issue 1", spawnDepth: 1 });
     agent("r1", said("m2", 2_000_000), { description: "Round 1 review", spawnDepth: 2, parentAgentId: "a1" });
@@ -1985,21 +2096,21 @@ describe("usage", () => {
     // an idle session's older reading of the same windows, and one of a week since reset
     windows([40, 100], [10, 2]);
     windows([99, -1]);
-    assert.equal(run(["--agent", "a1"]).stdout, "Tokens: about 20% of the week, about 8.0% of this 5-hour window (this agent and the 2 it started)\n");
-    assert.equal(run(["--agent", "b1"]).stdout, "Tokens: about 30% of the week, about 12% of this 5-hour window (this agent)\n");
-    assert.equal(run(["--agent", "c1"]).stdout, "Tokens: under 0.1% of the week, under 0.1% of this 5-hour window (this agent)\n");
+    assert.equal(tokensOf("a1"), "Tokens: about 20% of the week, about 8.0% of this 5-hour window (this agent and the 2 it started)");
+    assert.equal(tokensOf("b1"), "Tokens: about 30% of the week, about 12% of this 5-hour window (this agent)");
+    assert.equal(tokensOf("c1"), "Tokens: under 0.1% of the week, under 0.1% of this 5-hour window (this agent)");
     // a 5-hour window that began after the work
     windows(null, [1, 5.5]);
-    assert.equal(run(["--agent", "a1"]).stdout, "Tokens: about 20% of the week, none of this 5-hour window (this agent and the 2 it started)\n");
+    assert.equal(tokensOf("a1"), "Tokens: about 20% of the week, none of this 5-hour window (this agent and the 2 it started)");
   });
 
   test("--agent: a window with no reading, or one that has reset, is left out and the line says why", () => {
-    const { run, agent, windows } = scratch();
+    const { agent, windows, tokensOf } = scratch();
     agent("a1", said("m1", 1_000_000), { description: "Fix issue 1", spawnDepth: 1 });
     windows([50, 100]);
-    assert.equal(run(["--agent", "a1"]).stdout, "Tokens: about 50% of the week (this agent); no reading of this 5-hour window yet\n");
+    assert.equal(tokensOf("a1"), "Tokens: about 50% of the week (this agent); no reading of this 5-hour window yet");
     windows(null, [20, -1]);
-    assert.equal(run(["--agent", "a1"]).stdout, "Tokens: about 50% of the week (this agent); this 5-hour window has reset since its last reading\n");
+    assert.equal(tokensOf("a1"), "Tokens: about 50% of the week (this agent); this 5-hour window has reset since its last reading");
   });
 
   test("--agent: with no window to go by, the Tokens line sums the agent and every agent below it, and only them", () => {
@@ -2018,10 +2129,10 @@ describe("usage", () => {
     const ran = run(["--agent", "a1"]);
     assert.equal(ran.status, 0, ran.stderr);
     assert.equal(
-      ran.stdout,
+      ran.stdout.split("\n")[0],
       "Tokens: 6.0M cache read, 30 cache write, 15 output, 3 input over 3 turns (this agent and the 2 it started); " +
         "no reading of the week yet; no reading of this 5-hour window yet; " +
-        "not counted: up to 2 progress summaries Claude Code forked while it ran\n",
+        "not counted: up to 2 progress summaries Claude Code forked while it ran",
     );
     assert.match(run(["--agent", "b1"]).stdout, /; not counted: up to 2 progress summaries/);
     assert.match(run(["--agent", "x1"]).stdout, /^Tokens: 3\.0M cache read.* over 1 turn \(this agent\); no reading of the week yet/m);
@@ -2127,6 +2238,8 @@ describe("usage", () => {
     assert.match(ran.stdout, /^Merged PRs: o\/a 2, o\/b 1$/m);
     assert.match(ran.stdout, /^ {2}main s1 repo {2,}250k {2,}45\.5%$/m);
     assert.match(ran.stdout, /^ {2}change-reviewer {2,}175k {2,}31\.8% {2,}1$/m);
+    // each agent type's steps: a1's one step at 175k, no single read, one compaction
+    assert.match(ran.stdout, /^ {2}change-reviewer {2,}1 {2,}1 {2,}175k {2,}0\.0% {2,}1\.0 {2,}[\d.]+$/m);
     assert.match(ran.stdout, /^ {2}to .*: 50% at .*; 550k weighted by then, about 11k per 1% \(began before the ledger: reads low\)$/m);
     // gh asked for the account's PRs merged in each week, to the second before it ends
     const from = new Date(`${day(-6)}T00:00`);
@@ -2140,14 +2253,14 @@ describe("usage", () => {
     assert.match(failing.stdout, /^weighted per merged PR {2,}- {2,}-$/m);
   });
 
-  // usage.mjs and lib.mjs in a dotfiles-shaped tree, whose
+  // usage.mjs and the modules it imports in a dotfiles-shaped tree, whose
   // docs/token-review.md is the log the hook reads
   test("--hook at SessionStart: says once a week, at a main session's startup, that the review is due", () => {
     const home = scratchDir();
     const tree = scratchDir();
     mkdirSync(join(tree, "home/.claude/hooks"), { recursive: true });
     mkdirSync(join(tree, "docs"));
-    for (const name of ["usage", "lib"]) copyFileSync(join(HOOKS, `${name}.mjs`), join(tree, `home/.claude/hooks/${name}.mjs`));
+    for (const name of ["usage", "lib", "steps"]) copyFileSync(join(HOOKS, `${name}.mjs`), join(tree, `home/.claude/hooks/${name}.mjs`));
     const log = join(tree, "docs/token-review.md");
     const offered = join(home, ".claude/usage/review-offered");
     const start = (input = {}) =>
@@ -2185,6 +2298,260 @@ describe("usage", () => {
     assert.equal(run(["--since", "11/10"]).status, 1);
   });
 });
+
+// steps.mjs: one agent's profile from its transcript's rows, by kind of
+// step and stage, which usage.mjs records at each stop
+describe("steps", () => {
+  // a transcript's rows, minute by minute from 10:00: each a user row, an
+  // assistant message (one line per content block, the same id and usage),
+  // a tool's result or a compaction
+  const at = (minute) => new Date(Date.UTC(2026, 10, 25, 10, 0, minute * 60)).toISOString();
+  const usage = (context, output = 0) => ({ input_tokens: 0, cache_read_input_tokens: context, cache_creation_input_tokens: 0, output_tokens: output });
+  const step = (id, minute, context, calls = [], { output = 0, model = "claude-opus-5-5" } = {}) =>
+    (calls.length ? calls : [null]).map((call, i) => ({
+      type: "assistant",
+      timestamp: at(minute),
+      message: {
+        id,
+        model,
+        usage: usage(context, output),
+        content: call ? [{ type: "tool_use", id: `${id}-${i}`, name: call[0], input: call[1] }] : [{ type: "text", text: "done" }],
+      },
+    }));
+  const result = (id, minute) => ({ type: "user", timestamp: at(minute), message: { content: [{ type: "tool_result", tool_use_id: id }] } });
+  const told = (minute) => ({ type: "user", timestamp: at(minute), message: { content: "<task-notification>" } });
+  // weighed as usage.mjs does, cache reads at 0.05 and output at 5
+  const cost = (t) => t.cacheRead * 0.05 + t.output * 5 + t.input + t.cacheWrite * 1.25;
+
+  test("reads: the usage audit's rule, word for word", () => {
+    for (const [name, input, read] of [
+      ["Read", { file_path: "/a" }, true],
+      ["Glob", {}, true],
+      ["Bash", { command: "rg -n foo src | head" }, true],
+      ["Bash", { command: "cd /repo && git log --oneline -3" }, true],
+      ["Bash", { command: "gh pr view 12" }, true],
+      ["Bash", { command: "cat x; pnpm test" }, false],
+      ["Bash", { command: "git status && git commit -m x" }, false],
+      ["Bash", { command: "node --test" }, false],
+      ["WebFetch", {}, false],
+    ])
+      assert.equal(steps.reads({ name, input }), read, `${name} ${JSON.stringify(input)}`);
+  });
+
+  test("kindOf: a call's kind by its tool, a Bash command's by what it mostly is", () => {
+    for (const [name, input, kind] of [
+      ["Read", { file_path: "/a" }, "reading"],
+      ["Edit", {}, "edits"],
+      ["Agent", {}, "agents"],
+      ["WebSearch", {}, "web"],
+      ["Monitor", {}, "waits"],
+      ["LSP", {}, "other tools"],
+      ["Bash", { command: "rg -n 'pnpm test' docs" }, "reading"],
+      ["Bash", { command: "gh pr checks 12 --watch" }, "CI"],
+      ["Bash", { command: "pnpm test:change bills" }, "tests"],
+      ["Bash", { command: "until rg -q '^rc=' /tmp/x/log; do sleep 20; done" }, "tests"],
+      ["Bash", { command: "until [ -f done ]; do sleep 5; done" }, "waits"],
+      ["Bash", { command: "pnpm -r typecheck" }, "checks"],
+      ["Bash", { command: "git commit -m x" }, "git"],
+      ["Bash", { command: "node - <<'EOF'\nwriteFileSync('a', b)\nEOF" }, "edits"],
+      ["Bash", { command: "date" }, "other bash"],
+    ])
+      assert.equal(steps.kindOf({ name, input }), kind, `${name} ${JSON.stringify(input)}`);
+  });
+
+  test("profileOf: a step per message id, its time, its kind, and the waits and compactions between", () => {
+    const rows = [
+      { type: "user", timestamp: at(0), message: { content: "the brief" } },
+      // two lines of one message, two calls side by side: its tool time is the longer
+      ...step("m1", 1, 1000, [["Read", { file_path: "/a" }], ["Grep", { pattern: "x" }]]),
+      result("m1-0", 2),
+      result("m1-1", 3),
+      ...step("m2", 4, 1200, [["Bash", { command: "pnpm test:change" }]], { output: 10 }),
+      result("m2-0", 9),
+      // a 20-minute wait on an agent, then Claude Code's own reply, counted nowhere
+      told(29),
+      ...step("s1", 29, 0, [], { model: "<synthetic>" }),
+      { type: "system", subtype: "compact_boundary", timestamp: at(30), compactMetadata: { durationMs: 60_000 } },
+      ...step("m3", 31, 800),
+    ];
+    const profile = steps.profileOf(rows, cost);
+    assert.equal(profile.steps, 3);
+    assert.equal(profile.to - profile.from, 31 * 60_000);
+    assert.equal(profile.waitMs, 20 * 60_000);
+    assert.deepEqual([profile.compactions, profile.compactMs], [1, 60_000]);
+    // tools: m1's longest call 2 min, m2's 5 min
+    assert.equal(profile.toolMs, 7 * 60_000);
+    assert.deepEqual(
+      Object.fromEntries(Object.entries(profile.kinds).filter(([, group]) => group.steps).map(([kind, group]) => [kind, [group.steps, group.calls, group.toolMs]])),
+      { reading: [1, 2, 3 * 60_000], tests: [1, 1, 5 * 60_000], replies: [1, 0, 0] },
+    );
+    // cost: 1000 × 0.05, 1200 × 0.05 + 10 × 5, 800 × 0.05
+    assert.equal(profile.cost, 50 + 110 + 40);
+  });
+
+  test("profileOf: rereading the context is put down to the steps that brought it in, its start and a compaction's summary", () => {
+    const rows = [
+      ...step("m1", 1, 1000, [["Read", { file_path: "/a" }]]),
+      ...step("m2", 2, 3000, [["Bash", { command: "pnpm test:change" }]]),
+      ...step("m3", 3, 4000),
+      { type: "system", subtype: "compact_boundary", timestamp: at(4) },
+      ...step("m4", 5, 1500),
+    ];
+    const { kinds } = steps.profileOf(rows, cost);
+    const held = Object.fromEntries(Object.entries(kinds).map(([kind, group]) => [kind, group.held]));
+    // m1 50 its start; m2 150: 50 start, 100 the read's; m3 200: 50, 100, and 50 the test's;
+    // m4 75: its start 1000 of 1500, the summary the rest
+    assert.deepEqual(held, { start: 50 + 50 + 50 + 50, reading: 100 + 100, tests: 50, replies: 0, "compaction summaries": 25 });
+  });
+
+  // plan review F4: a builder's plan review was told apart by the word
+  // "plan" in its brief; the order of its calls decides it, whatever a brief says
+  test("profileOf: stages by the order of the change skill's steps, and single reads", () => {
+    const rows = [
+      ...step("m1", 1, 100, [["Read", { file_path: "/a" }]]),
+      ...step("m2", 2, 100, [["Bash", { command: "rg -n x src" }]]),
+      // an edit before the plan review: still the survey
+      ...step("m3", 3, 100, [["Edit", { file_path: "/repo/x.ts" }]]),
+      ...step("m4", 4, 100, [["Agent", { subagent_type: "change-reviewer", description: "Round 1 on the survey" }]]),
+      // the survey's fix in the git dir, and a scratch file: still the plan review
+      ...step("m5", 5, 100, [["Write", { file_path: "/repo/.git/worktrees/w/claude/survey-x.md" }]]),
+      ...step("m6", 6, 100, [["Write", { file_path: "/tmp/claude-1000/x/scratch.mjs" }]]),
+      ...step("m7", 7, 100, [["Edit", { file_path: "/repo/x.ts" }]]),
+      ...step("m8", 8, 100, [["Agent", { subagent_type: "critical-reviewer", description: "Plan pass" }]]),
+      ...step("m9", 9, 100, [["Bash", { command: "gh pr create --draft --body-file b" }]]),
+      ...step("m10", 10, 100, [["Read", { file_path: "/c" }], ["Read", { file_path: "/d" }]]),
+    ];
+    const profile = steps.profileOf(rows, cost);
+    assert.deepEqual(profile.starts, { "plan review": Date.parse(at(4)), build: Date.parse(at(7)), review: Date.parse(at(8)), PR: Date.parse(at(9)) });
+    assert.deepEqual(
+      Object.fromEntries(Object.entries(profile.stages).map(([stage, group]) => [stage, group.steps])),
+      { survey: 3, "plan review": 3, build: 1, review: 1, PR: 2 },
+    );
+    assert.deepEqual(profile.agents, { "change-reviewer": 1, "critical-reviewer": 1 });
+    // m1 and m2 each read one thing; m10 reads two in one step
+    assert.equal(profile.singleReads, 2);
+  });
+});
+
+// reads.mjs, the nudge when an agent's reads go one per turn, fed a
+// PostToolUse call as Claude Code sends it in an agent, over that agent's
+// transcript beside its session's
+describe("reads", () => {
+  // a session's folder, an agent's transcript in it, a step written to it
+  // (its calls, each [name, input]), and the hook's run on a call of the
+  // last step written
+  const scratch = () => {
+    const root = scratchDir();
+    const transcript = join(root, "s1/subagents/agent-a1.jsonl");
+    mkdirSync(dirname(transcript), { recursive: true });
+    let n = 0;
+    const step = (...calls) => {
+      n++;
+      appendFileSync(
+        transcript,
+        JSON.stringify({
+          type: "assistant",
+          timestamp: new Date().toISOString(),
+          message: {
+            id: `m${n}`,
+            model: "claude-opus-5-5",
+            usage: { input_tokens: 1, cache_read_input_tokens: 100_000 + n * 1000, cache_creation_input_tokens: 500, output_tokens: 10 },
+            content: calls.map(([name, input], i) => ({ type: "tool_use", id: `t${n}-${i}`, name, input })),
+          },
+        }) + "\n",
+      );
+    };
+    const run = ([name, input], extra = {}) => {
+      const ran = runHook("reads", { hook_event_name: "PostToolUse", session_id: "s1", agent_id: "a1", transcript_path: join(root, "s1.jsonl"), tool_name: name, tool_input: input, tool_use_id: `t${n}-0`, tool_response: {}, ...extra }, { env: { ...process.env, TMPDIR: root } });
+      assert.equal(ran.stderr, "");
+      return ran.stdout ? JSON.parse(ran.stdout).hookSpecificOutput : null;
+    };
+    // a step written one line per call, as Claude Code writes them, only
+    // its first `upTo` calls so far
+    const stepByLine = (calls, upTo) => {
+      n++;
+      for (const [i, [name, input]] of calls.slice(0, upTo).entries())
+        appendFileSync(
+          transcript,
+          JSON.stringify({
+            type: "assistant",
+            timestamp: new Date().toISOString(),
+            message: {
+              id: `m${n}`,
+              model: "claude-opus-5-5",
+              usage: { input_tokens: 1, cache_read_input_tokens: 100_000 + n * 1000, cache_creation_input_tokens: 500, output_tokens: 10 },
+              content: [{ type: "tool_use", id: `t${n}-${i}`, name, input }],
+            },
+          }) + "\n",
+        );
+    };
+    return { step, stepByLine, run };
+  };
+  const read = ["Read", { file_path: "/a" }];
+  const rg = ["Bash", { command: "rg -n foo src" }];
+
+  test("two steps that each sent one read, then a read: one line, with the context each turn rereads", () => {
+    const { step, run } = scratch();
+    step(read);
+    step(rg);
+    step(read);
+    assert.deepEqual(run(read), {
+      hookEventName: "PostToolUse",
+      additionalContext: "Your last two turns each sent one read, and every turn rereads your whole context (~104k tokens now): send the reads this step needs as several calls in one turn.",
+    });
+  });
+
+  // Claude Code writes the transcript behind the run: a step's PostToolUse
+  // can find the file without that step (live, 2026-11-25)
+  // and one line per call, so a step can be half written
+  test("a call not written yet: silent, as its step is unknown, and the next call's nudge comes", () => {
+    const { step, run } = scratch();
+    step(read);
+    step(rg);
+    assert.equal(run(read, { tool_use_id: "t-unwritten" }), null);
+    step(read);
+    assert.match(run(read)?.additionalContext, /\(~104k tokens now\)/);
+  });
+
+  test("a step half written: its unwritten call is silent, its written one judges the steps before it", () => {
+    const { step, stepByLine, run } = scratch();
+    step(read, rg);
+    step(read);
+    // m3's first read is written, its second not: m3 isn't a single read
+    stepByLine([read, rg], 1);
+    assert.equal(run(rg, { tool_use_id: "t3-1" }), null);
+    assert.equal(run(read, { tool_use_id: "t3-0" }), null);
+  });
+
+  test("silent in the main session, on a call that doesn't read, and after a step that read in more than one call or wrote", () => {
+    for (const [before, now, extra] of [
+      [[[read], [read]], read, { agent_id: undefined }],
+      [[[read], [read]], ["Bash", { command: "pnpm test:change" }]],
+      [[[read], [read]], ["Bash", { command: "rg foo && git commit -m x" }]],
+      [[[read, rg], [read]], read],
+      [[[read], [["Edit", { file_path: "/a" }]]], read],
+      // a reply's step, with no call
+      [[[read], []], read],
+    ]) {
+      const { step, run } = scratch();
+      for (const calls of before) step(...calls);
+      step(now);
+      assert.equal(run(now, extra), null, JSON.stringify([before, now]));
+    }
+  });
+
+  test("once in an agent's 10 steps", () => {
+    const { step, run } = scratch();
+    const said = [];
+    for (let i = 1; i <= 24; i++) {
+      step(read);
+      if (run(read)) said.push(i);
+    }
+    // steps 1 and 2 have no two single reads before them
+    assert.deepEqual(said, [3, 13, 23]);
+  });
+});
+
 
 // main-session.mjs at a session's start, in a scratch HOME (live()) whose
 // ~/.dotfiles has a file of each kind the check tells apart
