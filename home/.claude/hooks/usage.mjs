@@ -411,7 +411,9 @@ const breakdown = (id, { agents, steps, loads }) => {
     sum.cost += cost;
     types.set(type, sum);
   }
-  const sampled = loads.filter((row) => Date.parse(row.at) >= root.from && Date.parse(row.at) <= root.to).map((row) => row.load);
+  // its span runs on to its last stop, which comes after its last message
+  const end = Math.max(root.to, Date.parse(root.at));
+  const sampled = loads.filter((row) => Date.parse(row.at) >= root.from && Date.parse(row.at) <= end).map((row) => row.load);
   const kinds = Object.entries(root.kinds).filter(([, group]) => group.steps && group.cost >= 0.02 * root.cost);
   const held = Object.entries(root.kinds).filter(([, group]) => group.held >= 0.05 * root.cost);
   const byCost = (key) => (a, b) => b[1][key] - a[1][key];

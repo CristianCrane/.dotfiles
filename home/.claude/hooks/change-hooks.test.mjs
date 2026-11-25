@@ -1931,8 +1931,8 @@ describe("usage", () => {
     );
   });
 
-  // a builder's tree: its steps `minutes` from now (its stops land inside
-  // its span), each rereading `cacheRead` tokens and calling one tool
+  // a builder's tree: its steps `minutes` from now, each rereading
+  // `cacheRead` tokens and calling one tool; its stops come after them all
   const minutes = (n) => new Date(Date.now() + n * 60_000).toISOString();
   const stepped = (id, minute, cacheRead, call) => ({
     type: "assistant",
@@ -1959,7 +1959,7 @@ describe("usage", () => {
         stepped("m2", -29, 100_000, ["Agent", reviewer]),
         stepped("m3", -20, 100_000, ["Edit", { file_path: "/repo/x.ts" }]),
         stepped("m4", -10, 100_000, ["Agent", reviewer]),
-        stepped("m5", 30, 100_000),
+        stepped("m5", -1, 100_000),
       ],
       { description: "Fix issue 1", spawnDepth: 1 },
       "builder",
@@ -1975,7 +1975,7 @@ describe("usage", () => {
     const [tokens, ...where] = ran.stdout.trimEnd().split("\n");
     assert.match(tokens, /^Tokens: .*\(this agent and the 2 it started\)/);
     assert.equal(where[0], "Where it went (this agent and the 3 below it; weighted tokens, as usage.mjs's header says):");
-    assert.match(where[1], new RegExp(`^- Time: 1h00 start to end: the model 1m, tools 0s, waiting 0s, 0 compactions 0s\\. Machine load [\\d.]+ on average, [\\d.]+ at most, on ${availableParallelism()} cores \\(3 stops sampled\\)\\.$`));
+    assert.match(where[1], new RegExp(`^- Time: 29m start to end: the model 1m, tools 0s, waiting 0s, 0 compactions 0s\\. Machine load [\\d.]+ on average, [\\d.]+ at most, on ${availableParallelism()} cores \\(3 stops sampled\\)\\.$`));
     // of 55k: survey 5k, plan review 5k + r1's 10k, build 5k, review 10k + r2's 20k
     assert.deepEqual(where.slice(2), [
       "- By stage: survey 9%, plan review 27%, build 9%, review 55%.",
