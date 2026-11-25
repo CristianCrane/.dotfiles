@@ -29,7 +29,14 @@
 //   build) and PR (`gh pr create`).
 // - A single read is a step whose one call reads (`reads`): the change
 //   skill asks for a step's reads in one turn.
+// - Docs: the Markdown its calls read (`docsOf`), each file's reads, the
+//   characters its results brought into the context, those characters
+//   again at every later step they stay in up to a compaction (reread),
+//   and the cost of rereading them (held, as above). A result's tokens are
+//   its characters over CHARS_PER_TOKEN, at most the context's growth.
 import { readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { resolve } from "node:path";
 import { jsonLines } from "./lib.mjs";
 
 const GAP = 5 * 60 * 1000;
@@ -98,13 +105,56 @@ export const single = (step) => step.calls.length === 1 && reads(step.calls[0]);
 // Code's own `<synthetic>` replies cost nothing)
 export const counted = (row) => row.type === "assistant" && Boolean(row.message?.usage) && row.message.model !== "<synthetic>";
 
+// a file an agent keeps for its own work, not the work's: one in a git dir
+// (a survey, a review) or under /tmp (its scratch)
+export const own = (path) => /\/\.git\/|^\/tmp\//.test(String(path));
+
+// Markdown Read results ran 2.66 characters a token (the context's growth
+// after a step whose one call read it, median of 184 results of 10,000
+// characters or more, p10 2.27, p90 2.90; every transcript, 2026-11-25)
+export const CHARS_PER_TOKEN = 2.7;
+
+// the Markdown a call that reads names, each file as an absolute path
+// (from `cwd`, or a leading `cd`), an agent's own files left out (`own`):
+// Read's file, Grep's path or its glob under it (the ux-reviewer's search
+// of a log), a Bash command's arguments (`git show ref:path` by its path)
+export const docsOf = (call, cwd = "/") => {
+  if (!reads(call)) return [];
+  const input = call.input ?? {};
+  let base = cwd;
+  let named = [];
+  if (call.name === "Read") named = [input.file_path];
+  else if (call.name === "Grep") named = [input.glob ? `${input.path ?? "."}/${input.glob}` : input.path];
+  else if (call.name === "Bash") {
+    const command = String(input.command ?? "");
+    const cd = /^cd\s+(?:"([^"]+)"|'([^']+)'|([^\s;&]+))/.exec(command);
+    if (cd) base = resolve(cwd, cd[1] ?? cd[2] ?? cd[3]);
+    named = [...command.matchAll(/(?<=^|[\s'"=(])[\w.\/~@+:-]+\.md(?=$|[\s'"|;&)>,])/g)].map(([token]) => token.replace(/^.*:/, ""));
+  }
+  const paths = named.filter((path) => typeof path === "string" && path.endsWith(".md")).map((path) => resolve(base, path.replace(/^~(?=\/)/, homedir())));
+  return [...new Set(paths)].filter((path) => !own(path));
+};
+
+// a doc's name: from `cwd` when under it, else from the top of its
+// checkout under ~/github/<owner>/ (an agent in a repo's main checkout
+// reads its worktree's docs), else from ~
+const nameOf = (path, cwd) => {
+  const home = homedir();
+  if (cwd && cwd !== "/" && path.startsWith(`${cwd}/`)) return path.slice(cwd.length + 1);
+  const checkout = path.startsWith(`${home}/github/`) && /^[^/]+\/[^/]+\/(.+)$/.exec(path.slice(home.length + 8));
+  return checkout ? checkout[1] : path.startsWith(`${home}/`) ? `~${path.slice(home.length)}` : path;
+};
+
+// what a tool result brought in, in characters: its text (an image's tokens aren't a doc's)
+const charsOf = (content) => (typeof content === "string" ? content.length : Array.isArray(content) ? content.reduce((sum, part) => sum + (part.text?.length ?? 0), 0) : 0);
+
 export const STAGES = ["survey", "plan review", "build", "review", "PR"];
 const REVIEWERS = ["change-reviewer", "critical-reviewer"];
 
 // the stage a call starts, given the stages already started
 const stageAt = ({ name, input }, started) => {
   if (name === "Agent" && REVIEWERS.includes(input?.subagent_type)) return started.has("build") ? "review" : "plan review";
-  if (TOOLS.edits.includes(name) && started.has("plan review") && !/\/\.git\/|^\/tmp\//.test(String(input?.file_path))) return "build";
+  if (TOOLS.edits.includes(name) && started.has("plan review") && !own(input?.file_path)) return "build";
   if (name === "Bash" && /\bgh\s+pr\s+create\b/.test(String(input?.command))) return "PR";
 };
 
@@ -143,6 +193,7 @@ export const profileOf = (rows, cost) => {
       for (const part of results) {
         const call = calls.get(part.tool_use_id);
         if (call && call.ms === undefined) call.ms = at - call.at;
+        if (call) call.chars = charsOf(part.content);
       }
       if (!results.length && gap >= GAP) span.waitMs += gap;
       continue;
@@ -169,6 +220,7 @@ export const profileOf = (rows, cost) => {
       if (part.type === "tool_use") {
         const call = { name: part.name, input: part.input, at };
         call.kind = kindOf(call);
+        call.docs = docsOf(call, row.cwd).map((path) => nameOf(path, row.cwd));
         calls.set(part.id, call);
         step.calls.push(call);
       }
@@ -178,6 +230,9 @@ export const profileOf = (rows, cost) => {
   const started = new Map();
   const agents = {};
   let origin = {};
+  // the characters each doc's results put in the context, held as origin is
+  let held = {};
+  const docs = {};
   let singleReads = 0;
   const total = group();
   steps.forEach((step, i) => {
@@ -195,19 +250,37 @@ export const profileOf = (rows, cost) => {
     // agent's start stays through a compaction, and the rest after one is
     // its summary and what it re-attaches
     if (i === 0) origin = { start: step.context };
-    else if (step.afterCompaction) origin = { start: Math.min(steps[0].context, step.context), "compaction summaries": Math.max(0, step.context - steps[0].context) };
-    else {
+    else if (step.afterCompaction) {
+      origin = { start: Math.min(steps[0].context, step.context), "compaction summaries": Math.max(0, step.context - steps[0].context) };
+      held = {};
+    } else {
       const before = steps[i - 1];
       const added = step.context - before.context;
       if (added > 0) origin = { ...origin, [before.kind]: (origin[before.kind] ?? 0) + added };
       else if (added < 0) {
         // a context that shrank with no compaction (a cleared tool result): each part scaled down
-        const held = Object.values(origin).reduce((a, b) => a + b, 0) || 1;
-        origin = Object.fromEntries(Object.entries(origin).map(([kind, n]) => [kind, (n * step.context) / held]));
+        const all = Object.values(origin).reduce((a, b) => a + b, 0) || 1;
+        origin = Object.fromEntries(Object.entries(origin).map(([kind, n]) => [kind, (n * step.context) / all]));
+        held = Object.fromEntries(Object.entries(held).map(([name, n]) => [name, (n * step.context) / all]));
+      }
+      // the docs the step before read, a call's characters split among the
+      // files it named, together at most what the context grew by
+      const brought = before.calls.flatMap((call) => call.docs.map((name) => [name, (call.chars ?? 0) / call.docs.length]));
+      const chars = brought.reduce((sum, [, n]) => sum + n, 0);
+      const scale = chars ? Math.min(1, (Math.max(0, added) * CHARS_PER_TOKEN) / chars) : 0;
+      for (const [name, n] of brought) {
+        const doc = (docs[name] ??= { reads: 0, chars: 0, reread: 0, held: 0 });
+        doc.reads++;
+        doc.chars += n * scale;
+        held[name] = (held[name] ?? 0) + n * scale;
       }
     }
     const context = Object.values(origin).reduce((a, b) => a + b, 0) || 1;
     for (const [kind, n] of Object.entries(origin)) bump(kinds, kind).held += (step.reread * n) / context;
+    for (const [name, n] of Object.entries(held)) {
+      docs[name].reread += n;
+      docs[name].held += (step.reread * n) / CHARS_PER_TOKEN / context;
+    }
     bump(kinds, step.kind).held += step.output;
     const toolMs = Math.max(0, ...step.calls.map((call) => call.ms ?? 0));
     const stage = [...started].filter(([, at]) => at <= step.at).at(-1)?.[0] ?? "survey";
@@ -236,6 +309,7 @@ export const profileOf = (rows, cost) => {
     stages: whole(stages),
     starts: Object.fromEntries(started),
     agents,
+    docs: whole(docs),
   };
 };
 

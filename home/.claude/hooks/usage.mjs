@@ -89,8 +89,11 @@
 // compactions, progress summaries, and merged PRs (gh's search for the account's own,
 // in every repo); and by agent type, from each agent's latest steps row:
 // steps per agent, weighted per step, the share of single reads (steps.mjs)
-// beside the 2026-11-22 audit's 47% for builders, compactions per agent
-// and the mean load at its stops. Estimates: every weighted number (WEIGHTS below) and the
+// beside the 2026-11-22 audit's 47% for builders, compactions per agent,
+// the mean load at its stops, and the Markdown read (steps.mjs's docs: KB
+// in per agent, and rereading it as a share of the type's cost; the
+// baseline before agents searched the logs is
+// ~/.claude/process/audit/2026-11-25-doc-reads/metrics.md). Estimates: every weighted number (WEIGHTS below) and the
 // tokens per 1% of a window (the Tokens line's skews, below). Weighted per
 // merged PR is the week's whole spend over the PRs merged in it, so work
 // with no PR (a repo with no GitHub origin) and PRs merged a week after
@@ -358,6 +361,28 @@ const count = (n) => n.toLocaleString("en-US");
 
 const mean = (numbers) => numbers.reduce((sum, n) => sum + n, 0) / numbers.length;
 
+// characters as KB, or MB past 1,000 KB
+const kb = (chars) => (chars >= 1e6 ? `${(chars / 1e6).toFixed(1)}MB` : `${Math.round(chars / 1e3)}KB`);
+
+// steps rows' docs together: the characters in and reread, what rereading
+// them cost and the rows' whole cost, and each file's (rows recorded before
+// steps.mjs kept docs are left out)
+const docsTogether = (rows) => {
+  const all = { chars: 0, reread: 0, held: 0, cost: 0, files: {} };
+  for (const row of rows.filter((row) => row.docs)) {
+    all.cost += row.cost;
+    for (const [name, doc] of Object.entries(row.docs)) {
+      all.chars += doc.chars;
+      all.reread += doc.reread;
+      all.held += doc.held;
+      const file = (all.files[name] ??= { chars: 0, held: 0 });
+      file.chars += doc.chars;
+      file.held += doc.held;
+    }
+  }
+  return all;
+};
+
 // what the context held, as the breakdown names it (steps.mjs's `held`)
 const carried = (kind) => (kind === "start" ? "its start" : kind === "compaction summaries" ? kind : `what ${{ reading: "reads", replies: "its replies" }[kind] ?? kind} brought in`);
 
@@ -383,11 +408,30 @@ const breakdown = (id, { agents, steps, loads }) => {
     const { from, cost } = steps.get(agent);
     stages[stageOf(from)] += cost;
     const type = agents.get(agent)?.type || "agent";
-    const sum = types.get(type) ?? { n: 0, cost: 0 };
+    const sum = types.get(type) ?? { n: 0, cost: 0, rows: [] };
     sum.n++;
     sum.cost += cost;
+    sum.rows.push(steps.get(agent));
     types.set(type, sum);
   }
+  // the Markdown read, by itself then each type below, each with its three costliest files
+  const docs = [["itself", [root]], ...[...types].map(([type, { n, rows }]) => [`${type} ×${n}`, rows])]
+    .map(([who, rows]) => [who, docsTogether(rows)])
+    .filter(([, read]) => read.chars);
+  const docsLine =
+    root.docs &&
+    `- Docs read (Markdown outside a git dir and /tmp; in, then reread at each later step up to a compaction, share of the cost): ${
+      docs
+        .map(
+          ([who, read]) =>
+            `${who} ${kb(read.chars)} in, ${kb(read.reread)} reread, ${share(read.held, read.cost)} (${Object.entries(read.files)
+              .sort((a, b) => b[1].held - a[1].held)
+              .slice(0, 3)
+              .map(([name, file]) => `${name} ${kb(file.chars)}`)
+              .join(", ")})`,
+        )
+        .join("; ") || "none"
+    }.`;
   // its span runs on to its last stop, which comes after its last message
   const end = Math.max(root.to, Date.parse(root.at));
   const sampled = loads.filter((row) => Date.parse(row.at) >= root.from && Date.parse(row.at) <= end).map((row) => row.load);
@@ -406,6 +450,7 @@ const breakdown = (id, { agents, steps, loads }) => {
     `- Its own steps by kind, share of its cost (steps): ${kinds.sort(byCost("cost")).map(([kind, group]) => `${kind} ${share(group.cost, root.cost)} (${count(group.steps)})`).join(", ")}.`,
     `- Its cost by what it reread or wrote: ${held.sort(byCost("held")).map(([kind, group]) => `${carried(kind)} ${share(group.held, root.cost)}`).join(", ")}.`,
     `- Single reads: ${share(root.singleReads, root.steps)} of its steps (one call that reads; builders were 47% in the 2026-11-22 usage audit, before the change skill asked for a step's reads in one turn).`,
+    docsLine,
     missing.length && `- Not counted: ${plural(missing.length, "agent")} below it with no steps recorded (${missing.join(", ")}).`,
   ]
     .filter(Boolean)
@@ -575,11 +620,13 @@ const stepsByType = (period, { agents, steps, loads }) => {
   if (!types.size) return ["  no agent's steps recorded"];
   const sum = (rows, key) => rows.reduce((total, row) => total + row[key], 0);
   return columns([
-    ["", "agents", "steps per agent", "weighted per step", "single reads", "compactions per agent", "load"],
+    ["", "agents", "steps per agent", "weighted per step", "single reads", "compactions per agent", "load", "docs in per agent", "docs' share"],
     ...[...types]
       .sort((a, b) => sum(b[1], "cost") - sum(a[1], "cost"))
       .map(([type, rows]) => {
         const sampled = loads.filter((row) => row.kind === "agent" && row.type === type && inside(row)).map((row) => row.load);
+        const read = docsTogether(rows);
+        const counted = rows.filter((row) => row.docs).length;
         return [
           `  ${type}`,
           String(rows.length),
@@ -588,6 +635,8 @@ const stepsByType = (period, { agents, steps, loads }) => {
           percent(sum(rows, "singleReads"), sum(rows, "steps")),
           (sum(rows, "compactions") / rows.length).toFixed(1),
           sampled.length ? mean(sampled).toFixed(1) : "-",
+          counted ? kb(read.chars / counted) : "-",
+          counted ? percent(read.held, read.cost) : "-",
         ];
       }),
   ]);
@@ -676,7 +725,7 @@ const week = (day) => {
       ]),
     ),
     "",
-    "Steps by agent type this week (each agent's latest steps row; single reads: a step whose one call reads, builders 47% in the 2026-11-22 usage audit):",
+    "Steps by agent type this week (each agent's latest steps row; single reads: a step whose one call reads, builders 47% in the 2026-11-22 usage audit; docs: the Markdown read, outside a git dir and /tmp, and rereading it as a share of the cost):",
     ...stepsByType(now.period, book),
     "",
     "The plan's week (seven_day) as read, with the ledger's weighted tokens from its start to that reading:",

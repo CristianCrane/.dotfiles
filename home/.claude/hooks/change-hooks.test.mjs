@@ -1983,8 +1983,44 @@ describe("usage", () => {
       "- Its own steps by kind, share of its cost (steps): agents 40% (2), reading 20% (1), edits 20% (1), replies 20% (1).",
       "- Its cost by what it reread or wrote: its start 100%.",
       "- Single reads: 20% of its steps (one call that reads; builders were 47% in the 2026-11-22 usage audit, before the change skill asked for a step's reads in one turn).",
+      `${docsRead}none.`,
       "- Not counted: 1 agent below it with no steps recorded (x1).",
     ]);
+  });
+
+  const docsRead = "- Docs read (Markdown outside a git dir and /tmp; in, then reread at each later step up to a compaction, share of the cost): ";
+
+  test("--agent: the Markdown it and each type below it read, in, reread and their share of the cost", () => {
+    const { run, agent } = scratch();
+    const inRepo = (row) => ({ ...row, cwd: "/w/repo" });
+    const text = (id, minute, chars) => ({ type: "user", timestamp: minutes(minute), message: { content: [{ type: "tool_result", tool_use_id: `${id}-0`, content: "x".repeat(chars) }] } });
+    // r1 greps the log: 27,000 characters, 10k tokens, held 500 of its 10,500
+    agent(
+      "r1",
+      [inRepo(stepped("r1a", -20, 100_000, ["Grep", { pattern: "Home", path: "docs/ux-log.md" }])), text("r1a", -19, 27_000), inRepo(stepped("r1b", -18, 110_000))],
+      { description: "UX review", spawnDepth: 2, parentAgentId: "d1" },
+      "ux-reviewer",
+    );
+    // d1 reads ux.md (54,000 characters, held 1,000 at each of 2 steps, of
+    // 17,050) and its own survey, which isn't a doc
+    agent(
+      "d1",
+      [
+        inRepo(stepped("m1", -30, 100_000, ["Read", { file_path: "/w/repo/docs/ux.md" }])),
+        text("m1", -29, 54_000),
+        inRepo(stepped("m2", -28, 120_000, ["Read", { file_path: "/w/repo/.git/claude/survey-x.md" }])),
+        text("m2", -27, 2_700),
+        inRepo(stepped("m3", -26, 121_000)),
+      ],
+      { description: "Fix issue 1", spawnDepth: 1 },
+      "builder",
+    );
+    const ran = run(["--agent", "d1"]);
+    assert.equal(ran.status, 0, ran.stderr);
+    assert.ok(
+      ran.stdout.split("\n").includes(`${docsRead}itself 54KB in, 108KB reread, 12% (docs/ux.md 54KB); ux-reviewer ×1 27KB in, 27KB reread, 5% (docs/ux-log.md 27KB).`),
+      ran.stdout,
+    );
   });
 
   // a finished agent's report reaches the main session by itself: a
@@ -2238,8 +2274,8 @@ describe("usage", () => {
     assert.match(ran.stdout, /^Merged PRs: o\/a 2, o\/b 1$/m);
     assert.match(ran.stdout, /^ {2}main s1 repo {2,}250k {2,}45\.5%$/m);
     assert.match(ran.stdout, /^ {2}change-reviewer {2,}175k {2,}31\.8% {2,}1$/m);
-    // each agent type's steps: a1's one step at 175k, no single read, one compaction
-    assert.match(ran.stdout, /^ {2}change-reviewer {2,}1 {2,}1 {2,}175k {2,}0\.0% {2,}1\.0 {2,}[\d.]+$/m);
+    // each agent type's steps: a1's one step at 175k, no single read, one compaction, no docs read
+    assert.match(ran.stdout, /^ {2}change-reviewer {2,}1 {2,}1 {2,}175k {2,}0\.0% {2,}1\.0 {2,}[\d.]+ {2,}0KB {2,}0\.0%$/m);
     assert.match(ran.stdout, /^ {2}to .*: 50% at .*; 550k weighted by then, about 11k per 1% \(began before the ledger: reads low\)$/m);
     // gh asked for the account's PRs merged in each week, to the second before it ends
     const from = new Date(`${day(-6)}T00:00`);
@@ -2359,6 +2395,26 @@ describe("steps", () => {
       assert.equal(steps.kindOf({ name, input }), kind, `${name} ${JSON.stringify(input)}`);
   });
 
+  // plan review F2, F3: the ux-reviewer searches with Grep, and an agent's
+  // own survey, reviews and scratch aren't the docs it reads
+  test("docsOf: the Markdown a call that reads names, its own files left out", () => {
+    for (const [name, input, docs] of [
+      ["Read", { file_path: "/r/docs/ux-log.md" }, ["/r/docs/ux-log.md"]],
+      ["Read", { file_path: "/r/src/a.ts" }, []],
+      ["Grep", { pattern: "Home", path: "docs/ux-log.md" }, ["/r/docs/ux-log.md"]],
+      ["Grep", { pattern: "Home", path: "docs", glob: "*.md" }, ["/r/docs/*.md"]],
+      ["Grep", { pattern: "Home" }, []],
+      ["Bash", { command: "rg -n 'Home|failed' docs/ux-log.md docs/testing-log.md" }, ["/r/docs/ux-log.md", "/r/docs/testing-log.md"]],
+      ["Bash", { command: "cd /s && sed -n '1,40p' README.md" }, ["/s/README.md"]],
+      ["Bash", { command: "git show origin/main:docs/ux.md | head" }, ["/r/docs/ux.md"]],
+      ["Bash", { command: "rg -n x --glob '*.md' docs" }, []],
+      ["Read", { file_path: "/r/.git/worktrees/w/claude/survey-x.md" }, []],
+      ["Read", { file_path: "/tmp/claude-1000/x/notes.md" }, []],
+      ["Edit", { file_path: "/r/docs/ux.md" }, []],
+    ])
+      assert.deepEqual(steps.docsOf({ name, input }, "/r"), docs, `${name} ${JSON.stringify(input)}`);
+  });
+
   test("profileOf: a step per message id, its time, its kind, and the waits and compactions between", () => {
     const rows = [
       { type: "user", timestamp: at(0), message: { content: "the brief" } },
@@ -2402,6 +2458,29 @@ describe("steps", () => {
     // m1 50 its start; m2 150: 50 start, 100 the read's; m3 200: 50, 100, and 50 the test's;
     // m4 75: its start 1000 of 1500, the summary the rest
     assert.deepEqual(held, { start: 50 + 50 + 50 + 50, reading: 100 + 100, tests: 50, replies: 0, "compaction summaries": 25 });
+  });
+
+  test("profileOf: the docs it read, in and reread up to a compaction, at most what the context grew by", () => {
+    const text = (id, minute, chars) => ({ type: "user", timestamp: at(minute), message: { content: [{ type: "tool_result", tool_use_id: id, content: [{ type: "text", text: "x".repeat(chars) }] }] } });
+    const rows = [
+      // one command, two files: its 540 characters (200 tokens) split between them
+      ...step("m1", 1, 1000, [["Bash", { command: "cd /repo && git show origin/main:docs/a.md docs/b.md | head" }]]).map((row) => ({ ...row, cwd: "/w" })),
+      text("m1-0", 2, 540),
+      ...step("m2", 3, 1200, [["Read", { file_path: "/repo/docs/big.md" }]]),
+      // 2,700 characters, but the context grew 500 tokens: 1,350 counted
+      text("m2-0", 4, 2700),
+      ...step("m3", 5, 1700),
+      { type: "system", subtype: "compact_boundary", timestamp: at(6) },
+      ...step("m4", 7, 1000),
+    ];
+    const { docs } = steps.profileOf(rows, cost);
+    // held: m2 rereads 1,200 for 60, each 100 of its tokens 5; m3 1,700 for
+    // 85, each 100 tokens 5 and big.md's 500 25; m4 holds none after the compaction
+    assert.deepEqual(docs, {
+      "/repo/docs/a.md": { reads: 1, chars: 270, reread: 540, held: 10 },
+      "/repo/docs/b.md": { reads: 1, chars: 270, reread: 540, held: 10 },
+      "/repo/docs/big.md": { reads: 1, chars: 1350, reread: 1350, held: 25 },
+    });
   });
 
   // plan review F4: a builder's plan review was told apart by the word
