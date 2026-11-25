@@ -48,6 +48,7 @@ import {
   lines,
   masked,
   onBranch,
+  passOf,
   positional,
   processBatch,
   prArgs,
@@ -226,15 +227,18 @@ const uxReview = (cwd, work) => {
   const path = stateFile(cwd, "ux-review", work.key);
   if (!existsSync(path)) return { path, reason: "missing" };
   const text = readFileSync(path, "utf8");
-  const header = text.match(/^# UX review:.* @ ([0-9a-f]{7,40}),.*?\b(\d+) open finding/m);
-  if (!header)
+  const { head, sha, open } = passOf(path);
+  if (!/^# UX review:/.test(head) || !sha || open === null)
     return {
       path,
-      reason: "its header has no commit and open count: its first line reads `# UX review: <branch> @ <the shots' commit>, <first pass | pass n>, <k> open findings (<h> high)`",
+      reason: "its header has no commit and open count: its first line reads `# UX review: <branch> @ <the shots' commit>, first pass, <k> open findings (<h> high)`",
     };
-  if (!onBranch(cwd, header[1])) return { path, reason: `its shots are of ${header[1]}, no commit on this branch` };
-  return { path, ok: true, text, ids: [...new Set([...text.matchAll(/^(?:- )?(U\d+)\b/gm)].map((id) => id[1]))] };
+  if (!onBranch(cwd, sha)) return { path, reason: `its shots are of ${sha}, no commit on this branch` };
+  return { path, ok: true, text, ids: idsOf(text, "U") };
 };
+
+// a finding's ids in a review's text, by its letter
+const idsOf = (text, letter) => [...new Set([...text.matchAll(new RegExp(`^(?:- )?(${letter}\\d+)\\b`, "gm"))].map((id) => id[1]))];
 
 // a UX review not ready, in words for a turn-down
 const uxNotReady = (ux, branch) =>
@@ -246,12 +250,13 @@ const uxNotReady = (ux, branch) =>
 const unclosedAll = (cwd, work, found, body, section, seen) => {
   const ux = seen ? uxReview(cwd, work) : null;
   if (ux && !ux.ok) return uxNotReady(ux, work.branch);
+  const others = [ux].filter(Boolean);
   const open = [
     ...found.ids.map((id) => [id, unclosed(cwd, section, id, found.text)]),
-    ...(ux?.ids ?? []).map((id) => [id, unclosed(cwd, section, id, `${ux.text}\n${found.text}`)]),
+    ...others.flatMap((other) => other.ids.map((id) => [id, unclosed(cwd, section, id, `${other.text}\n${found.text}`)])),
   ].flatMap(([id, why]) => (why ? [`${id}: ${why}`] : []));
   if (open.length)
-    return `The PR body's Change section (${body}) doesn't close every finding of the last change review (${found.path})${ux ? ` and UX review (${ux.path})` : ""}: ${open.join("; ")}. Each finding gets its own line ending \`fixed in <sha>\` (a commit on this branch), \`filed in #<n>\` for an \`[issue]\`, or the review's own word on it, after its line's last → (\`fixed in the survey\`, \`fixed elsewhere:\`, \`conceded:\`, \`turned down:\`, \`ruled by the user:\`).`;
+    return `The PR body's Change section (${body}) doesn't close every finding of the last change review (${found.path})${others.map((other) => ` and ${other.path}`).join("")}: ${open.join("; ")}. Each finding gets its own line ending \`fixed in <sha>\` (a commit on this branch), \`filed in #<n>\` for an \`[issue]\`, or the review's own word on it, after its line's last → (\`fixed in the survey\`, \`fixed elsewhere:\`, \`conceded:\`, \`turned down:\`, \`ruled by the user:\`).`;
 };
 
 // gh pr create: the PR's branch (not a prototype, and the one checked

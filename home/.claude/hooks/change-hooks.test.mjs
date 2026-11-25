@@ -380,7 +380,9 @@ const STATES = {
       passPlanRedone: { survey: "Change: a.\nExpected files: 7\n", "plan-review": "# Change review: feature @ abc1234, plan, 1 open change findings, 4 expected files\n" },
       passRound1: { review: "# Change review: feature @ abc1234, round 1, 2 open change findings\n" },
       passRecheckOpen: { review: "# Change review: feature @ abc1234, recheck of round 1, 1 open change findings\n" },
-      passRecheckDone: { review: "# Change review: feature @ abc1234, recheck of round 1, 0 open change findings\n" },
+      // a recheck of HEAD leaves nothing to read; one of an older commit does
+      passRecheckDone: { review: (head) => `# Change review: feature @ ${head}, recheck of round 1, 0 open change findings\n` },
+      passRecheckOld: { review: "# Change review: feature @ abc1234, recheck of round 1, 0 open change findings\n" },
       passUx: { "ux-review": "# UX review: feature @ abc1234, first pass, 2 open findings (0 high)\n" },
       passCriticalPlan: { "critical-review": "# Critical review: feature @ abc1234, plan, 0 open findings\n" },
       passCriticalDiff: { "critical-review": "# Critical review: feature @ abc1234, diff, 1 open findings\n" },
@@ -390,7 +392,8 @@ const STATES = {
         "agent-gate",
         () => {
           const state = scratchRepo();
-          for (const [kind, text] of Object.entries(files)) write(state.repo, kind, text);
+          const head = git(state.repo, "rev-parse", "--short", "HEAD");
+          for (const [kind, text] of Object.entries(files)) write(state.repo, kind, typeof text === "function" ? text(head) : text);
           return { ...state, out: dirname(stateFile(state.repo, "review", BRANCH)) };
         },
       ],
@@ -607,15 +610,18 @@ const CASES = [
   ["passPlanRedone", "change-reviewer: plan, survey <out>/survey-feature.md, output <out>/plan-review-feature.md", THROUGH],
   ["passRound1", "change-reviewer: recheck, output <out>/review-feature.md", THROUGH],
   ["passRecheckOpen", "change-reviewer: recheck, output <out>/review-feature.md", THROUGH],
-  ["passRecheckDone", "change-reviewer: recheck, output <out>/review-feature.md", /holds round 1's recheck, which left no change finding open/],
+  ["passRecheckDone", "change-reviewer: recheck, output <out>/review-feature.md", /review-feature\.md already reads HEAD .* and leaves no change finding open/],
+  ["passRecheckOld", "change-reviewer: recheck, output <out>/review-feature.md", THROUGH],
   ["passUx", "ux-reviewer: shots, output <out>/ux-review-feature.md", /ux-review-feature\.md is written/],
   ["passUx", "ux-reviewer: design, output <out>/ux-review-design-feature.md", THROUGH],
-  ["passCriticalPlan", "critical-reviewer: diff, output <out>/critical-review-feature.md", THROUGH],
-  ["passCriticalDiff", "critical-reviewer: diff, output <out>/critical-review-feature.md", /critical-review-feature\.md is written/],
+  ["passCriticalPlan", "critical-reviewer: mode: diff, output <out>/critical-review-feature.md", THROUGH],
+  ["passCriticalPlan", "critical-reviewer: plan mode, output <out>/critical-review-feature.md", /critical-review-feature\.md is written/],
+  ["passCriticalDiff", "critical-reviewer: mode: diff, output <out>/critical-review-feature.md", /critical-review-feature\.md is written/],
   // whatever the files, a reviewer's prompt names its output
   ["passPlanRedone", "critical-reviewer: diff of feature", /prompt names no output path/],
   ["passRound1", "critical-reviewer: diff of feature", /prompt names no output path/],
   ["passRecheckOpen", "critical-reviewer: diff of feature", /prompt names no output path/],
+  ["passRecheckOld", "critical-reviewer: diff of feature", /prompt names no output path/],
   ["passCriticalPlan", "critical-reviewer: diff of feature", /prompt names no output path/],
   // survey-gate: the build's size cap, and a reviewer's file kept to it
   ["capped", "<repo>/b.txt", THROUGH],
@@ -2527,6 +2533,19 @@ describe("steps", () => {
       cost,
     );
     assert.deepEqual(Object.keys(review.starts), ["review"]);
+    // the review phase's own fixes and its critical diff pass stay review,
+    // though it read the plan review first (round-1 review F1)
+    const fixes = steps.profileOf(
+      [
+        ...step("m1", 1, 100, [["Read", { file_path: "/repo/.git/claude/plan-review-x.md" }]]),
+        ...step("m2", 2, 100, [["Agent", { subagent_type: "change-reviewer", prompt: "round 1, output /repo/.git/claude/review-x.md" }]]),
+        ...step("m3", 3, 100, [["Edit", { file_path: "/repo/x.ts" }]]),
+        ...step("m4", 4, 100, [["Agent", { subagent_type: "critical-reviewer", prompt: "mode: diff, output /repo/.git/claude/critical-review-x.md" }]]),
+      ],
+      cost,
+    );
+    assert.deepEqual(Object.keys(fixes.starts), ["plan review", "review"]);
+    assert.equal(fixes.stages.review.steps, 3);
   });
 });
 

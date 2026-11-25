@@ -10,7 +10,7 @@
 // reviewer writes: its header holds the passes agent-gate counts and the
 // file count the build's size cap reads (lib's passOf).
 import { existsSync, readFileSync } from "node:fs";
-import { beforeEdit, cwdFor, deny, hook, inGitDir, workOf } from "./lib.mjs";
+import { beforeEdit, cwdFor, deny, hook, inGitDir, reviewFiles, workOf } from "./lib.mjs";
 
 // the file's text once this edit is made: Write's content, or Edit's and
 // MultiEdit's replacements applied to the file as it is
@@ -27,8 +27,8 @@ hook((input) => {
   if (!path) return;
   const cwd = cwdFor(input);
   if (inGitDir(cwd, path)) {
-    if (/\/claude\/(plan-review|review|ux-review|critical-review)-[^/]*$/.test(path) && !/-reviewer$/.test(input.agent_type ?? ""))
-      return deny(`${path} is a reviewer's file: only its reviewer writes it. Give your case against a finding in the reviewer's next pass, as the \`change\` skill's Review says.`);
+    if (reviewFiles(path).length && !/-reviewer$/.test(input.agent_type ?? ""))
+      return deny(`${path} is a reviewer's file: only its reviewer writes it. Give your case against a finding in the recheck's prompt, as the \`change\` skill's Review says.`);
     return;
   }
   const work = workOf(cwd, input);

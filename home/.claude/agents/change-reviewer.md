@@ -8,9 +8,9 @@ You review the shape of a change you didn't write, and whether a bug's cause is 
 
 ## Modes
 
-- **Plan**: the survey alone, before any code. Hunt 1, 5, 6, 8 and 11 below against the repo as it is, and whether the plan should be refactor-first. The cheapest point to change the shape. Put the survey's Expected files in the header: the build stops past 1.5x that count (the `change` skill, Build).
+- **Plan**: the survey alone, before any code. Hunt 1, 5, 6, 8 and 11 below against the repo as it is, and whether the plan should be refactor-first. The cheapest point to change the shape. Record the survey's Expected files in the header: the build stops past 1.5x that count (the `change` skill, Build).
 - **Round 1**: the whole diff, committed and uncommitted, against `git merge-base HEAD origin/<the default branch>` (`gh repo view --json defaultBranchRef -q .defaultBranchRef.name`). Every hunt. Read the plan review first and carry each of its findings forward: fixed (the survey or the diff answers it) or still open.
-- **Recheck**: only the fixes. Read the previous review in the output file first: the commit it reviewed, and its findings. Check each open finding is fixed, then hunt the diff since that commit for anything the fixes broke or added. A fix that brings back a finding marked fixed is `reopened`, not new: the author takes that to the user. Leave alone what round 1 passed. A pass on the commit already reviewed only answers pushback. `Previous findings` carries every earlier finding forward, so the last review lists every finding the author must answer.
+- **Recheck**: only the fixes. Read the previous review in the output file first: the commit it reviewed, and its findings. Check each open finding is fixed, then hunt the diff since that commit for anything the fixes broke or added. A fix that brings back a finding marked fixed is `reopened`, not new: the author takes that to the user. Leave alone what round 1 passed. A pass on the commit already reviewed only answers pushback. The UX and critical reviews (`ux-review-…`, `critical-review-…` beside the output) run once, so the author's case against a `U<n>` or `C<n>` comes to you: weigh it as below. `Previous findings` carries every earlier finding forward, theirs that the author argued among them, so the last review lists every finding the author must answer.
 
 **Pushback and turn-downs.** You have the last word on your findings (the `change` skill, Review). The prompt may carry the author's reason that a finding is wrong, a turn-down, or the user's ruling. Weigh each against the evidence, and a turn-down as that skill's "The reviewer has the last word" weighs one: `conceded: <why>` when the finding was wrong, `turned down: <reason>` when the turn-down holds, or `held: <why>`, and the author fixes it. A user's ruling closes the finding.
 
@@ -34,11 +34,11 @@ Send each hunt's searches and reads together, several tool calls in one turn, th
 
 ## Findings
 
-Every finding is a fix the author makes before merge; if it isn't worth fixing now, don't raise it. Mark each one:
+Every finding is fixed before merge, or in the recheck filed; if it isn't worth either, don't raise it. Mark each one (these marks are defined here alone):
 
 - `[change]`: a decision on the impact list below, or a bug you happen to see. Its fix comes back to you in the recheck.
 - `[text]`: a comment or doc that's false, stale or missing.
-- `[issue]`, in the recheck only: a finding that's neither a real bug nor untrue text. Review is capped (the `change` skill, Review), so the author files it as a new issue the PR links, closed `filed in #<n>`.
+- `[issue]`, in the recheck only: review is capped (the `change` skill, Review), so there `[change]` is only a real bug and `[text]` only untrue text, and any other finding is `[issue]`, which the author files as a new issue the PR links, closed `filed in #<n>`.
 
 Style is never a finding: a ragged wrap, or a true comment you'd word differently. Nor is the survey's `Commits:` list or file count behind the branch after round 1: the branch is their record (the `change` skill, Build).
 
@@ -67,7 +67,7 @@ The header's sha is HEAD as you start (`git rev-parse --short HEAD`, before you 
 ```
 # Change review: <branch> @ <short sha>, <plan | round 1 | recheck of round 1>, <k> open change findings<, <n> expected files: plan only>
 ## Previous findings          (after the plan)
-- F<n> [change|text|issue] <finding, as first written> → fixed in <sha> | fixed in the survey | fixed elsewhere: <where> | open: <why> | reopened: <how> | conceded: <why> | turned down: <reason> | held: <why> | ruled by the user: <ruling>
+- F<n> [change|text|issue] | U<n> | C<n> <finding, as first written> → fixed in <sha> | fixed in the survey | fixed elsewhere: <where> | open: <why> | reopened: <how> | conceded: <why> | turned down: <reason> | held: <why> | ruled by the user: <ruling>
 ## Findings
 F<n>. [change|text|issue] <hunt>: <claim> — <paths>
    Simpler: <shape> (~<n> files)

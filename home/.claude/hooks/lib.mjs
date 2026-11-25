@@ -418,15 +418,31 @@ const survey = (cwd, key) => {
   return { path, ok: true, expected: expected || null };
 };
 
+// the reviewers' files beside a survey, each absolute path in `text` (a
+// prompt, a file_path) with its kind: the one list of them, for agent-gate,
+// survey-gate and steps.mjs
+export const reviewFiles = (text) =>
+  [...String(text ?? "").matchAll(/(\/[^\s`'"),]*\/claude\/(plan-review|review|ux-review-design|ux-review|critical-review)-[^\s`'"),/]+\.md)\b/g)].map(([, path, kind]) => ({ path, kind }));
+
 // a review file's first line, as the reviewer writes it (change-reviewer.md,
-// ux-reviewer.md, critical-reviewer.md, Output): which pass it is, how many
-// findings it leaves open, and, for a plan review, the file count it judged
-// right. Null when there's no file
+// ux-reviewer.md, critical-reviewer.md, Output): the commit it read, which
+// pass it is, how many findings it leaves open, and, for a plan review, the
+// survey's Expected files it read. The one reader of the headers: review(),
+// review-gate's uxReview and agent-gate take them from it. Null when
+// there's no file
 export const passOf = (path) => {
   if (!existsSync(path)) return null;
   const head = readFileSync(path, "utf8").split("\n", 1)[0];
   const number = (pattern) => (pattern.test(head) ? Number(head.match(pattern)[1]) : null);
-  return { head, plan: /,\s*plan\b/.test(head), recheck: /\brecheck\b/.test(head), open: number(/\b(\d+) open\b/), files: number(/\b(\d+) expected files?\b/) };
+  return {
+    head,
+    sha: head.match(/ @ ([0-9a-f]{7,40}),/)?.[1] ?? null,
+    plan: /,\s*plan\b/.test(head),
+    round: number(/\bround (\d+)\b/),
+    recheck: /\brecheck of round\b/.test(head),
+    open: number(/\b(\d+) open\b/),
+    files: number(/\b(\d+) expected files?\b/),
+  };
 };
 
 // the reviewer's read of the survey, before any code: once is enough
@@ -435,11 +451,19 @@ const planReview = (cwd, key) => {
   return existsSync(path) ? { path, ok: true, files: passOf(path).files } : { path, ok: false, reason: "missing" };
 };
 
-// the build's size cap: 1.5x the files the plan review judged right, so a
-// change that outgrows one reviewable PR stops while splitting it is cheap
-// (2026-11-25: #508's tree, #561 at round 5). The count is the reviewer's,
-// read from its header, so raising the survey's Expected files opens
-// nothing: a redone survey gets a plan pass of its own (agent-gate)
+// the checkout a file in a git dir's claude/ folder belongs to: the git
+// dir's parent, or, for a linked worktree's, the folder its `gitdir` names
+export const checkoutOf = (file) => {
+  const gitDir = dirname(dirname(file));
+  const link = join(gitDir, "gitdir");
+  return dirname(existsSync(link) ? readFileSync(link, "utf8").trim() : gitDir);
+};
+
+// the build's size cap: 1.5x the survey's Expected files as the plan
+// review recorded them, so a change that outgrows one reviewable PR stops
+// while splitting it is cheap (2026-11-25: #508's tree, #561 at round 5).
+// The count is read from the reviewer's header, so raising the survey's
+// opens nothing: a redone survey gets a plan pass of its own (agent-gate)
 const CAP = 1.5;
 const pastCap = (cwd, work, plan, found, pending) => {
   if (!plan.files) return null;
@@ -662,6 +686,10 @@ const commentOnly = (cwd, sha) => {
   }
 };
 
+// whether a review of `sha` still reads HEAD: it is HEAD, or the commits
+// since change only comment lines
+export const stillHead = (cwd, sha) => headSha(cwd).startsWith(sha) || commentOnly(cwd, sha);
+
 // the reviewer's read of the diff: it must be of the last commit (written
 // after it isn't enough: a round runs while fixes may land), or of one
 // before it with only comment lines changed since; and it must leave no
@@ -680,27 +708,23 @@ export const review = (cwd, work, input = {}, draft = false) => {
     return { path, ok: false, reason: dictated ? `missing: its survey is dictated, but ${dictated.why}, so it takes the full flow` : "missing" };
   }
   const text = readFileSync(path, "utf8");
-  // the first `round <n>` after the sha, and the first open count after
-  // that, whatever words come between (a "(with a recheck of …)")
-  const header = text.match(/^# Change review:.* @ ([0-9a-f]{7,40}),.*?\bround (\d+)\b.*?\b(\d+) open change finding/m);
-  if (!header)
+  const { head, sha, round, recheck, open } = passOf(path);
+  if (!/^# Change review:/.test(head) || !sha || round === null || open === null)
     return {
       path,
       ok: false,
       reason:
         "its header has no commit, round and open count: its first line reads `# Change review: <branch> @ <short sha>, round <n>, <k> open change findings` (or `recheck of round <n>`), with anything more after the round",
     };
-  const [sha, ...counts] = header.slice(1);
   const ids = [...new Set([...text.matchAll(/^(?:- )?(F\d+)\b/gm)].map((id) => id[1]))];
   if (draft) return onBranch(cwd, sha) ? { path, ok: true, ids, text } : { path, ok: false, reason: `it reviewed ${sha}, no commit on this branch` };
-  if (!headSha(cwd).startsWith(sha) && !commentOnly(cwd, sha))
+  if (!stillHead(cwd, sha))
     return { path, ok: false, reason: `it reviewed ${sha}, and the commits since change more than comment lines` };
-  const [round, open] = counts.map(Number);
   if (open)
     return {
       path,
       ok: false,
-      reason: `round ${round}${/\brecheck of round\b/.test(header[0]) ? "'s recheck" : ""} left ${open} change finding(s) open: fix them and run the recheck of those fixes (the \`change\` skill's Review)`,
+      reason: `round ${round}${recheck ? "'s recheck" : ""} left ${open} change finding(s) open: fix them and run the recheck of those fixes (the \`change\` skill's Review)`,
     };
   // the review (each replaces the last) lists every finding of the change,
   // each with the reviewer's word on it
