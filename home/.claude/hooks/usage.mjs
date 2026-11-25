@@ -16,7 +16,9 @@
 //   its trigger (auto or manual) and the context it compacted (preTokens)
 // - an "agent" row per agent stop: its parent, depth, type, description,
 //   effort and cwd, from the input and the meta.json beside its transcript;
-//   a "session" row per main session stop, with its cwd
+//   a "session" row per main session stop, with its cwd. Either says
+//   `unreadable` when the new lines held some it couldn't read, which it
+//   skips (a run of NULs a crash left)
 // - a "fork" row per stop of Claude Code's own progress summary: while a
 //   background agent works, every ~30 s it forks the agent for one turn to
 //   summarize it (forkLabel "agent_summary", skipTranscript, in 2.1.308's
@@ -143,12 +145,11 @@ const unread = (transcript, from) => {
   }
 };
 
-// a row per assistant message in `text` (one message spans several lines,
+// a row per assistant message in `rows` (one message spans several lines,
 // each with the same id and usage) and per compaction
-const messages = (text, who) => {
+const messages = (lines, who) => {
   const rows = new Map();
-  for (const line of lines(text)) {
-    const { type, subtype, uuid, timestamp, message, compactMetadata } = JSON.parse(line);
+  for (const { type, subtype, uuid, timestamp, message, compactMetadata } of lines) {
     if (type === "system" && subtype === "compact_boundary") {
       rows.set(uuid, { kind: "compact", id: uuid, at: timestamp, ...who, trigger: compactMetadata?.trigger ?? null, preTokens: compactMetadata?.preTokens ?? null });
       continue;
@@ -184,8 +185,12 @@ const record = (input) => {
     const { text, to } = unread(transcript, existsSync(offsetFile) ? Number(readFileSync(offsetFile, "utf8")) : 0);
     const meta = transcript.replace(/\.jsonl$/, ".meta.json");
     const { parentAgentId, spawnDepth, description } = agent && existsSync(meta) ? JSON.parse(readFileSync(meta, "utf8")) : {};
+    // a line it can't read is skipped and counted, and the offset moves past
+    // it: thrown, it stopped the transcript's recording for good (session
+    // 3d4158ee, 2026-11-23: one line of 2,030 NULs, then ~70 error rows)
+    const { rows, unreadable } = jsonLines(text);
     append([
-      ...messages(text, { session, agent }),
+      ...messages(rows, { session, agent }),
       agent
         ? {
             kind: "agent",
@@ -198,8 +203,9 @@ const record = (input) => {
             description: description ?? null,
             effort: input.effort?.level ?? null,
             cwd,
+            ...(unreadable && { unreadable }),
           }
-        : { kind: "session", at, session, cwd },
+        : { kind: "session", at, session, cwd, ...(unreadable && { unreadable }) },
     ]);
     mkdirSync(dirname(offsetFile), { recursive: true });
     writeFileSync(offsetFile, String(to));

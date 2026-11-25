@@ -1859,7 +1859,7 @@ describe("usage", () => {
     };
     const session = (id, entries) => {
       const transcript = join(project, `${id}.jsonl`);
-      appendFileSync(transcript, jsonl(entries));
+      appendFileSync(transcript, typeof entries === "string" ? entries : jsonl(entries));
       return run(["--hook"], { hook_event_name: "Stop", session_id: id, cwd: "/w/repo", transcript_path: transcript });
     };
     // the plan's windows as a status line's input gives them: each window's
@@ -1902,6 +1902,23 @@ describe("usage", () => {
       { kind: "agent", at: undefined, session: "s1", agent: "a1", parent: null, depth: 1, type: "general-purpose", description: "Fix issue 1", effort: "high", cwd: "/w/repo" },
     );
     assert.doesNotMatch(JSON.stringify(rows), /never keeps/);
+  });
+
+  // plan review F10: session 3d4158ee's transcript gained a line of 2,030
+  // NULs (2026-11-23), and every stop after it failed on that line
+  test("--hook: a line it can't read is skipped and counted, and the stops after it record", () => {
+    const { ledger, agent, session } = scratch();
+    session("s1", said("m1", 100));
+    const nul = "\0".repeat(2030) + "\n";
+    session("s1", nul + jsonl(said("m2", 200)));
+    session("s1", said("m3", 300));
+    agent("a1", nul + jsonl(said("m4", 400)), { description: "Fix issue 1", spawnDepth: 1 });
+    const rows = ledger();
+    assert.deepEqual(rows.filter((row) => row.kind === "message").map((row) => row.id), ["m1", "m2", "m3", "m4"]);
+    assert.deepEqual(
+      rows.filter((row) => row.kind !== "message").map((row) => [row.kind, row.unreadable]),
+      [["session", undefined], ["session", 1], ["session", undefined], ["agent", 1]],
+    );
   });
 
   // each line is what settings.json's jq one-liner printed for that input,
