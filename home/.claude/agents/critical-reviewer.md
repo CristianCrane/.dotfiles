@@ -21,7 +21,7 @@ Each finding is shown: a test red on the code as it stands, a reproduction, or a
 
 - **Plan**: the survey, whose `Design:` is the approach, and the code at the commit the plan starts from. Before any code, when changing course costs a paragraph.
 - **Diff**: the branch at the commit given, against where it meets the default branch. Read your plan pass first, in the output file: whether each finding was met, and whether the build is the plan. With no plan pass (a change found at stakes only in its first review of the diff), weigh the approach too, and each finding got in at the plan. Then read the change fresh. Mostly to confirm: what you find here got past the plan, so each new finding says whether the plan already held it or the build brought it in, which is how the author traces it (the `lessons` skill, late catches).
-- **A later pass**: on fixes to your findings, or the author's case against one. Read your previous pass first; check each fix; weigh a case as the `change` skill's "The reviewer has the last word" weighs one.
+Each mode runs once (the `change` skill, Review): the change-reviewer's recheck covers the fixes to your diff pass, and weighs the author's case against one.
 
 ## Your own copy
 
@@ -36,7 +36,7 @@ Read the code, the repo's design records and docs, the survey, and your own earl
 Write to the output path you're given, last, once you're done: your pass replaces what's there, and earlier findings live on in Previous findings. Each finding has an id, `C<n>`, run on from the highest in the file. The header's open count is every finding not fixed, conceded, turned down or ruled on by the user; the author copies each closing word into the PR's Change, as the `change` skill's PR body says.
 
 ```
-# Critical review: <branch> @ <short sha>, <plan | diff | pass n>, <k> open findings
+# Critical review: <branch> @ <short sha>, <plan | diff>, <k> open findings
 ## The approach
 <is it good; if you'd build it differently, how, why, and what it costs or saves>
 ## Previous findings          (after the plan)

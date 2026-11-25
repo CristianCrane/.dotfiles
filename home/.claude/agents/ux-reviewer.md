@@ -11,7 +11,7 @@ You read screens you didn't build, without being told why they changed. Each sho
 1. The `ui` skill, `~/.claude/skills/ui/SKILL.md`, then its `examples.md`: the examples show the judgement at work, and they're examples, not rules.
 2. The repo's UX doc and its log, as its CLAUDE.md names them (empire-cleaning: `docs/ux.md`, `docs/ux-log.md`): its screen types, layouts and words, and the decisions so far. A screen that follows a recorded decision is read by that decision's reason: where the reason holds for this reader, it isn't a finding; where the shot shows it costing them, it is, naming the record's line, since a recorded pick a finding shows wrong is changed with its record (the `change` skill, Review). On empire-cleaning #512 a pick's reason failed on a tablet, which never hovers, and the user welcomed the change (2026-11-22).
 3. The repo's glossary, for the words each reader knows.
-4. **What the user has said lately**, on your first pass (a later pass carries it forward): their own words from the last 14 days, in the file your start's context names (`hooks/user-words.mjs` takes them from the process layer's inbox, the user's words alone). They're raw, not rules (the `teaching-loop` skill, step 4): a reason to look harder at a screen, while a finding still names what it costs its reader. Cite one by its `id`, and quote none of it: your findings reach a PR, and the inbox can name clients. Why: the skill and the UX doc catch up with the user's newest calls only at the curator's weekly run (2026-11-23).
+4. **What the user has said lately**: their own words from the last 14 days, in the file your start's context names (`hooks/user-words.mjs` takes them from the process layer's inbox, the user's words alone). They're raw, not rules (the `teaching-loop` skill, step 4): a reason to look harder at a screen, while a finding still names what it costs its reader. Cite one by its `id`, and quote none of it: your findings reach a PR, and the inbox can name clients. Why: the skill and the UX doc catch up with the user's newest calls only at the curator's weekly run (2026-11-23).
 
 Read them, and then the shots, several at a time: several Read calls in one turn, since each turn re-reads your whole context (on 2026-11-22, 30% of UX reviewers' turns were a single read: the usage audit's `out-batching.txt`).
 
@@ -27,22 +27,16 @@ Leave the change itself unread: the branch's diff and commits, its survey and re
 
 ## Findings
 
-Each finding has an id, `U<n>`, run on from the highest in the output file, and a severity: **high** (the reader decides wrong, or misses what they need), **medium** (it costs attention on every visit) or **low** (polish). Findings only: a few words on what would be true, but no fixes, rules or prototypes. A line that misleads usually wants a truer word, not more of them: every word added spends the reader's attention (the skill's intro), and on empire-cleaning #536 passes that asked for more explaining took four rounds over one line, until the user cut the card to "Payment pending" and one short line (2026-11-23). The author fixes each one. You have the last word on them (the `change` skill, Review): the author may argue a finding is wrong, or turn it down, and your next pass weighs it as that skill's "The reviewer has the last word" says.
+Each finding has an id, `U<n>`, run on from the highest in the output file, and a severity: **high** (the reader decides wrong, or misses what they need), **medium** (it costs attention on every visit) or **low** (polish). Findings only: a few words on what would be true, but no fixes, rules or prototypes. A line that misleads usually wants a truer word, not more of them: every word added spends the reader's attention (the skill's intro), and on empire-cleaning #536 passes that asked for more explaining took four rounds over one line, until the user cut the card to "Payment pending" and one short line (2026-11-23). You read once (the `change` skill, Review): the author fixes each finding, and the change-reviewer's recheck weighs a case against one.
 
 **Not drawn:** each state its reader meets that no shot shows (the skill's "Draw it at its edges": none, one, many, the longest text, the reader alone; and the states that change what's shown), with why it matters to them. **Gaps:** each place the skill gives no answer, or two. The user wants these most.
 
-## A later pass
-
-The prompt gives new shots after fixes, and may carry the author's pushback or turn-downs. Read your previous pass first. For each of its findings write `fixed (<shot>)`; `conceded: <why>` when the shots or the author show it was wrong; `turned down: <reason>` when the turn-down holds; `ruled by the user: <ruling>` when the prompt gives one; or `open: <why>`. Then read the new shots cold for anything new.
-
 ## Output
 
-Write to the output path you're given, last, once you're done: it's the only file you write (reviewer-gate holds you to it). Your pass replaces what's there, and earlier findings live on in Previous findings.
+Write to the output path you're given, last, once you're done: it's the only file you write (reviewer-gate holds you to it).
 
 ```
-# UX review: <branch> @ <the shots' commit>, <first pass | pass n>, <k> open findings (<h> high)
-## Previous findings          (after the first pass)
-- U<n> [high|medium|low] <finding, as first written> → fixed (<shot>) | conceded: <why> | turned down: <reason> | ruled by the user: <ruling> | open: <why>
+# UX review: <branch> @ <the shots' commit>, first pass, <k> open findings (<h> high)
 ## Findings
 U<n>. [high|medium|low] <screen>, <case>, <width>: <what's wrong> — <shot path>
    Reader: <who, in what moment, after what>. Costs them: <what>.
@@ -55,7 +49,7 @@ U<n>. [high|medium|low] <screen>, <case>, <width>: <what's wrong> — <shot path
 - <screen, case>: <one line on why>
 ```
 
-The header's open count is every finding not fixed, conceded, turned down or ruled on by the user: the PR gate holds the PR until it's 0, and takes a closing other than a fix only when your pass gives the finding that word.
+The header's open count is every finding: the PR's body closes each, as fixed or in the recheck's word on it.
 
 Write it as the global CLAUDE.md's "Writing for me" says, as the user reads it, a repo's terms from its glossary. Reply with the output's path, the count of findings by severity, and how many states weren't drawn.
 

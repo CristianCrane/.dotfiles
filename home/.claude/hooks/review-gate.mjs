@@ -1,17 +1,17 @@
 // `gh pr create` waits for the branch's change review (the `change` skill):
 // it is turned down until the review exists (a dictated change that holds
-// has none: lib's dictatedHolds), is of the last commit (or
-// of one before it with only comment lines changed since) and leaves no
-// change finding open, and until the PR body, read
-// from its file, is in the skill's shape (its parts, Check these's
-// permalinks, Change collapsed, nothing else) and closes every finding of
-// that review in its Change section, as fixed or in the review's own word
-// on it. A body with Before / after also needs the branch's UX review, its
-// last pass of a commit on the branch leaving no finding open, and closes
-// its findings the same way. A PR leaves draft (`gh pr ready`, or `gh pr
-// create` without `--draft`) once the branch's lessons file (the `lessons`
-// skill) says where every cost went, the review is still of the last
-// commit, and a UX review its body needs still leaves none open.
+// has none: lib's dictatedHolds) and is of a commit on the branch, and
+// until the PR body, read from its file, is in the skill's shape (its
+// parts, Check these's permalinks, Change collapsed, nothing else) and
+// closes every finding of that review in its Change section, as fixed or
+// in the review's own word on it. A body with Before / after also needs
+// the branch's UX review, its one pass of a commit on the branch, and
+// closes its findings the same way. A PR leaves draft (`gh pr ready`, or
+// `gh pr create` without `--draft`) once the review, round 1's recheck by
+// then, is of the last commit (or of one before it with only comment lines
+// changed since) and leaves no change finding open, the body closes its
+// findings, and the branch's lessons file (the `lessons` skill) says where
+// every cost went.
 // The closing check is the backstop for the reviewer's last word (the
 // change skill, Review), not a rule of its own: in words alone, the
 // principle failed three times in two days, builders answering UX
@@ -178,6 +178,10 @@ const shapeOf = (text, cwd) => {
 // are read after their last →, as a finding's text before it can quote
 // one of the words (dotfiles review F13, 2026-11-23)
 const REVIEWERS_WORDS = ["fixed in the survey", "fixed elsewhere", "conceded", "turned down", "ruled by the user"];
+// a recheck's finding that's neither a real bug nor untrue text, marked
+// `[issue]` in the review, closes by the issue it went into (the `change`
+// skill's Review: the cap's later finding, 2026-11-25)
+const FILED = /\bfiled in #\d+\b/;
 const closingOf = (line) => line.split("→").at(-1).trim();
 const wordOf = (line) => REVIEWERS_WORDS.find((word) => closingOf(line).startsWith(word));
 
@@ -194,6 +198,10 @@ const unclosed = (cwd, section, id, text) => {
     .map(wordOf);
   const whys = named.map((named) => {
     const line = closingOf(named);
+    if (FILED.test(line))
+      return lines(text).some((line) => new RegExp(`^(?:- )?${id}\\b.*\\[issue\\]`).test(line))
+        ? null
+        : "`filed in #<n>` closes only a finding the review marks `[issue]`: fix this one";
     const word = wordOf(line);
     if (word)
       return words.includes(word)
@@ -205,15 +213,15 @@ const unclosed = (cwd, section, id, text) => {
       return "it says fixed, but in no commit on this branch: a fix to the survey's text is `fixed in the survey`, one anywhere else (an issue, a comment) is `fixed elsewhere: <where>`, as the review says";
     if (/\banswered\b/.test(line))
       return "`answered` closes nothing: a finding is `fixed in <sha>`, or takes the review's own word on it (`fixed in the survey`, `fixed elsewhere:`, `conceded:`, `turned down:`, `ruled by the user:`)";
-    return "its line says neither `fixed in` nor the review's own word on it";
+    return "its line says neither `fixed in`, `filed in #<n>` for an `[issue]`, nor the review's own word on it";
   });
   return whys.includes(null) ? null : whys[0];
 };
 
 // the branch's UX review (the `change` skill, Review), which a PR body
-// with Before / after needs: its last pass of a commit on the branch, and
-// leaving no finding open. Not of HEAD: a pass per commit that changes no
-// screen (a test, a type) would re-read the ui skill and the repo's UX docs
+// with Before / after needs: its one pass, of a commit on the branch. Its
+// findings are fixed after it, so it leaves them open, and the body closes
+// each; the change-reviewer's recheck covers the fixes
 const uxReview = (cwd, work) => {
   const path = stateFile(cwd, "ux-review", work.key);
   if (!existsSync(path)) return { path, reason: "missing" };
@@ -225,14 +233,26 @@ const uxReview = (cwd, work) => {
       reason: "its header has no commit and open count: its first line reads `# UX review: <branch> @ <the shots' commit>, <first pass | pass n>, <k> open findings (<h> high)`",
     };
   if (!onBranch(cwd, header[1])) return { path, reason: `its shots are of ${header[1]}, no commit on this branch` };
-  if (Number(header[2]))
-    return { path, reason: `its last pass leaves ${header[2]} finding(s) open: fix them, take new shots and run a later pass` };
   return { path, ok: true, text, ids: [...new Set([...text.matchAll(/^(?:- )?(U\d+)\b/gm)].map((id) => id[1]))] };
 };
 
 // a UX review not ready, in words for a turn-down
 const uxNotReady = (ux, branch) =>
-  `The PR body has **Before / after:**, so ${branch} needs a UX review whose last pass leaves no finding open, and it isn't ready (${ux.reason}), with output ${ux.path}: run the \`ux-reviewer\` agent as the \`change\` skill's Review step says.`;
+  `The PR body has **Before / after:**, so ${branch} needs its UX review, and it isn't ready (${ux.reason}), with output ${ux.path}: run the \`ux-reviewer\` agent as the \`change\` skill's Review step says.`;
+
+// why the body's Change section doesn't close every finding, if it
+// doesn't: the change review's, and with Before / after the UX review's,
+// whose word on a finding can be the recheck's, as the UX review has one pass
+const unclosedAll = (cwd, work, found, body, section, seen) => {
+  const ux = seen ? uxReview(cwd, work) : null;
+  if (ux && !ux.ok) return uxNotReady(ux, work.branch);
+  const open = [
+    ...found.ids.map((id) => [id, unclosed(cwd, section, id, found.text)]),
+    ...(ux?.ids ?? []).map((id) => [id, unclosed(cwd, section, id, `${ux.text}\n${found.text}`)]),
+  ].flatMap(([id, why]) => (why ? [`${id}: ${why}`] : []));
+  if (open.length)
+    return `The PR body's Change section (${body}) doesn't close every finding of the last change review (${found.path})${ux ? ` and UX review (${ux.path})` : ""}: ${open.join("; ")}. Each finding gets its own line ending \`fixed in <sha>\` (a commit on this branch), \`filed in #<n>\` for an \`[issue]\`, or the review's own word on it, after its line's last → (\`fixed in the survey\`, \`fixed elsewhere:\`, \`conceded:\`, \`turned down:\`, \`ruled by the user:\`).`;
+};
 
 // gh pr create: the PR's branch (not a prototype, and the one checked
 // out), then the review, the body's shape and its Change section, and its
@@ -255,7 +275,8 @@ const createGate = (command, hidden, match, input) => {
   const work = workOf(cwd, input);
   if (!work) return;
 
-  const found = review(cwd, work, input);
+  const draft = /(?:^|\s)(?:--draft|-d)(?=\s|=|$)/.test(argsOf(hidden, end));
+  const found = review(cwd, work, input, draft);
   if (!found.ok)
     return turnDownCreate(
       `The change review for ${work.branch} isn't ready (${found.reason}). Run the change-reviewer agent as the \`change\` skill's Review step says, with output ${found.path}. Answer each finding in the PR's Change section, then open the PR. (This checked ${work.branch}, checked out in ${cwd} when the command started.)`,
@@ -273,20 +294,10 @@ const createGate = (command, hidden, match, input) => {
     return turnDownCreate(
       `The PR body (${body}) isn't in the shape the \`change\` skill's PR body step gives: ${problems.join("; ")}.`,
     );
-  // each finding closed: the change review's, and with Before / after the
-  // UX review's, which must leave none open
-  const ux = seen ? uxReview(cwd, work) : null;
-  if (ux && !ux.ok) return turnDownCreate(uxNotReady(ux, work.branch));
-  const open = [
-    ...found.ids.map((id) => [id, unclosed(cwd, section, id, found.text)]),
-    ...(ux?.ids ?? []).map((id) => [id, unclosed(cwd, section, id, ux.text)]),
-  ].flatMap(([id, why]) => (why ? [`${id}: ${why}`] : []));
-  if (open.length)
-    return turnDownCreate(
-      `The PR body's Change section (${body}) doesn't close every finding of the last change review (${found.path})${ux ? ` and UX review (${ux.path})` : ""}: ${open.join("; ")}. Each finding gets its own line ending \`fixed in <sha>\` (a commit on this branch) or the review's own word on it, after its line's last → (\`fixed in the survey\`, \`fixed elsewhere:\`, \`conceded:\`, \`turned down:\`, \`ruled by the user:\`).`,
-    );
+  const why = unclosedAll(cwd, work, found, body, section, seen);
+  if (why) return turnDownCreate(why);
 
-  if (/(?:^|\s)(?:--draft|-d)(?=\s|=|$)/.test(argsOf(hidden, end))) return;
+  if (draft) return;
   const missing = lessonsMissing(cwd, work);
   if (missing) return turnDownCreate(`${missing} Or open it as a draft (\`--draft\`) and mark it ready once they're written.`);
 };
@@ -332,11 +343,13 @@ const readyGate = (command, hidden, match, input) => {
       "ready",
     );
 
-  // a later UX pass may have found more since the PR opened
+  // the recheck may have found more since the PR opened: the body, as
+  // edited onto the PR (`gh pr edit --body-file`), closes it too
   const body = stateFile(cwd, "pr-body", work.key);
-  if (existsSync(body) && shapeOf(readFileSync(body, "utf8"), cwd).seen) {
-    const ux = uxReview(cwd, work);
-    if (!ux.ok) return turnDown(uxNotReady(ux, work.branch), "ready");
+  if (existsSync(body)) {
+    const { section, seen } = shapeOf(readFileSync(body, "utf8"), cwd);
+    const why = section && unclosedAll(cwd, work, found, body, section, seen);
+    if (why) return turnDown(`${why} Then \`gh pr edit --body-file ${body}\`, as its own command.`, "ready");
   }
 
   const missing = lessonsMissing(cwd, work);

@@ -12,7 +12,7 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { closeSync, existsSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, dirname, isAbsolute, join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 
 export const git = (cwd, ...args) =>
@@ -418,10 +418,36 @@ const survey = (cwd, key) => {
   return { path, ok: true, expected: expected || null };
 };
 
+// a review file's first line, as the reviewer writes it (change-reviewer.md,
+// ux-reviewer.md, critical-reviewer.md, Output): which pass it is, how many
+// findings it leaves open, and, for a plan review, the file count it judged
+// right. Null when there's no file
+export const passOf = (path) => {
+  if (!existsSync(path)) return null;
+  const head = readFileSync(path, "utf8").split("\n", 1)[0];
+  const number = (pattern) => (pattern.test(head) ? Number(head.match(pattern)[1]) : null);
+  return { head, plan: /,\s*plan\b/.test(head), recheck: /\brecheck\b/.test(head), open: number(/\b(\d+) open\b/), files: number(/\b(\d+) expected files?\b/) };
+};
+
 // the reviewer's read of the survey, before any code: once is enough
 const planReview = (cwd, key) => {
   const path = stateFile(cwd, "plan-review", key);
-  return existsSync(path) ? { path, ok: true } : { path, ok: false, reason: "missing" };
+  return existsSync(path) ? { path, ok: true, files: passOf(path).files } : { path, ok: false, reason: "missing" };
+};
+
+// the build's size cap: 1.5x the files the plan review judged right, so a
+// change that outgrows one reviewable PR stops while splitting it is cheap
+// (2026-11-25: #508's tree, #561 at round 5). The count is the reviewer's,
+// read from its header, so raising the survey's Expected files opens
+// nothing: a redone survey gets a plan pass of its own (agent-gate)
+const CAP = 1.5;
+const pastCap = (cwd, work, plan, found, pending) => {
+  if (!plan.files) return null;
+  const cap = Math.ceil(plan.files * CAP);
+  const files = changedFiles(cwd);
+  const adds = pending && !files.has(relative(topOf(cwd), pending.path)) ? 1 : 0;
+  if (files.size + adds <= cap) return null;
+  return `${work.branch} is past ${CAP}x the ${plan.files} files its plan review counted (${files.size + adds} with this edit, against ${cap}; ${plan.path}). Split it: commit what's built as its own PR, put the rest in an issue it links, and end with a report that says so; or redo the survey (${found.path}) with a new Expected files and run the change-reviewer on it in plan mode again, as the \`change\` skill's Build says`;
 };
 
 // A dictated change (the change skill's rule): a config change the user
@@ -565,7 +591,7 @@ export const beforeEdit = (cwd, work, input = {}, pending = null) => {
         : `the survey for ${work.branch} has no plan review: run the change-reviewer agent on it in plan mode, as the \`change\` skill's Plan review step says, with survey ${found.path} and output ${plan.path}`,
     };
   }
-  return { survey: found, missing: null };
+  return { survey: found, missing: pastCap(cwd, work, plan, found, pending) };
 };
 
 // how a comment line starts: `#` in HASH files, `//` in SLASHES files;
@@ -639,12 +665,14 @@ const commentOnly = (cwd, sha) => {
 // the reviewer's read of the diff: it must be of the last commit (written
 // after it isn't enough: a round runs while fixes may land), or of one
 // before it with only comment lines changed since; and it must leave no
-// change finding open, in any round (.dotfiles#45). The
+// change finding open, in any round (.dotfiles#45). A draft PR (`draft`)
+// opens after round 1, its fixes not yet rechecked: its review needs only
+// to be of a commit on the branch. The
 // reviewer's header line says all three: "… @ <sha>, round <n>, <k> open
 // change findings", where a recheck says "recheck of round <n>", keeping
 // the number. A dictated change that holds (dictatedHolds) has no review,
 // and passes with no findings.
-export const review = (cwd, work, input = {}) => {
+export const review = (cwd, work, input = {}, draft = false) => {
   const path = stateFile(cwd, "review", work.key);
   if (!existsSync(path)) {
     const dictated = dictatedHolds(cwd, work, input, null);
@@ -663,6 +691,8 @@ export const review = (cwd, work, input = {}) => {
         "its header has no commit, round and open count: its first line reads `# Change review: <branch> @ <short sha>, round <n>, <k> open change findings` (or `recheck of round <n>`), with anything more after the round",
     };
   const [sha, ...counts] = header.slice(1);
+  const ids = [...new Set([...text.matchAll(/^(?:- )?(F\d+)\b/gm)].map((id) => id[1]))];
+  if (draft) return onBranch(cwd, sha) ? { path, ok: true, ids, text } : { path, ok: false, reason: `it reviewed ${sha}, no commit on this branch` };
   if (!headSha(cwd).startsWith(sha) && !commentOnly(cwd, sha))
     return { path, ok: false, reason: `it reviewed ${sha}, and the commits since change more than comment lines` };
   const [round, open] = counts.map(Number);
@@ -670,11 +700,10 @@ export const review = (cwd, work, input = {}) => {
     return {
       path,
       ok: false,
-      reason: `round ${round} left ${open} change finding(s) open: fix them and run round ${round + 1}; only a loop goes to the user (the \`change\` skill's When rounds stop)`,
+      reason: `round ${round}${/\brecheck of round\b/.test(header[0]) ? "'s recheck" : ""} left ${open} change finding(s) open: fix them and run the recheck of those fixes (the \`change\` skill's Review)`,
     };
   // the review (each replaces the last) lists every finding of the change,
   // each with the reviewer's word on it
-  const ids = [...new Set([...text.matchAll(/^(?:- )?(F\d+)\b/gm)].map((id) => id[1]))];
   return { path, ok: true, ids, text };
 };
 

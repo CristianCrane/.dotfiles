@@ -183,10 +183,11 @@ const ROUTED = "Signals for feature:\n- A cost → inbox 1a2b3c4d\n";
 const BEFORE = "**Before / after:**\n| Before | After |\n| --- | --- |\n| a | b |\n";
 // a UX review of HEAD with no findings, for a body with Before / after
 const CLEAN_UX = (head) => `# UX review: ${BRANCH} @ ${head}, first pass, 0 open findings (0 high)\n`;
-// a UX review of HEAD whose last pass leaves nothing open, U1 fixed and U2
-// turned down
-const CLOSED_UX = (head) =>
-  `# UX review: ${BRANCH} @ ${head}, pass 2, 0 open findings (0 high)\n## Previous findings\n- U1 [high] a → fixed (a.png)\n- U2 [low] b → turned down: the owner's call\n`;
+// a UX review of HEAD, its one pass, with two findings: the body fixes U1,
+// and U2 is turned down in the change review's recheck, which weighs a UX
+// turn-down as the UX review has no second pass
+const CLOSED_UX = (head) => `# UX review: ${BRANCH} @ ${head}, first pass, 2 open findings (1 high)\n## Findings\nU1. [high] a\nU2. [low] b\n`;
+const UX_TURNED_DOWN = "## Previous findings\n- U2 [low] b → turned down: the owner's call\n";
 // a PR body in the change skill's shape, its permalinks at `head`, with
 // `change` as its Change section's lines; `parts` replaces a part's text,
 // or leaves it out (null)
@@ -262,14 +263,15 @@ const STATES = {
   // a PR body with Before / after, and the UX review it then needs
   ...Object.fromEntries(
     Object.entries({
-      uxClosed: [CLOSED_UX, (head) => `- UX review: U1 a → fixed in ${head.slice(0, 7)}\n- UX review: U2 b → turned down: the owner's call\n`],
+      uxClosed: [CLOSED_UX, (head) => `- UX review: U1 a → fixed in ${head.slice(0, 7)}\n- UX review: U2 b → turned down: the owner's call\n`, UX_TURNED_DOWN],
       uxUnclosed: [CLOSED_UX, () => "- UX review: U1 a → answered: rare\n"],
       uxOpen: [(head) => `# UX review: ${BRANCH} @ ${head}, first pass, 1 open findings (1 high)\n## Findings\nU1. [high] a\n`, () => ""],
+      uxFixed: [(head) => `# UX review: ${BRANCH} @ ${head}, first pass, 1 open findings (1 high)\n## Findings\nU1. [high] a\n`, (head) => `- UX review: U1 a → fixed in ${head.slice(0, 7)}\n`],
       uxElsewhere: [() => `# UX review: ${BRANCH} @ 0000000, first pass, 0 open findings (0 high)\n`, () => ""],
       uxMissing: [undefined, () => ""],
-    }).map(([name, [ux, change]]) => [
+    }).map(([name, [ux, change, review = true]]) => [
       name,
-      ["review-gate", () => scratchRepo({ review: true, ux, lessons: ROUTED, body: (head) => prBody(head, `- New: nothing\n${change(head)}`, { before: BEFORE }) })],
+      ["review-gate", () => scratchRepo({ review, ux, lessons: ROUTED, body: (head) => prBody(head, `- New: nothing\n${change(head)}`, { before: BEFORE }) })],
     ]),
   ),
   // a survey that names its file by a short name only, and one that
@@ -318,6 +320,12 @@ const STATES = {
       headerNoRound: "plan, 0 open change findings",
     }).map(([name, header]) => [name, ["review-gate", () => scratchRepo({ review: true, header, body: BODY })]]),
   ),
+  ...Object.fromEntries(
+    ["issue", "change"].map((mark) => [
+      `filed${mark[0].toUpperCase()}${mark.slice(1)}`,
+      ["review-gate", () => scratchRepo({ review: `F1. [${mark}] a\n`, header: "recheck of round 1, 0 open change findings", body: (head) => prBody(head, "- New: nothing\n- Review: F1 a → filed in #12\n") })],
+    ]),
+  ),
   // PR bodies out of the change skill's shape, each a part replaced (bodyMore
   // has every part, and headings in fenced code)
   ...Object.fromEntries(
@@ -363,6 +371,42 @@ const STATES = {
   ],
   // agent-gate reads only the tool call
   agent: ["agent-gate", () => ({ repo: scratchDir() })],
+  // a reviewer's passes, read from the review files at the output path its
+  // prompt names (`<out>`, the folder beside the survey)
+  ...Object.fromEntries(
+    Object.entries({
+      passNone: {},
+      passPlan: { survey: "Change: a.\nExpected files: 4\n", "plan-review": "# Change review: feature @ abc1234, plan, 1 open change findings, 4 expected files\n" },
+      passPlanRedone: { survey: "Change: a.\nExpected files: 7\n", "plan-review": "# Change review: feature @ abc1234, plan, 1 open change findings, 4 expected files\n" },
+      passRound1: { review: "# Change review: feature @ abc1234, round 1, 2 open change findings\n" },
+      passRecheckOpen: { review: "# Change review: feature @ abc1234, recheck of round 1, 1 open change findings\n" },
+      passRecheckDone: { review: "# Change review: feature @ abc1234, recheck of round 1, 0 open change findings\n" },
+      passUx: { "ux-review": "# UX review: feature @ abc1234, first pass, 2 open findings (0 high)\n" },
+      passCriticalPlan: { "critical-review": "# Critical review: feature @ abc1234, plan, 0 open findings\n" },
+      passCriticalDiff: { "critical-review": "# Critical review: feature @ abc1234, diff, 1 open findings\n" },
+    }).map(([name, files]) => [
+      name,
+      [
+        "agent-gate",
+        () => {
+          const state = scratchRepo();
+          for (const [kind, text] of Object.entries(files)) write(state.repo, kind, text);
+          return { ...state, out: dirname(stateFile(state.repo, "review", BRANCH)) };
+        },
+      ],
+    ]),
+  ),
+  // the build's size cap: 1.5x the plan review's count, 1 here, is 2 files
+  capped: [
+    "survey-gate",
+    () => {
+      const state = scratchRepo();
+      commit(state.repo, "c.txt", "c\n");
+      write(state.repo, "survey", "Change: b.\nFiles: b.txt\nExpected files: 1\n");
+      write(state.repo, "plan-review", "# Change review: feature @ abc1234, plan, 0 open change findings, 1 expected files\n");
+      return { ...state, out: dirname(stateFile(state.repo, "review", BRANCH)) };
+    },
+  ],
   // process-gate reads only the command
   process: ["process-gate", () => ({ repo: scratchDir() })],
   // scratch-gate: a subagent's call, the repo standing for the session's
@@ -468,18 +512,22 @@ const CASES = [
   ["unanswered", "gh pr create --draft --body-file <body>", /F7: it says `conceded`, but the review's own word on it doesn't/],
   ["unanswered", "gh pr create --draft --body-file <body>", /F8: it says `fixed in the survey`, but the review's own word on it doesn't/],
   ["unanswered", "gh pr create --draft --body-file <body>", /F6: `answered` closes nothing/],
-  // a body with Before / after needs a UX review that leaves none open,
+  // a body with Before / after needs a UX review,
   // its findings closed as the change review's (red on the old gate,
   // which read no UX review)
   ["uxClosed", "gh pr create --draft --body-file <body>", THROUGH],
   ["uxClosed", "gh pr ready", THROUGH],
   ["uxClosed", "gh pr create --draft --body-file <body> --head other", /--head other runs from feature's checkout/],
   ["uxUnclosed", "gh pr create --draft --body-file <body>", /U1: `answered` closes nothing: .*; U2: no line names it/],
-  ["uxOpen", "gh pr create --draft --body-file <body>", /needs a UX review .*isn't ready \(its last pass leaves 1 finding\(s\) open/],
-  ["uxOpen", "gh pr ready", /needs a UX review .*isn't ready \(its last pass leaves 1 finding\(s\) open/],
+  // its one pass leaves its findings open, and the body closes each
+  ["uxOpen", "gh pr create --draft --body-file <body>", /U1: no line names it/],
+  ["uxOpen", "gh pr ready", /U1: no line names it\. .*Then `gh pr edit --body-file /],
+  ["uxFixed", "gh pr create --draft --body-file <body>", THROUGH],
+  ["uxFixed", "gh pr ready", THROUGH],
+  ["uxFixed", "gh pr create --draft --body-file <body> --head other", /--head other runs from feature's checkout/],
   ["uxElsewhere", "gh pr create --draft --body-file <body>", /its shots are of 0000000, no commit on this branch/],
-  ["uxMissing", "gh pr create --draft --body-file <body>", /needs a UX review .*isn't ready \(missing\)/],
-  ["uxMissing", "gh pr ready", /needs a UX review .*isn't ready \(missing\)/],
+  ["uxMissing", "gh pr create --draft --body-file <body>", /needs its UX review, and it isn't ready \(missing\)/],
+  ["uxMissing", "gh pr ready", /needs its UX review, and it isn't ready \(missing\)/],
 
   // what runs before gh: a prefix or wrapper is gated, a mention isn't
   ...[`FOO="a b"`, `FOO='a b'`, "env", "command", "time", "nohup", "exec"].map((prefix) => [
@@ -534,8 +582,15 @@ const CASES = [
 
   ["headerAside", "gh pr create --draft --body-file <body>", THROUGH],
   ["headerAside", "gh pr create --body-file <body>", NO_LESSONS],
-  ["headerAsideOpen", "gh pr create --draft --body-file <body>", /round 2 left 1 change finding\(s\) open/],
-  ["headerLateOpen", "gh pr create --draft --body-file <body>", /round 6 left 1 change finding\(s\) open: fix them and run round 7/],
+  // a draft opens after round 1, its fixes not yet rechecked; ready waits
+  // for a review that leaves none open
+  ["headerAsideOpen", "gh pr create --draft --body-file <body>", THROUGH],
+  ["headerAsideOpen", "gh pr ready", /round 2 left 1 change finding\(s\) open/],
+  ["headerLateOpen", "gh pr create --body-file <body>", /round 6 left 1 change finding\(s\) open: fix them and run the recheck of those fixes/],
+  // `filed in #<n>` closes a recheck's `[issue]` finding, and no other
+  ["filedIssue", "gh pr create --draft --body-file <body>", THROUGH],
+  ["filedIssue", "gh pr create --body-file <body>", NO_LESSONS],
+  ["filedChange", "gh pr create --draft --body-file <body>", /F1: `filed in #<n>` closes only a finding the review marks `\[issue\]`/],
   ["headerRecheck", "gh pr create --draft --body-file <body>", THROUGH],
   ["headerRecheck", "gh pr create --body-file <body>", NO_LESSONS],
   ["headerNoRound", "gh pr create --draft --body-file <body>", /its first line reads `# Change review: <branch> @ <short sha>, round <n>, <k> open change findings`/],
@@ -543,6 +598,29 @@ const CASES = [
   // agent-gate: the command is the Agent call's isolation, if any
   ["agent", "worktree", /Spawn it without `isolation`/],
   ["agent", "", THROUGH],
+  // agent-gate: a reviewer's prompt (`<type>: <prompt>`), its passes capped
+  ["passNone", "change-reviewer: round 1 of feature", /prompt names no output path/],
+  ["passNone", "change-reviewer: round 1, output <out>/review-feature.md, plan review <out>/plan-review-feature.md", THROUGH],
+  ["passNone", "ux-reviewer: shots, output <out>/ux-review-feature.md", THROUGH],
+  ["passPlan", "change-reviewer: plan, survey <out>/survey-feature.md, output <out>/plan-review-feature.md", /plan-review-feature\.md is written/],
+  ["passPlan", "change-reviewer: round 1, output <out>/review-feature.md, plan review <out>/plan-review-feature.md", THROUGH],
+  ["passPlanRedone", "change-reviewer: plan, survey <out>/survey-feature.md, output <out>/plan-review-feature.md", THROUGH],
+  ["passRound1", "change-reviewer: recheck, output <out>/review-feature.md", THROUGH],
+  ["passRecheckOpen", "change-reviewer: recheck, output <out>/review-feature.md", THROUGH],
+  ["passRecheckDone", "change-reviewer: recheck, output <out>/review-feature.md", /holds round 1's recheck, which left no change finding open/],
+  ["passUx", "ux-reviewer: shots, output <out>/ux-review-feature.md", /ux-review-feature\.md is written/],
+  ["passUx", "ux-reviewer: design, output <out>/ux-review-design-feature.md", THROUGH],
+  ["passCriticalPlan", "critical-reviewer: diff, output <out>/critical-review-feature.md", THROUGH],
+  ["passCriticalDiff", "critical-reviewer: diff, output <out>/critical-review-feature.md", /critical-review-feature\.md is written/],
+  // whatever the files, a reviewer's prompt names its output
+  ["passPlanRedone", "critical-reviewer: diff of feature", /prompt names no output path/],
+  ["passRound1", "critical-reviewer: diff of feature", /prompt names no output path/],
+  ["passRecheckOpen", "critical-reviewer: diff of feature", /prompt names no output path/],
+  ["passCriticalPlan", "critical-reviewer: diff of feature", /prompt names no output path/],
+  // survey-gate: the build's size cap, and a reviewer's file kept to it
+  ["capped", "<repo>/b.txt", THROUGH],
+  ["capped", "<repo>/d.txt", /feature is past 1\.5x the 1 files its plan review counted \(3 with this edit, against 2;/],
+  ["capped", "<out>/review-feature.md", /is a reviewer's file/],
 
   // process-gate: a full-command-line pgrep/pkill matches its own shell (dotfiles#15)
   ...[
@@ -727,7 +805,10 @@ const CASES = [
 const TOOL_INPUT = {
   "review-gate": (command) => ({ command }),
   "survey-gate": (file_path) => ({ file_path, content: "x\n" }),
-  "agent-gate": (isolation) => ({ prompt: "x", ...(isolation && { isolation }) }),
+  "agent-gate": (call) => {
+    const [, subagent_type, prompt] = /^(\S+-reviewer): (.*)$/.exec(call) ?? [];
+    return subagent_type ? { subagent_type, prompt } : { prompt: "x", ...(call && { isolation: call }) };
+  },
   "process-gate": (command) => ({ command }),
   "scratch-gate": (call) => (call.startsWith("/") ? { file_path: call, content: "x\n" } : { command: call }),
   "reviewer-gate": (call) => (call.startsWith("/") ? { file_path: call, content: "x\n" } : { command: call }),
@@ -741,7 +822,7 @@ const MORE_INPUT = {
 
 // the hook's answer to the case's tool call: the deny reason, or null
 const answer = (hookName, state, command) => {
-  const filled = command.replace(/<(body|repo|outside|own)>/g, (_, name) => state[name]);
+  const filled = command.replace(/<(body|repo|outside|own|out)>/g, (_, name) => state[name]);
   const toolInput = TOOL_INPUT[hookName](filled);
   const cwd = filled.startsWith(state.outside ?? "\0") ? state.outside : state.repo;
   const ran = runHook(hookName, { tool_input: toolInput, cwd, session_id: "s", ...MORE_INPUT[hookName]?.(state) });
@@ -2430,6 +2511,22 @@ describe("steps", () => {
     assert.deepEqual(profile.agents, { "change-reviewer": 1, "critical-reviewer": 1 });
     // m1 and m2 each read one thing; m10 reads two in one step
     assert.equal(profile.singleReads, 2);
+  });
+
+  test("profileOf: a phase's fresh agent stages from the plan review it reads and the review it runs", () => {
+    const build = steps.profileOf(
+      [
+        ...step("m1", 1, 100, [["Read", { file_path: "/repo/.git/claude/plan-review-x.md" }]]),
+        ...step("m2", 2, 100, [["Edit", { file_path: "/repo/x.ts" }]]),
+      ],
+      cost,
+    );
+    assert.deepEqual(Object.keys(build.starts), ["plan review", "build"]);
+    const review = steps.profileOf(
+      [...step("m1", 1, 100, [["Agent", { subagent_type: "change-reviewer", prompt: "round 1, output /repo/.git/claude/review-x.md" }]])],
+      cost,
+    );
+    assert.deepEqual(Object.keys(review.starts), ["review"]);
   });
 });
 

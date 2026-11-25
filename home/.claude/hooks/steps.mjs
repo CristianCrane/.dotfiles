@@ -103,6 +103,10 @@ const REVIEWERS = ["change-reviewer", "critical-reviewer"];
 
 // the stage a call starts, given the stages already started
 const stageAt = ({ name, input }, started) => {
+  // a phase run as a fresh agent (the change skill's Phases): the build's
+  // reading the plan review, and a reviewer named a diff review's output
+  if (name === "Read" && !started.has("build") && /\/claude\/plan-review-/.test(String(input?.file_path))) return "plan review";
+  if (name === "Agent" && REVIEWERS.includes(input?.subagent_type) && /\/claude\/review-/.test(String(input?.prompt))) return "review";
   if (name === "Agent" && REVIEWERS.includes(input?.subagent_type)) return started.has("build") ? "review" : "plan review";
   if (TOOLS.edits.includes(name) && started.has("plan review") && !/\/\.git\/|^\/tmp\//.test(String(input?.file_path))) return "build";
   if (name === "Bash" && /\bgh\s+pr\s+create\b/.test(String(input?.command))) return "PR";
