@@ -9,9 +9,9 @@
 // half a 5-hour window went in 50 minutes (#508's tree: plan review 28%,
 // review 46%; #561 at round 5, its 7th UX pass still finding 6): the plan
 // review once (again only for a redone survey, whose Expected files differ
-// from the count it recorded), the change review's round 1 and then a
-// recheck only of what no review has read or while one leaves a change
-// finding open, the UX review once per file, the critical review's plan
+// from the count it recorded), the change review's round 1 and its
+// recheck, and after that a recheck only of what no review has read or
+// while one leaves a change finding open, the UX review once per file, the critical review's plan
 // pass and one diff pass. The count is the review files' own headers
 // (lib's passOf), at the output path the prompt names, as an Agent call's
 // cwd is the spawning session's folder, not the change's checkout.
