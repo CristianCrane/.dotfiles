@@ -2433,6 +2433,84 @@ describe("steps", () => {
   });
 });
 
+// reads.mjs, the nudge when an agent's reads go one per turn, fed a
+// PostToolUse call as Claude Code sends it in an agent, over that agent's
+// transcript beside its session's
+describe("reads", () => {
+  // a session's folder, an agent's transcript in it, and the hook's run
+  // after `steps` (each a list of calls, [name, input]) on the step's last call
+  const scratch = () => {
+    const root = scratchDir();
+    const transcript = join(root, "s1/subagents/agent-a1.jsonl");
+    mkdirSync(dirname(transcript), { recursive: true });
+    let n = 0;
+    const step = (...calls) => {
+      n++;
+      appendFileSync(
+        transcript,
+        JSON.stringify({
+          type: "assistant",
+          timestamp: new Date().toISOString(),
+          message: {
+            id: `m${n}`,
+            model: "claude-opus-5-5",
+            usage: { input_tokens: 1, cache_read_input_tokens: 100_000 + n * 1000, cache_creation_input_tokens: 500, output_tokens: 10 },
+            content: calls.map(([name, input], i) => ({ type: "tool_use", id: `t${n}-${i}`, name, input })),
+          },
+        }) + "\n",
+      );
+    };
+    const run = ([name, input], extra = {}) => {
+      const ran = runHook("reads", { hook_event_name: "PostToolUse", session_id: "s1", agent_id: "a1", transcript_path: join(root, "s1.jsonl"), tool_name: name, tool_input: input, tool_response: {}, ...extra }, { env: { ...process.env, TMPDIR: root } });
+      assert.equal(ran.stderr, "");
+      return ran.stdout ? JSON.parse(ran.stdout).hookSpecificOutput : null;
+    };
+    return { step, run };
+  };
+  const read = ["Read", { file_path: "/a" }];
+  const rg = ["Bash", { command: "rg -n foo src" }];
+
+  test("two steps that each sent one read, then a read: one line, with the context each turn rereads", () => {
+    const { step, run } = scratch();
+    step(read);
+    step(rg);
+    step(read);
+    assert.deepEqual(run(read), {
+      hookEventName: "PostToolUse",
+      additionalContext: "Your last two turns each sent one read, and every turn rereads your whole context (~104k tokens now): send the reads this step needs as several calls in one turn.",
+    });
+  });
+
+  test("silent in the main session, on a call that doesn't read, and after a step that read in more than one call or wrote", () => {
+    for (const [before, now, extra] of [
+      [[[read], [read]], read, { agent_id: undefined }],
+      [[[read], [read]], ["Bash", { command: "pnpm test:change" }]],
+      [[[read], [read]], ["Bash", { command: "rg foo && git commit -m x" }]],
+      [[[read, rg], [read]], read],
+      [[[read], [["Edit", { file_path: "/a" }]]], read],
+      // a reply's step, with no call
+      [[[read], []], read],
+    ]) {
+      const { step, run } = scratch();
+      for (const calls of before) step(...calls);
+      step(now);
+      assert.equal(run(now, extra), null, JSON.stringify([before, now]));
+    }
+  });
+
+  test("once in an agent's 10 steps", () => {
+    const { step, run } = scratch();
+    const said = [];
+    for (let i = 1; i <= 24; i++) {
+      step(read);
+      if (run(read)) said.push(i);
+    }
+    // steps 1 and 2 have no two single reads before them
+    assert.deepEqual(said, [3, 13, 23]);
+  });
+});
+
+
 // main-session.mjs at a session's start, in a scratch HOME (live()) whose
 // ~/.dotfiles has a file of each kind the check tells apart
 describe("main-session", () => {
