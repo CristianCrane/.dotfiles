@@ -11,7 +11,8 @@
 // work), red-checks (the SessionStart hook that names what is red),
 // catch-up (the SessionStart hook that fast-forwards ~/.dotfiles),
 // usage (the ledger of tokens spent, its reports, and the
-// SessionStart check that the weekly review is due), main-session (the
+// SessionStart check that the weekly review is due), steps (one agent's
+// profile from its transcript), main-session (the
 // main session's SessionStart message), pr-conflict (the note that a PR
 // conflicting with its base runs no CI), settings-format, and the repo's
 // .githooks (pre-commit, which runs settings-format, and post-commit). Run
@@ -55,6 +56,7 @@ import { after, describe, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { cwdFor, lines, stateFile, substitutions, workOf } from "./lib.mjs";
 import { formatSettings } from "./settings-format.mjs";
+import * as steps from "./steps.mjs";
 
 const HOOKS = dirname(fileURLToPath(import.meta.url));
 const BRANCH = "feature";
@@ -2157,14 +2159,14 @@ describe("usage", () => {
     assert.match(failing.stdout, /^weighted per merged PR {2,}- {2,}-$/m);
   });
 
-  // usage.mjs and lib.mjs in a dotfiles-shaped tree, whose
+  // usage.mjs and the modules it imports in a dotfiles-shaped tree, whose
   // docs/token-review.md is the log the hook reads
   test("--hook at SessionStart: says once a week, at a main session's startup, that the review is due", () => {
     const home = scratchDir();
     const tree = scratchDir();
     mkdirSync(join(tree, "home/.claude/hooks"), { recursive: true });
     mkdirSync(join(tree, "docs"));
-    for (const name of ["usage", "lib"]) copyFileSync(join(HOOKS, `${name}.mjs`), join(tree, `home/.claude/hooks/${name}.mjs`));
+    for (const name of ["usage", "lib", "steps"]) copyFileSync(join(HOOKS, `${name}.mjs`), join(tree, `home/.claude/hooks/${name}.mjs`));
     const log = join(tree, "docs/token-review.md");
     const offered = join(home, ".claude/usage/review-offered");
     const start = (input = {}) =>
@@ -2200,6 +2202,140 @@ describe("usage", () => {
     assert.equal(typo.status, 1);
     assert.match(typo.stderr, /^usage: .*'--sinse'.*\nUsage: node ~\/\.claude\/hooks\/usage\.mjs \[--agent <id>\] \[--week\] \[--since <YYYY-MM-DD>\]$/m);
     assert.equal(run(["--since", "11/10"]).status, 1);
+  });
+});
+
+// steps.mjs: one agent's profile from its transcript's rows, by kind of
+// step and stage, which usage.mjs records at each stop
+describe("steps", () => {
+  // a transcript's rows, minute by minute from 10:00: each a user row, an
+  // assistant message (one line per content block, the same id and usage),
+  // a tool's result or a compaction
+  const at = (minute) => new Date(Date.UTC(2026, 10, 25, 10, 0, minute * 60)).toISOString();
+  const usage = (context, output = 0) => ({ input_tokens: 0, cache_read_input_tokens: context, cache_creation_input_tokens: 0, output_tokens: output });
+  const step = (id, minute, context, calls = [], { output = 0, model = "claude-opus-5-5" } = {}) =>
+    (calls.length ? calls : [null]).map((call, i) => ({
+      type: "assistant",
+      timestamp: at(minute),
+      message: {
+        id,
+        model,
+        usage: usage(context, output),
+        content: call ? [{ type: "tool_use", id: `${id}-${i}`, name: call[0], input: call[1] }] : [{ type: "text", text: "done" }],
+      },
+    }));
+  const result = (id, minute) => ({ type: "user", timestamp: at(minute), message: { content: [{ type: "tool_result", tool_use_id: id }] } });
+  const told = (minute) => ({ type: "user", timestamp: at(minute), message: { content: "<task-notification>" } });
+  // weighed as usage.mjs does, cache reads at 0.05 and output at 5
+  const cost = (t) => t.cacheRead * 0.05 + t.output * 5 + t.input + t.cacheWrite * 1.25;
+
+  test("reads: the usage audit's rule, word for word", () => {
+    for (const [name, input, read] of [
+      ["Read", { file_path: "/a" }, true],
+      ["Glob", {}, true],
+      ["Bash", { command: "rg -n foo src | head" }, true],
+      ["Bash", { command: "cd /repo && git log --oneline -3" }, true],
+      ["Bash", { command: "gh pr view 12" }, true],
+      ["Bash", { command: "cat x; pnpm test" }, false],
+      ["Bash", { command: "git status && git commit -m x" }, false],
+      ["Bash", { command: "node --test" }, false],
+      ["WebFetch", {}, false],
+    ])
+      assert.equal(steps.reads({ name, input }), read, `${name} ${JSON.stringify(input)}`);
+  });
+
+  test("kindOf: a call's kind by its tool, a Bash command's by what it mostly is", () => {
+    for (const [name, input, kind] of [
+      ["Read", { file_path: "/a" }, "reading"],
+      ["Edit", {}, "edits"],
+      ["Agent", {}, "agents"],
+      ["WebSearch", {}, "web"],
+      ["Monitor", {}, "waits"],
+      ["LSP", {}, "other tools"],
+      ["Bash", { command: "rg -n 'pnpm test' docs" }, "reading"],
+      ["Bash", { command: "gh pr checks 12 --watch" }, "CI"],
+      ["Bash", { command: "pnpm test:change bills" }, "tests"],
+      ["Bash", { command: "until rg -q '^rc=' /tmp/x/log; do sleep 20; done" }, "tests"],
+      ["Bash", { command: "until [ -f done ]; do sleep 5; done" }, "waits"],
+      ["Bash", { command: "pnpm -r typecheck" }, "checks"],
+      ["Bash", { command: "git commit -m x" }, "git"],
+      ["Bash", { command: "node - <<'EOF'\nwriteFileSync('a', b)\nEOF" }, "edits"],
+      ["Bash", { command: "date" }, "other bash"],
+    ])
+      assert.equal(steps.kindOf({ name, input }), kind, `${name} ${JSON.stringify(input)}`);
+  });
+
+  test("profileOf: a step per message id, its time, its kind, and the waits and compactions between", () => {
+    const rows = [
+      { type: "user", timestamp: at(0), message: { content: "the brief" } },
+      // two lines of one message, two calls side by side: its tool time is the longer
+      ...step("m1", 1, 1000, [["Read", { file_path: "/a" }], ["Grep", { pattern: "x" }]]),
+      result("m1-0", 2),
+      result("m1-1", 3),
+      ...step("m2", 4, 1200, [["Bash", { command: "pnpm test:change" }]], { output: 10 }),
+      result("m2-0", 9),
+      // a 20-minute wait on an agent, then Claude Code's own reply, counted nowhere
+      told(29),
+      ...step("s1", 29, 0, [], { model: "<synthetic>" }),
+      { type: "system", subtype: "compact_boundary", timestamp: at(30), compactMetadata: { durationMs: 60_000 } },
+      ...step("m3", 31, 800),
+    ];
+    const profile = steps.profileOf(rows, cost);
+    assert.equal(profile.steps, 3);
+    assert.equal(profile.to - profile.from, 31 * 60_000);
+    assert.equal(profile.waitMs, 20 * 60_000);
+    assert.deepEqual([profile.compactions, profile.compactMs], [1, 60_000]);
+    // tools: m1's longest call 2 min, m2's 5 min
+    assert.equal(profile.toolMs, 7 * 60_000);
+    assert.deepEqual(
+      Object.fromEntries(Object.entries(profile.kinds).filter(([, group]) => group.steps).map(([kind, group]) => [kind, [group.steps, group.calls, group.toolMs]])),
+      { reading: [1, 2, 3 * 60_000], tests: [1, 1, 5 * 60_000], replies: [1, 0, 0] },
+    );
+    // cost: 1000 × 0.05, 1200 × 0.05 + 10 × 5, 800 × 0.05
+    assert.equal(profile.cost, 50 + 110 + 40);
+  });
+
+  test("profileOf: rereading the context is put down to the steps that brought it in, its start and a compaction's summary", () => {
+    const rows = [
+      ...step("m1", 1, 1000, [["Read", { file_path: "/a" }]]),
+      ...step("m2", 2, 3000, [["Bash", { command: "pnpm test:change" }]]),
+      ...step("m3", 3, 4000),
+      { type: "system", subtype: "compact_boundary", timestamp: at(4) },
+      ...step("m4", 5, 1500),
+    ];
+    const { kinds } = steps.profileOf(rows, cost);
+    const held = Object.fromEntries(Object.entries(kinds).map(([kind, group]) => [kind, group.held]));
+    // m1 50 its start; m2 150: 50 start, 100 the read's; m3 200: 50, 100, and 50 the test's;
+    // m4 75: its start 1000 of 1500, the summary the rest
+    assert.deepEqual(held, { start: 50 + 50 + 50 + 50, reading: 100 + 100, tests: 50, replies: 0, "compaction summaries": 25 });
+  });
+
+  // plan review F4: a builder's plan review was told apart by the word
+  // "plan" in its brief; the order of its calls decides it, whatever a brief says
+  test("profileOf: stages by the order of the change skill's steps, and single reads", () => {
+    const rows = [
+      ...step("m1", 1, 100, [["Read", { file_path: "/a" }]]),
+      ...step("m2", 2, 100, [["Bash", { command: "rg -n x src" }]]),
+      // an edit before the plan review: still the survey
+      ...step("m3", 3, 100, [["Edit", { file_path: "/repo/x.ts" }]]),
+      ...step("m4", 4, 100, [["Agent", { subagent_type: "change-reviewer", description: "Round 1 on the survey" }]]),
+      // the survey's fix in the git dir, and a scratch file: still the plan review
+      ...step("m5", 5, 100, [["Write", { file_path: "/repo/.git/worktrees/w/claude/survey-x.md" }]]),
+      ...step("m6", 6, 100, [["Write", { file_path: "/tmp/claude-1000/x/scratch.mjs" }]]),
+      ...step("m7", 7, 100, [["Edit", { file_path: "/repo/x.ts" }]]),
+      ...step("m8", 8, 100, [["Agent", { subagent_type: "critical-reviewer", description: "Plan pass" }]]),
+      ...step("m9", 9, 100, [["Bash", { command: "gh pr create --draft --body-file b" }]]),
+      ...step("m10", 10, 100, [["Read", { file_path: "/c" }], ["Read", { file_path: "/d" }]]),
+    ];
+    const profile = steps.profileOf(rows, cost);
+    assert.deepEqual(profile.starts, { "plan review": Date.parse(at(4)), build: Date.parse(at(7)), review: Date.parse(at(8)), PR: Date.parse(at(9)) });
+    assert.deepEqual(
+      Object.fromEntries(Object.entries(profile.stages).map(([stage, group]) => [stage, group.steps])),
+      { survey: 3, "plan review": 3, build: 1, review: 1, PR: 2 },
+    );
+    assert.deepEqual(profile.agents, { "change-reviewer": 1, "critical-reviewer": 1 });
+    // m1 and m2 each read one thing; m10 reads two in one step
+    assert.equal(profile.singleReads, 2);
   });
 });
 

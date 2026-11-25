@@ -98,6 +98,7 @@ import { execFileSync } from "node:child_process";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { context, flagsOf, hook, jsonLines, lines } from "./lib.mjs";
+import { counted } from "./steps.mjs";
 
 const USAGE = join(homedir(), ".claude/usage");
 const LEDGER = join(USAGE, "ledger.jsonl");
@@ -149,12 +150,13 @@ const unread = (transcript, from) => {
 // each with the same id and usage) and per compaction
 const messages = (lines, who) => {
   const rows = new Map();
-  for (const { type, subtype, uuid, timestamp, message, compactMetadata } of lines) {
+  for (const line of lines) {
+    const { type, subtype, uuid, timestamp, message, compactMetadata } = line;
     if (type === "system" && subtype === "compact_boundary") {
       rows.set(uuid, { kind: "compact", id: uuid, at: timestamp, ...who, trigger: compactMetadata?.trigger ?? null, preTokens: compactMetadata?.preTokens ?? null });
       continue;
     }
-    if (type !== "assistant" || !message?.usage || message.model === "<synthetic>" || rows.has(message.id)) continue;
+    if (!counted(line) || rows.has(message.id)) continue;
     const usage = message.usage;
     rows.set(message.id, {
       kind: "message",
