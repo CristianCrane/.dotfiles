@@ -34,6 +34,21 @@ export const projectOf = (cwd) => {
 
 export const lines = (text) => text.split("\n").filter(Boolean);
 
+// a JSONL file's text as its rows, and how many of its lines couldn't be
+// read (cut short by a crash, or a run of NULs, as a WSL crash leaves)
+export const jsonLines = (text) => {
+  const rows = [];
+  let unreadable = 0;
+  for (const line of lines(text)) {
+    try {
+      rows.push(JSON.parse(line));
+    } catch {
+      unreadable++;
+    }
+  }
+  return { rows, unreadable };
+};
+
 // a command that may reach the network (fetch, push, gh), or whose refusal
 // the report quotes: its output, or a throw with its first error line; never
 // a prompt, and at most 30 s

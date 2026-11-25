@@ -95,7 +95,7 @@ import { homedir } from "node:os";
 import { execFileSync } from "node:child_process";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { context, flagsOf, hook, lines } from "./lib.mjs";
+import { context, flagsOf, hook, jsonLines, lines } from "./lib.mjs";
 
 const USAGE = join(homedir(), ".claude/usage");
 const LEDGER = join(USAGE, "ledger.jsonl");
@@ -217,15 +217,9 @@ const ledger = () => {
   const counted = new Map();
   const compactions = new Map();
   const forks = [];
-  let errors = 0;
-  for (const line of existsSync(LEDGER) ? lines(readFileSync(LEDGER, "utf8")) : []) {
-    let row;
-    try {
-      row = JSON.parse(line);
-    } catch {
-      errors++;
-      continue;
-    }
+  const { rows, unreadable } = jsonLines(existsSync(LEDGER) ? readFileSync(LEDGER, "utf8") : "");
+  let errors = unreadable;
+  for (const row of rows) {
     if (row.kind === "agent") agents.set(row.agent, row);
     else if (row.kind === "session") sessions.set(row.session, row);
     else if (row.kind === "message" && !counted.has(row.id)) counted.set(row.id, row);
@@ -254,15 +248,7 @@ const total = (rows) =>
   );
 
 // every reading of the plan's windows kept, a row that can't be read left out
-const readings = () => {
-  const rows = [];
-  for (const line of existsSync(READINGS) ? lines(readFileSync(READINGS, "utf8")) : []) {
-    try {
-      rows.push(JSON.parse(line));
-    } catch {}
-  }
-  return rows;
-};
+const readings = () => jsonLines(existsSync(READINGS) ? readFileSync(READINGS, "utf8") : "").rows;
 
 // when the plan's window `key` that resets at `resetsAt` (epoch seconds) began
 const windowFrom = (key, resetsAt) => new Date((resetsAt - WINDOWS.find((window) => window.key === key).hours * 3600) * 1000);
