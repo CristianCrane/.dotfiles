@@ -274,6 +274,24 @@ const STATES = {
       ["review-gate", () => scratchRepo({ review, ux, lessons: ROUTED, body: (head) => prBody(head, `- New: nothing\n${change(head)}`, { before: BEFORE }) })],
     ]),
   ),
+  // a change at stakes: the critical review's findings close in the body
+  // too (red on the old gate, which read no critical review)
+  ...Object.fromEntries(
+    Object.entries({
+      criticalClosed: (head) => `- Critical review: C1 a → fixed in ${head.slice(0, 7)}\n`,
+      criticalUnclosed: () => "",
+    }).map(([name, change]) => [
+      name,
+      [
+        "review-gate",
+        () => {
+          const state = scratchRepo({ review: true, lessons: ROUTED, body: (head) => prBody(head, `- New: nothing\n${change(head)}`) });
+          write(state.repo, "critical-review", "# Critical review: feature @ abc1234, diff, 1 open findings\n## Findings\nC1. [high] a\n");
+          return state;
+        },
+      ],
+    ]),
+  ),
   // a survey that names its file by a short name only, and one that
   // names no file at all
   shortNames: [
@@ -531,6 +549,9 @@ const CASES = [
   ["uxElsewhere", "gh pr create --draft --body-file <body>", /its shots are of 0000000, no commit on this branch/],
   ["uxMissing", "gh pr create --draft --body-file <body>", /needs its UX review, and it isn't ready \(missing\)/],
   ["uxMissing", "gh pr ready", /needs its UX review, and it isn't ready \(missing\)/],
+  ["criticalClosed", "gh pr create --draft --body-file <body>", THROUGH],
+  ["criticalClosed", "gh pr create --draft --body-file <body> --head other", /--head other runs from feature's checkout/],
+  ["criticalUnclosed", "gh pr create --draft --body-file <body>", /C1: no line names it/],
 
   // what runs before gh: a prefix or wrapper is gated, a mention isn't
   ...[`FOO="a b"`, `FOO='a b'`, "env", "command", "time", "nohup", "exec"].map((prefix) => [

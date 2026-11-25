@@ -240,17 +240,28 @@ const uxReview = (cwd, work) => {
 // a finding's ids in a review's text, by its letter
 const idsOf = (text, letter) => [...new Set([...text.matchAll(new RegExp(`^(?:- )?(${letter}\\d+)\\b`, "gm"))].map((id) => id[1]))];
 
+// the critical review, when the change is at stakes: its findings closed
+// in the body like the others (it went unread here until 2026-11-25)
+const criticalReview = (cwd, work) => {
+  const path = stateFile(cwd, "critical-review", work.key);
+  if (!existsSync(path)) return null;
+  const text = readFileSync(path, "utf8");
+  return { path, text, ids: idsOf(text, "C") };
+};
+
 // a UX review not ready, in words for a turn-down
 const uxNotReady = (ux, branch) =>
   `The PR body has **Before / after:**, so ${branch} needs its UX review, and it isn't ready (${ux.reason}), with output ${ux.path}: run the \`ux-reviewer\` agent as the \`change\` skill's Review step says.`;
 
 // why the body's Change section doesn't close every finding, if it
-// doesn't: the change review's, and with Before / after the UX review's,
-// whose word on a finding can be the recheck's, as the UX review has one pass
+// doesn't: the change review's, the critical review's, and with Before /
+// after the UX review's. A UX or critical finding's word can be the
+// recheck's, as each of those reviews has one pass on the diff
 const unclosedAll = (cwd, work, found, body, section, seen) => {
   const ux = seen ? uxReview(cwd, work) : null;
   if (ux && !ux.ok) return uxNotReady(ux, work.branch);
-  const others = [ux].filter(Boolean);
+  const critical = criticalReview(cwd, work);
+  const others = [ux, critical].filter(Boolean);
   const open = [
     ...found.ids.map((id) => [id, unclosed(cwd, section, id, found.text)]),
     ...others.flatMap((other) => other.ids.map((id) => [id, unclosed(cwd, section, id, `${other.text}\n${found.text}`)])),
