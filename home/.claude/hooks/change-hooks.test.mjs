@@ -2437,8 +2437,9 @@ describe("steps", () => {
 // PostToolUse call as Claude Code sends it in an agent, over that agent's
 // transcript beside its session's
 describe("reads", () => {
-  // a session's folder, an agent's transcript in it, and the hook's run
-  // after `steps` (each a list of calls, [name, input]) on the step's last call
+  // a session's folder, an agent's transcript in it, a step written to it
+  // (its calls, each [name, input]), and the hook's run on a call of the
+  // last step written
   const scratch = () => {
     const root = scratchDir();
     const transcript = join(root, "s1/subagents/agent-a1.jsonl");
@@ -2461,7 +2462,7 @@ describe("reads", () => {
       );
     };
     const run = ([name, input], extra = {}) => {
-      const ran = runHook("reads", { hook_event_name: "PostToolUse", session_id: "s1", agent_id: "a1", transcript_path: join(root, "s1.jsonl"), tool_name: name, tool_input: input, tool_response: {}, ...extra }, { env: { ...process.env, TMPDIR: root } });
+      const ran = runHook("reads", { hook_event_name: "PostToolUse", session_id: "s1", agent_id: "a1", transcript_path: join(root, "s1.jsonl"), tool_name: name, tool_input: input, tool_use_id: `t${n}-0`, tool_response: {}, ...extra }, { env: { ...process.env, TMPDIR: root } });
       assert.equal(ran.stderr, "");
       return ran.stdout ? JSON.parse(ran.stdout).hookSpecificOutput : null;
     };
@@ -2479,6 +2480,18 @@ describe("reads", () => {
       hookEventName: "PostToolUse",
       additionalContext: "Your last two turns each sent one read, and every turn rereads your whole context (~104k tokens now): send the reads this step needs as several calls in one turn.",
     });
+  });
+
+  // Claude Code writes the transcript behind the run: a step's PostToolUse
+  // can find the file without that step (live, 2026-11-25)
+  test("a call whose step isn't written yet: the last two steps written are the two before it", () => {
+    const { step, run } = scratch();
+    step(read);
+    step(rg);
+    assert.match(run(read, { tool_use_id: "t-unwritten" })?.additionalContext, /\(~103k tokens now\)/);
+    step(read);
+    step(["Edit", { file_path: "/a" }]);
+    assert.equal(run(read, { tool_use_id: "t-unwritten" }), null);
   });
 
   test("silent in the main session, on a call that doesn't read, and after a step that read in more than one call or wrote", () => {
