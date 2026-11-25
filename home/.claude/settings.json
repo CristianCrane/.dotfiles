@@ -88,6 +88,27 @@
             "timeout": 10
           }
         ]
+      },
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.claude/hooks/usage.mjs\" --hook",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.claude/hooks/usage.mjs\" --hook",
+            "timeout": 30
+          }
+        ]
       }
     ],
     "SubagentStop": [

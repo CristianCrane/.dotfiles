@@ -16,9 +16,15 @@
 //   its trigger (auto or manual) and the context it compacted (preTokens)
 // - an "agent" row per agent stop: its parent, depth, type, description,
 //   effort and cwd, from the input and the meta.json beside its transcript;
-//   a "session" row per main session stop, with its cwd. Either says
+//   a "session" row per main session stop, with its cwd. Either has `load`,
+//   the machine's 1-minute load average as it stopped (stops came a median
+//   49 s apart, 2026-11-22 to 25, so they sample a run's load), and says
 //   `unreadable` when the new lines held some it couldn't read, which it
 //   skips (a run of NULs a crash left)
+// - a "steps" row per agent stop, after its agent row: where the agent's
+//   time and tokens went so far, from its whole transcript (steps.mjs's
+//   profile, ~0.6 s for a 9-hour builder's). The latest one stands for the
+//   agent
 // - a "fork" row per stop of Claude Code's own progress summary: while a
 //   background agent works, every ~30 s it forks the agent for one turn to
 //   summarize it (forkLabel "agent_summary", skipTranscript, in 2.1.308's
@@ -38,6 +44,16 @@
 // appended twice by two stops at once. An agent stops up to 3 times (waiting on its own agents, then done): each
 // stop reads only what's new.
 //
+// From UserPromptSubmit and PostToolUse on Agent (`--hook` too), in a main
+// session only, it brings a finished agent's Tokens line and where its
+// time and tokens went into the main session's context, so the update to
+// the user carries them with nobody asking: a background agent's on the
+// prompt that is its `<task-notification>` (each `<task-id>` with rows),
+// a foreground one's on its Agent call's return (`status: "completed"`
+// and its `agentId`). The agent's last stop is recorded before either
+// fires. In an agent it stays silent: its reviewers' reports would sit in
+// its context, reread at every later step.
+//
 // From the SessionStart hook (`--hook` too) it says when the weekly token
 // review is due: in a main session's startup (not a resume, clear, compact
 // or an agent) once 7 days have passed since both the newest entry of the
@@ -56,7 +72,7 @@
 //
 // By hand:
 //
-//   node ~/.claude/hooks/usage.mjs --agent <id>             one workstream's Tokens line: its share of each window
+//   node ~/.claude/hooks/usage.mjs --agent <id>             one workstream's Tokens line: its share of each window; then where it went (`breakdown`)
 //   node ~/.claude/hooks/usage.mjs [--since <YYYY-MM-DD>]   each workstream and main session since then, in token counts and weighted (default: today)
 //   node ~/.claude/hooks/usage.mjs --week [--since <YYYY-MM-DD>]   the weekly review's measures: the 7 days from then beside the 7 before (default: the 7 days before today)
 //
@@ -66,7 +82,10 @@
 // The weekly report is the same measures every week, so one week can be
 // set against another. Exact: active days, context per turn, agents,
 // compactions, progress summaries, and merged PRs (gh's search for the account's own,
-// in every repo). Estimates: every weighted number (WEIGHTS below) and the
+// in every repo); and by agent type, from each agent's latest steps row:
+// steps per agent, weighted per step, the share of single reads (steps.mjs)
+// beside the 2026-11-22 audit's 47% for builders, compactions per agent
+// and the mean load at its stops. Estimates: every weighted number (WEIGHTS below) and the
 // tokens per 1% of a window (the Tokens line's skews, below). Weighted per
 // merged PR is the week's whole spend over the PRs merged in it, so work
 // with no PR (a repo with no GitHub origin) and PRs merged a week after
@@ -93,12 +112,12 @@
 // - A window that began before the ledger's first row (2026-11-09) reads
 //   high: the tokens before it are in the used % only.
 import { appendFileSync, closeSync, existsSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, statSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { availableParallelism, homedir, loadavg } from "node:os";
 import { execFileSync } from "node:child_process";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { context, flagsOf, hook, jsonLines, lines } from "./lib.mjs";
-import { counted } from "./steps.mjs";
+import { counted, profileOfFile, STAGES } from "./steps.mjs";
 
 const USAGE = join(homedir(), ".claude/usage");
 const LEDGER = join(USAGE, "ledger.jsonl");
@@ -191,6 +210,17 @@ const record = (input) => {
     // it: thrown, it stopped the transcript's recording for good (session
     // 3d4158ee, 2026-11-23: one line of 2,030 NULs, then ~70 error rows)
     const { rows, unreadable } = jsonLines(text);
+    const load = loadavg()[0];
+    // the agent's whole profile, before the rows land: a finished
+    // background agent's notification follows its last stop's hook, and
+    // the breakdown it brings reads this row (~0.7 s for a 77 MB builder)
+    let steps = [];
+    if (agent)
+      try {
+        steps = [{ kind: "steps", at, session, agent, ...profileOfFile(transcript, (tokens) => cost({ ...tokens, agent })) }];
+      } catch (error) {
+        steps = [{ kind: "error", at, session, agent, event: input.hook_event_name, type, error: `steps: ${error.message}` }];
+      }
     append([
       ...messages(rows, { session, agent }),
       agent
@@ -205,9 +235,11 @@ const record = (input) => {
             description: description ?? null,
             effort: input.effort?.level ?? null,
             cwd,
+            load,
             ...(unreadable && { unreadable }),
           }
-        : { kind: "session", at, session, cwd, ...(unreadable && { unreadable }) },
+        : { kind: "session", at, session, cwd, load, ...(unreadable && { unreadable }) },
+      ...steps,
     ]);
     mkdirSync(dirname(offsetFile), { recursive: true });
     writeFileSync(offsetFile, String(to));
@@ -216,13 +248,16 @@ const record = (input) => {
   }
 };
 
-// the ledger: each agent's and session's latest row, each message id's
-// first row, each compaction's, and the forks and errors (a row that can't be read
+// the ledger: each agent's and session's latest row, each agent's latest
+// steps row, every stop's row with a load, each message id's first row,
+// each compaction's, and the forks and errors (a row that can't be read
 // is one)
 const ledger = () => {
   const agents = new Map();
   const sessions = new Map();
-  const counted = new Map();
+  const steps = new Map();
+  const loads = [];
+  const firsts = new Map();
   const compactions = new Map();
   const forks = [];
   const { rows, unreadable } = jsonLines(existsSync(LEDGER) ? readFileSync(LEDGER, "utf8") : "");
@@ -230,12 +265,14 @@ const ledger = () => {
   for (const row of rows) {
     if (row.kind === "agent") agents.set(row.agent, row);
     else if (row.kind === "session") sessions.set(row.session, row);
-    else if (row.kind === "message" && !counted.has(row.id)) counted.set(row.id, row);
+    else if (row.kind === "steps") steps.set(row.agent, row);
+    else if (row.kind === "message" && !firsts.has(row.id)) firsts.set(row.id, row);
     else if (row.kind === "compact" && !compactions.has(row.id)) compactions.set(row.id, row);
     else if (row.kind === "fork") forks.push(row);
     else if (row.kind === "error") errors++;
+    if (typeof row.load === "number") loads.push(row);
   }
-  return { agents, sessions, messages: [...counted.values()], compactions: [...compactions.values()], forks, errors };
+  return { agents, sessions, steps, loads, messages: [...firsts.values()], compactions: [...compactions.values()], forks, errors };
 };
 
 // the agents up from `agent` to the one the main session started
@@ -301,8 +338,8 @@ const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 // of the plan's windows (the header says how far to trust it). A window
 // with no reading to go by is left out and the line says why; with
 // neither, the line gives the counts.
-const tokensLine = (id) => {
-  const { agents, messages, forks } = ledger();
+const tokensLine = (id, book = ledger()) => {
+  const { agents, messages, forks } = book;
   const own = messages.filter((row) => row.agent && lineage(agents, row.agent).includes(id));
   if (!own.length) return null;
   const ids = new Set(own.map((row) => row.agent));
@@ -330,6 +367,106 @@ const tokensLine = (id) => {
     windows.map((window) => (window.why ? `; ${window.why}` : "")).join("") +
     (summaries ? `; not counted: up to ${summaries} progress ${summaries === 1 ? "summary" : "summaries"} Claude Code forked while it ran` : "")
   );
+};
+
+// how long `ms` is: 3h05, 52m, 40s
+const duration = (ms) => {
+  const minutes = Math.round(ms / 60000);
+  if (minutes >= 60) return `${Math.floor(minutes / 60)}h${String(minutes % 60).padStart(2, "0")}`;
+  return minutes ? `${minutes}m` : `${Math.round(ms / 1000)}s`;
+};
+
+// 1,626
+const count = (n) => n.toLocaleString("en-US");
+
+const mean = (numbers) => numbers.reduce((sum, n) => sum + n, 0) / numbers.length;
+
+// what the context held, as the breakdown names it (steps.mjs's `held`)
+const carried = (kind) => (kind === "start" ? "its start" : kind === "compaction summaries" ? kind : `what ${{ reading: "reads", replies: "its replies" }[kind] ?? kind} brought in`);
+
+// Where a workstream went, after its Tokens line: the agent `id` and every
+// agent below it, each by its latest steps row (steps.mjs says what each
+// number is). An agent below with no steps row (stopped before they were
+// recorded, or its profile failed: an error row) is named; null when `id`
+// has none.
+const breakdown = (id, { agents, steps, loads }) => {
+  const root = steps.get(id);
+  if (!root) return null;
+  const below = [...agents.keys()].filter((agent) => agent !== id && lineage(agents, agent).includes(id));
+  const profiled = below.filter((agent) => steps.has(agent));
+  const missing = below.filter((agent) => !steps.has(agent));
+  const all = root.cost + profiled.reduce((sum, agent) => sum + steps.get(agent).cost, 0);
+  const share = (n, of = all) => `${of ? Math.round((100 * n) / of) : 0}%`;
+  // the tree's cost by the root's stages, each agent below in the stage it began in
+  const starts = Object.entries(root.starts).sort((a, b) => a[1] - b[1]);
+  const stageOf = (at) => starts.filter(([, from]) => from <= at).at(-1)?.[0] ?? "survey";
+  const stages = Object.fromEntries(STAGES.map((stage) => [stage, root.stages[stage]?.cost ?? 0]));
+  const types = new Map();
+  for (const agent of profiled) {
+    const { from, cost } = steps.get(agent);
+    stages[stageOf(from)] += cost;
+    const type = agents.get(agent)?.type || "agent";
+    const sum = types.get(type) ?? { n: 0, cost: 0 };
+    sum.n++;
+    sum.cost += cost;
+    types.set(type, sum);
+  }
+  const sampled = loads.filter((row) => Date.parse(row.at) >= root.from && Date.parse(row.at) <= root.to).map((row) => row.load);
+  const kinds = Object.entries(root.kinds).filter(([, group]) => group.steps && group.cost >= 0.02 * root.cost);
+  const held = Object.entries(root.kinds).filter(([, group]) => group.held >= 0.05 * root.cost);
+  const byCost = (key) => (a, b) => b[1][key] - a[1][key];
+  return [
+    `Where it went (${below.length ? `this agent and the ${below.length} below it` : "this agent"}; weighted tokens, as usage.mjs's header says):`,
+    `- Time: ${duration(root.to - root.from)} start to end: the model ${duration(root.modelMs)}, tools ${duration(root.toolMs)}, waiting ${duration(root.waitMs)}, ` +
+      `${plural(root.compactions, "compaction")} ${duration(root.compactMs)}. ` +
+      (sampled.length
+        ? `Machine load ${mean(sampled).toFixed(1)} on average, ${Math.max(...sampled).toFixed(1)} at most, on ${availableParallelism()} cores (${plural(sampled.length, "stop")} sampled).`
+        : "No load sampled in its span."),
+    `- By stage: ${STAGES.filter((stage) => stages[stage]).map((stage) => `${stage} ${share(stages[stage])}`).join(", ")}.`,
+    `- By agent: itself ${share(root.cost)} (${count(root.steps)} step${root.steps === 1 ? "" : "s"})${[...types].sort(byCost("cost")).map(([type, { n, cost }]) => `, ${type} ×${n} ${share(cost)}`).join("")}.`,
+    `- Its own steps by kind, share of its cost (steps): ${kinds.sort(byCost("cost")).map(([kind, group]) => `${kind} ${share(group.cost, root.cost)} (${count(group.steps)})`).join(", ")}.`,
+    `- Its cost by what it reread or wrote: ${held.sort(byCost("held")).map(([kind, group]) => `${carried(kind)} ${share(group.held, root.cost)}`).join(", ")}.`,
+    `- Single reads: ${share(root.singleReads, root.steps)} of its steps (one call that reads; builders were 47% in the 2026-11-22 usage audit, before the change skill asked for a step's reads in one turn).`,
+    missing.length && `- Not counted: ${plural(missing.length, "agent")} below it with no steps recorded (${missing.join(", ")}).`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+};
+
+// a workstream's Tokens line and where it went; null with no tokens of it
+const report = (id, book = ledger()) => {
+  const line = tokensLine(id, book);
+  return line && [line, breakdown(id, book)].filter(Boolean).join("\n");
+};
+
+// For the main session, each finished agent's report: a background one's
+// when its notification comes (UserPromptSubmit, a `<task-notification>`
+// naming its `<task-id>`, which lands after its last stop's row), a
+// foreground one's when its call returns (PostToolUse on Agent, `completed`
+// with its agentId). Never in an agent: its own reviewers' reports would
+// sit in its context, reread at every later step.
+const finished = (input) => {
+  if (input.agent_id) return;
+  const event = input.hook_event_name;
+  const response = input.tool_response;
+  const ids =
+    event === "UserPromptSubmit"
+      ? String(input.prompt ?? "").includes("<task-notification>")
+        ? [...String(input.prompt).matchAll(/<task-id>([^<\s]+)<\/task-id>/g)].map(([, id]) => id)
+        : []
+      : response?.status === "completed" && response.agentId
+        ? [response.agentId]
+        : [];
+  if (!ids.length) return;
+  const book = ledger();
+  const reports = ids
+    .map((id) => {
+      const text = report(id, book);
+      const { description, type } = book.agents.get(id) ?? {};
+      return text && `Agent ${id} finished${description ? ` (${description})` : type ? ` (${type})` : ""}. From usage.mjs, for the update:\n${text}`;
+    })
+    .filter(Boolean);
+  if (reports.length) return context(event, reports.join("\n\n"));
 };
 
 // the workstreams and main sessions `rows` belong to, each with its label,
@@ -451,6 +588,32 @@ const mergedPRs = (from, to) => {
   }
 };
 
+// each agent type's steps in `period`, from the steps rows of agents whose
+// last stop is in it, with the load at its agents' stops there
+const stepsByType = (period, { agents, steps, loads }) => {
+  const inside = within(period);
+  const types = Map.groupBy([...steps.values()].filter(inside), (row) => agents.get(row.agent)?.type || "unknown");
+  if (!types.size) return ["  no agent's steps recorded"];
+  const sum = (rows, key) => rows.reduce((total, row) => total + row[key], 0);
+  return columns([
+    ["", "agents", "steps per agent", "weighted per step", "single reads", "compactions per agent", "load"],
+    ...[...types]
+      .sort((a, b) => sum(b[1], "cost") - sum(a[1], "cost"))
+      .map(([type, rows]) => {
+        const sampled = loads.filter((row) => row.kind === "agent" && row.type === type && inside(row)).map((row) => row.load);
+        return [
+          `  ${type}`,
+          String(rows.length),
+          String(Math.round(sum(rows, "steps") / rows.length)),
+          short(Math.round(sum(rows, "cost") / (sum(rows, "steps") || 1))),
+          percent(sum(rows, "singleReads"), sum(rows, "steps")),
+          (sum(rows, "compactions") / rows.length).toFixed(1),
+          sampled.length ? mean(sampled).toFixed(1) : "-",
+        ];
+      }),
+  ]);
+};
+
 // The weekly review's measures (the header says which are estimates): the
 // 7 days from `day` beside the 7 before, then this week's merged PRs per
 // repo, its costliest workstreams, its cost per agent type, and the
@@ -458,7 +621,7 @@ const mergedPRs = (from, to) => {
 // weighted tokens per 1% of it.
 const week = (day) => {
   const book = ledger();
-  const { agents, messages, compactions, forks, errors } = book;
+  const { agents, messages, compactions, forks, errors, steps, loads } = book;
   const from = new Date(`${day}T00:00`);
   const periods = [
     { from, to: later(from, 7) },
@@ -487,7 +650,7 @@ const week = (day) => {
       ["weighted per merged PR", prs.count ? short(all / prs.count) : "-"],
       ["progress summaries not counted", String(forks.filter(within(period)).length)],
     ];
-    return { rows, all, prs, cells };
+    return { period, rows, all, prs, cells };
   });
   const [now] = measured;
   const head = ({ from, to }) => `${stamp(from).slice(0, 10)}..${stamp(later(to, -1)).slice(0, 10)}`;
@@ -534,6 +697,9 @@ const week = (day) => {
       ]),
     ),
     "",
+    "Steps by agent type this week (each agent's latest steps row; single reads: a step whose one call reads, builders 47% in the 2026-11-22 usage audit):",
+    ...stepsByType(now.period, book),
+    "",
     "The plan's week (seven_day) as read, with the ledger's weighted tokens from its start to that reading:",
     ...(readLines.length ? readLines : ["  no reading"]),
   ]
@@ -562,12 +728,13 @@ const { values: flags } = flagsOf("usage", "[--agent <id>] [--week] [--since <YY
   options: { hook: { type: "boolean" }, status: { type: "boolean" }, agent: { type: "string" }, week: { type: "boolean" }, since: { type: "string" } },
 });
 
-if (flags.hook) hook((input) => (input.hook_event_name === "SessionStart" ? reviewDue(input) : record(input)));
+const HOOKS = { SessionStart: reviewDue, UserPromptSubmit: finished, PostToolUse: finished };
+if (flags.hook) hook((input) => (HOOKS[input.hook_event_name] ?? record)(input));
 else if (flags.status) status();
 else if (flags.agent) {
-  const line = tokensLine(flags.agent);
-  console.log(line ?? `No usage recorded for agent ${flags.agent}.`);
-  if (!line) process.exitCode = 1;
+  const text = report(flags.agent);
+  console.log(text ?? `No usage recorded for agent ${flags.agent}.`);
+  if (!text) process.exitCode = 1;
 } else {
   // the week defaults to the 7 days before today, the table to today
   const day = flags.since ?? later(new Date(), flags.week ? -7 : 0).toLocaleDateString("sv");

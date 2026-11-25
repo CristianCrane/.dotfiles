@@ -50,7 +50,7 @@ import {
   utimesSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
+import { availableParallelism, tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { after, describe, test } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -1843,6 +1843,8 @@ describe("usage", () => {
     mkdirSync(join(project, "s1/subagents"), { recursive: true });
     const run = (args, input, options) => runHook("usage", input, { args, env: { ...process.env, HOME: home }, ...options });
     const ledger = () => lines(readFileSync(join(home, ".claude/usage/ledger.jsonl"), "utf8")).map((line) => JSON.parse(line));
+    // --agent's first line; the breakdown after it has a test of its own
+    const tokensOf = (id) => run(["--agent", id]).stdout.split("\n")[0];
     // an agent's transcript and meta.json, and its stop
     const agent = (id, entries, meta, type = "general-purpose") => {
       const transcript = join(project, `s1/subagents/agent-${id}.jsonl`);
@@ -1880,7 +1882,7 @@ describe("usage", () => {
       const { bin } = fakeCommand("gh", body, join(home, "bin"));
       return (args) => run(args, undefined, { env: { ...process.env, HOME: home, PATH: `${bin}:${process.env.PATH}` } });
     };
-    return { home, run, ledger, agent, session, windows, readings, gh };
+    return { home, run, ledger, tokensOf, agent, session, windows, readings, gh };
   };
 
   test("--hook: a row per message once, only what's new at each stop, and the agent's place", () => {
@@ -1900,8 +1902,14 @@ describe("usage", () => {
     const stops = rows.filter((row) => row.kind === "agent");
     assert.equal(stops.length, 3);
     assert.deepEqual(
-      { ...stops[0], at: undefined },
-      { kind: "agent", at: undefined, session: "s1", agent: "a1", parent: null, depth: 1, type: "general-purpose", description: "Fix issue 1", effort: "high", cwd: "/w/repo" },
+      { ...stops[0], at: undefined, load: undefined },
+      { kind: "agent", at: undefined, session: "s1", agent: "a1", parent: null, depth: 1, type: "general-purpose", description: "Fix issue 1", effort: "high", cwd: "/w/repo", load: undefined },
+    );
+    // the machine's load at each stop, and the agent's whole profile so far
+    assert.ok(stops.every((stop) => typeof stop.load === "number"));
+    assert.deepEqual(
+      rows.filter((row) => row.kind === "steps").map((row) => [row.agent, row.steps]),
+      [["a1", 1], ["a1", 2], ["a1", 3]],
     );
     assert.doesNotMatch(JSON.stringify(rows), /never keeps/);
   });
@@ -1918,9 +1926,93 @@ describe("usage", () => {
     const rows = ledger();
     assert.deepEqual(rows.filter((row) => row.kind === "message").map((row) => row.id), ["m1", "m2", "m3", "m4"]);
     assert.deepEqual(
-      rows.filter((row) => row.kind !== "message").map((row) => [row.kind, row.unreadable]),
+      rows.filter((row) => row.kind === "agent" || row.kind === "session").map((row) => [row.kind, row.unreadable]),
       [["session", undefined], ["session", 1], ["session", undefined], ["agent", 1]],
     );
+  });
+
+  // a builder's tree: its steps `minutes` from now (its stops land inside
+  // its span), each rereading `cacheRead` tokens and calling one tool
+  const minutes = (n) => new Date(Date.now() + n * 60_000).toISOString();
+  const stepped = (id, minute, cacheRead, call) => ({
+    type: "assistant",
+    timestamp: minutes(minute),
+    message: {
+      id,
+      model: "claude-opus-5-5",
+      usage: { input_tokens: 0, cache_read_input_tokens: cacheRead, cache_creation_input_tokens: 0, output_tokens: 0 },
+      content: call ? [{ type: "tool_use", id: `${id}-0`, name: call[0], input: call[1] }] : [{ type: "text", text: "done" }],
+    },
+  });
+  // a1 at 5k a step: a read, a plan review, an edit, round 1, its reply;
+  // r1 (10k) began in its plan review and r2 (20k) in its review; x1 has
+  // no steps row
+  const tree = () => {
+    const ran = scratch();
+    const reviewer = { subagent_type: "change-reviewer" };
+    ran.agent("r1", [stepped("r1m", -28, 200_000)], { description: "Plan review", spawnDepth: 2, parentAgentId: "a1" }, "change-reviewer");
+    ran.agent("r2", [stepped("r2m", -9, 400_000)], { description: "Round 1 review", spawnDepth: 2, parentAgentId: "a1" }, "change-reviewer");
+    ran.agent(
+      "a1",
+      [
+        stepped("m1", -30, 100_000, ["Read", { file_path: "/a" }]),
+        stepped("m2", -29, 100_000, ["Agent", reviewer]),
+        stepped("m3", -20, 100_000, ["Edit", { file_path: "/repo/x.ts" }]),
+        stepped("m4", -10, 100_000, ["Agent", reviewer]),
+        stepped("m5", 30, 100_000),
+      ],
+      { description: "Fix issue 1", spawnDepth: 1 },
+      "builder",
+    );
+    appendFileSync(join(ran.home, ".claude/usage/ledger.jsonl"), JSON.stringify({ kind: "agent", at: now, session: "s1", agent: "x1", parent: "a1", type: "Explore" }) + "\n");
+    return ran;
+  };
+
+  test("--agent: the Tokens line, then where it went by stage, agent and kind, with the load at its stops", () => {
+    const { run } = tree();
+    const ran = run(["--agent", "a1"]);
+    assert.equal(ran.status, 0, ran.stderr);
+    const [tokens, ...where] = ran.stdout.trimEnd().split("\n");
+    assert.match(tokens, /^Tokens: .*\(this agent and the 2 it started\)/);
+    assert.equal(where[0], "Where it went (this agent and the 3 below it; weighted tokens, as usage.mjs's header says):");
+    assert.match(where[1], new RegExp(`^- Time: 1h00 start to end: the model 1m, tools 0s, waiting 0s, 0 compactions 0s\\. Machine load [\\d.]+ on average, [\\d.]+ at most, on ${availableParallelism()} cores \\(3 stops sampled\\)\\.$`));
+    // of 55k: survey 5k, plan review 5k + r1's 10k, build 5k, review 10k + r2's 20k
+    assert.deepEqual(where.slice(2), [
+      "- By stage: survey 9%, plan review 27%, build 9%, review 55%.",
+      "- By agent: itself 45% (5 steps), change-reviewer ×2 55%.",
+      "- Its own steps by kind, share of its cost (steps): agents 40% (2), reading 20% (1), edits 20% (1), replies 20% (1).",
+      "- Its cost by what it reread or wrote: its start 100%.",
+      "- Single reads: 20% of its steps (one call that reads; builders were 47% in the 2026-11-22 usage audit, before the change skill asked for a step's reads in one turn).",
+      "- Not counted: 1 agent below it with no steps recorded (x1).",
+    ]);
+  });
+
+  // a finished agent's report reaches the main session by itself: a
+  // background agent's on its notification, a foreground one's on its
+  // call's return (plan review F5)
+  test("--hook in the main session: a finished agent's report on its notification or its call's return, and nothing else", () => {
+    const { run } = tree();
+    const said = (input) => {
+      const ran = run(["--hook"], { session_id: "s1", cwd: "/w/repo", ...input });
+      assert.equal(ran.status, 0, ran.stderr);
+      return ran.stdout ? JSON.parse(ran.stdout).hookSpecificOutput : null;
+    };
+    const notified = said({ hook_event_name: "UserPromptSubmit", prompt: "<task-notification>\n<task-id>a1</task-id>\n<status>completed</status>\n</task-notification>" });
+    assert.equal(notified.hookEventName, "UserPromptSubmit");
+    assert.match(notified.additionalContext, /^Agent a1 finished \(Fix issue 1\)\. From usage\.mjs, for the update:\nTokens: .*\nWhere it went \(this agent and the 3 below it/);
+    const returned = said({ hook_event_name: "PostToolUse", tool_name: "Agent", tool_response: { status: "completed", agentId: "r2", content: [] } });
+    assert.equal(returned.hookEventName, "PostToolUse");
+    assert.match(returned.additionalContext, /^Agent r2 finished \(Round 1 review\)\. From usage\.mjs, for the update:\nTokens: .*\nWhere it went \(this agent;/);
+    for (const input of [
+      // in an agent: its reviewers' reports would sit in its context
+      { hook_event_name: "PostToolUse", agent_id: "a1", tool_name: "Agent", tool_response: { status: "completed", agentId: "r2" } },
+      // a background agent's launch, and a typed prompt
+      { hook_event_name: "PostToolUse", tool_name: "Agent", tool_response: { status: "async_launched", agentId: "r2" } },
+      { hook_event_name: "UserPromptSubmit", prompt: "what did <task-id>a1</task-id> cost?" },
+      // a shell's notification: no agent of that id
+      { hook_event_name: "UserPromptSubmit", prompt: "<task-notification><task-id>b7</task-id></task-notification>" },
+    ])
+      assert.equal(said(input), null, JSON.stringify(input));
   });
 
   // each line is what settings.json's jq one-liner printed for that input,
@@ -1993,7 +2085,7 @@ describe("usage", () => {
   });
 
   test("--agent: the Tokens line is the workstream's share of each window, by what its tokens cost", () => {
-    const { run, agent, windows } = scratch();
+    const { agent, windows, tokensOf } = scratch();
     // a1's workstream: 6M of the 15M cache read, the rest alike message by message
     agent("a1", said("m1", 1_000_000), { description: "Fix issue 1", spawnDepth: 1 });
     agent("r1", said("m2", 2_000_000), { description: "Round 1 review", spawnDepth: 2, parentAgentId: "a1" });
@@ -2004,21 +2096,21 @@ describe("usage", () => {
     // an idle session's older reading of the same windows, and one of a week since reset
     windows([40, 100], [10, 2]);
     windows([99, -1]);
-    assert.equal(run(["--agent", "a1"]).stdout, "Tokens: about 20% of the week, about 8.0% of this 5-hour window (this agent and the 2 it started)\n");
-    assert.equal(run(["--agent", "b1"]).stdout, "Tokens: about 30% of the week, about 12% of this 5-hour window (this agent)\n");
-    assert.equal(run(["--agent", "c1"]).stdout, "Tokens: under 0.1% of the week, under 0.1% of this 5-hour window (this agent)\n");
+    assert.equal(tokensOf("a1"), "Tokens: about 20% of the week, about 8.0% of this 5-hour window (this agent and the 2 it started)");
+    assert.equal(tokensOf("b1"), "Tokens: about 30% of the week, about 12% of this 5-hour window (this agent)");
+    assert.equal(tokensOf("c1"), "Tokens: under 0.1% of the week, under 0.1% of this 5-hour window (this agent)");
     // a 5-hour window that began after the work
     windows(null, [1, 5.5]);
-    assert.equal(run(["--agent", "a1"]).stdout, "Tokens: about 20% of the week, none of this 5-hour window (this agent and the 2 it started)\n");
+    assert.equal(tokensOf("a1"), "Tokens: about 20% of the week, none of this 5-hour window (this agent and the 2 it started)");
   });
 
   test("--agent: a window with no reading, or one that has reset, is left out and the line says why", () => {
-    const { run, agent, windows } = scratch();
+    const { agent, windows, tokensOf } = scratch();
     agent("a1", said("m1", 1_000_000), { description: "Fix issue 1", spawnDepth: 1 });
     windows([50, 100]);
-    assert.equal(run(["--agent", "a1"]).stdout, "Tokens: about 50% of the week (this agent); no reading of this 5-hour window yet\n");
+    assert.equal(tokensOf("a1"), "Tokens: about 50% of the week (this agent); no reading of this 5-hour window yet");
     windows(null, [20, -1]);
-    assert.equal(run(["--agent", "a1"]).stdout, "Tokens: about 50% of the week (this agent); this 5-hour window has reset since its last reading\n");
+    assert.equal(tokensOf("a1"), "Tokens: about 50% of the week (this agent); this 5-hour window has reset since its last reading");
   });
 
   test("--agent: with no window to go by, the Tokens line sums the agent and every agent below it, and only them", () => {
@@ -2037,10 +2129,10 @@ describe("usage", () => {
     const ran = run(["--agent", "a1"]);
     assert.equal(ran.status, 0, ran.stderr);
     assert.equal(
-      ran.stdout,
+      ran.stdout.split("\n")[0],
       "Tokens: 6.0M cache read, 30 cache write, 15 output, 3 input over 3 turns (this agent and the 2 it started); " +
         "no reading of the week yet; no reading of this 5-hour window yet; " +
-        "not counted: up to 2 progress summaries Claude Code forked while it ran\n",
+        "not counted: up to 2 progress summaries Claude Code forked while it ran",
     );
     assert.match(run(["--agent", "b1"]).stdout, /; not counted: up to 2 progress summaries/);
     assert.match(run(["--agent", "x1"]).stdout, /^Tokens: 3\.0M cache read.* over 1 turn \(this agent\); no reading of the week yet/m);
@@ -2146,6 +2238,8 @@ describe("usage", () => {
     assert.match(ran.stdout, /^Merged PRs: o\/a 2, o\/b 1$/m);
     assert.match(ran.stdout, /^ {2}main s1 repo {2,}250k {2,}45\.5%$/m);
     assert.match(ran.stdout, /^ {2}change-reviewer {2,}175k {2,}31\.8% {2,}1$/m);
+    // each agent type's steps: a1's one step at 175k, no single read, one compaction
+    assert.match(ran.stdout, /^ {2}change-reviewer {2,}1 {2,}1 {2,}175k {2,}0\.0% {2,}1\.0 {2,}[\d.]+$/m);
     assert.match(ran.stdout, /^ {2}to .*: 50% at .*; 550k weighted by then, about 11k per 1% \(began before the ledger: reads low\)$/m);
     // gh asked for the account's PRs merged in each week, to the second before it ends
     const from = new Date(`${day(-6)}T00:00`);
