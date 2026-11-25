@@ -10,7 +10,7 @@
 // routes, round after round (47b0a6c, 3b948a6, then 6442db7 took this
 // shape; the cases: change-hooks.test.mjs).
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
@@ -47,6 +47,23 @@ export const jsonLines = (text) => {
     }
   }
   return { rows, unreadable };
+};
+
+// a file's whole lines after `from` (from the start, if it has since
+// shrunk), and the offset just past them: a line still being written is
+// left for the next read
+export const unread = (file, from) => {
+  const fd = openSync(file, "r");
+  try {
+    const { size } = fstatSync(fd);
+    const start = from <= size ? from : 0;
+    const buffer = Buffer.alloc(size - start);
+    readSync(fd, buffer, 0, buffer.length, start);
+    const end = buffer.lastIndexOf(10) + 1;
+    return { text: buffer.subarray(0, end).toString("utf8"), to: start + end };
+  } finally {
+    closeSync(fd);
+  }
 };
 
 // a command that may reach the network (fetch, push, gh), or whose refusal

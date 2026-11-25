@@ -77,6 +77,23 @@ export const kindOf = (call) =>
       ? (BASH.find(([, rule]) => rule.test(String(call.input?.command ?? "")))?.[0] ?? "other bash")
       : (Object.entries(TOOLS).find(([, names]) => names.includes(call.name))?.[0] ?? "other tools");
 
+// a message's usage as the ledger's token counts; cacheWrite1h only when
+// the usage splits its cache writes (usage.mjs's `cost` weighs a row
+// without one by who wrote it)
+export const tokensOf = (usage) => ({
+  cacheRead: usage.cache_read_input_tokens ?? 0,
+  cacheWrite: usage.cache_creation_input_tokens ?? 0,
+  ...(usage.cache_creation && { cacheWrite1h: usage.cache_creation.ephemeral_1h_input_tokens ?? 0 }),
+  output: usage.output_tokens ?? 0,
+  input: usage.input_tokens ?? 0,
+});
+
+// the context a message read: everything sent, cached or not
+export const contextOf = (tokens) => tokens.input + tokens.cacheRead + tokens.cacheWrite;
+
+// a step whose one call reads: the change skill asks for a step's reads in one turn
+export const single = (step) => step.calls.length === 1 && reads(step.calls[0]);
+
 // a transcript line of an assistant message with its tokens counted (Claude
 // Code's own `<synthetic>` replies cost nothing)
 export const counted = (row) => row.type === "assistant" && Boolean(row.message?.usage) && row.message.model !== "<synthetic>";
@@ -133,22 +150,15 @@ export const profileOf = (rows, cost) => {
     if (!counted(row)) continue;
     let step = byId.get(row.message.id);
     if (!step) {
-      const usage = row.message.usage;
-      const tokens = {
-        input: usage.input_tokens ?? 0,
-        cacheWrite: usage.cache_creation_input_tokens ?? 0,
-        cacheWrite1h: usage.cache_creation?.ephemeral_1h_input_tokens ?? 0,
-        cacheRead: usage.cache_read_input_tokens ?? 0,
-        output: 0,
-      };
+      const { output, ...tokens } = tokensOf(row.message.usage);
       step = {
         at,
         modelMs: 0,
         calls: [],
         afterCompaction: compacted,
-        context: tokens.input + tokens.cacheWrite + tokens.cacheRead,
-        reread: cost(tokens),
-        output: cost({ input: 0, cacheWrite: 0, cacheWrite1h: 0, cacheRead: 0, output: usage.output_tokens ?? 0 }),
+        context: contextOf(tokens),
+        reread: cost({ ...tokens, output: 0 }),
+        output: cost({ input: 0, cacheWrite: 0, cacheWrite1h: 0, cacheRead: 0, output }),
       };
       compacted = false;
       byId.set(row.message.id, step);
@@ -172,7 +182,7 @@ export const profileOf = (rows, cost) => {
   const total = group();
   steps.forEach((step, i) => {
     step.kind = step.calls[0]?.kind ?? "replies";
-    if (step.calls.length === 1 && reads(step.calls[0])) singleReads++;
+    if (single(step)) singleReads++;
     for (const call of step.calls) {
       const stage = stageAt(call, started);
       if (stage && !started.has(stage)) started.set(stage, call.at);

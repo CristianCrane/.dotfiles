@@ -2466,7 +2466,26 @@ describe("reads", () => {
       assert.equal(ran.stderr, "");
       return ran.stdout ? JSON.parse(ran.stdout).hookSpecificOutput : null;
     };
-    return { step, run };
+    // a step written one line per call, as Claude Code writes them, only
+    // its first `upTo` calls so far
+    const stepByLine = (calls, upTo) => {
+      n++;
+      for (const [i, [name, input]] of calls.slice(0, upTo).entries())
+        appendFileSync(
+          transcript,
+          JSON.stringify({
+            type: "assistant",
+            timestamp: new Date().toISOString(),
+            message: {
+              id: `m${n}`,
+              model: "claude-opus-5-5",
+              usage: { input_tokens: 1, cache_read_input_tokens: 100_000 + n * 1000, cache_creation_input_tokens: 500, output_tokens: 10 },
+              content: [{ type: "tool_use", id: `t${n}-${i}`, name, input }],
+            },
+          }) + "\n",
+        );
+    };
+    return { step, stepByLine, run };
   };
   const read = ["Read", { file_path: "/a" }];
   const rg = ["Bash", { command: "rg -n foo src" }];
@@ -2484,14 +2503,24 @@ describe("reads", () => {
 
   // Claude Code writes the transcript behind the run: a step's PostToolUse
   // can find the file without that step (live, 2026-11-25)
-  test("a call whose step isn't written yet: the last two steps written are the two before it", () => {
+  // and one line per call, so a step can be half written
+  test("a call not written yet: silent, as its step is unknown, and the next call's nudge comes", () => {
     const { step, run } = scratch();
     step(read);
     step(rg);
-    assert.match(run(read, { tool_use_id: "t-unwritten" })?.additionalContext, /\(~103k tokens now\)/);
-    step(read);
-    step(["Edit", { file_path: "/a" }]);
     assert.equal(run(read, { tool_use_id: "t-unwritten" }), null);
+    step(read);
+    assert.match(run(read)?.additionalContext, /\(~104k tokens now\)/);
+  });
+
+  test("a step half written: its unwritten call is silent, its written one judges the steps before it", () => {
+    const { step, stepByLine, run } = scratch();
+    step(read, rg);
+    step(read);
+    // m3's first read is written, its second not: m3 isn't a single read
+    stepByLine([read, rg], 1);
+    assert.equal(run(rg, { tool_use_id: "t3-1" }), null);
+    assert.equal(run(read, { tool_use_id: "t3-0" }), null);
   });
 
   test("silent in the main session, on a call that doesn't read, and after a step that read in more than one call or wrote", () => {

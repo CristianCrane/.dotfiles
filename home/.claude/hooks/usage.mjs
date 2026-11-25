@@ -42,12 +42,15 @@
 // empire-cleaning's transcripts, 2026-11-10), so the report counts each
 // message id, and each compaction's, once; that also absorbs a message
 // appended twice by two stops at once. An agent stops up to 3 times (waiting on its own agents, then done): each
-// stop reads only what's new.
+// stop records only the messages new since the last (an offset per
+// transcript), and reads the whole transcript again for its steps row.
 //
 // From UserPromptSubmit and PostToolUse on Agent (`--hook` too), in a main
 // session only, it brings a finished agent's Tokens line and where its
 // time and tokens went into the main session's context, so the update to
-// the user carries them with nobody asking: a background agent's on the
+// the user carries them with nobody asking (a node start on every prompt
+// and every Agent return, ~30 ms; on a finished agent, the ledger's parse
+// too, ~0.3 s for a 15 MB ledger, 2026-11-25): a background agent's on the
 // prompt that is its `<task-notification>` (each `<task-id>` with rows),
 // a foreground one's on its Agent call's return (`status: "completed"`
 // and its `agentId`). The agent's last stop is recorded before either
@@ -111,13 +114,13 @@
 //   agents have them, so a workstream reads low beside a main session.
 // - A window that began before the ledger's first row (2026-11-09) reads
 //   high: the tokens before it are in the used % only.
-import { appendFileSync, closeSync, existsSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { availableParallelism, homedir, loadavg } from "node:os";
 import { execFileSync } from "node:child_process";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { context, flagsOf, hook, jsonLines, lines } from "./lib.mjs";
-import { counted, profileOfFile, STAGES } from "./steps.mjs";
+import { context, flagsOf, hook, jsonLines, lines, unread } from "./lib.mjs";
+import { contextOf, counted, profileOfFile, STAGES, tokensOf } from "./steps.mjs";
 
 const USAGE = join(homedir(), ".claude/usage");
 const LEDGER = join(USAGE, "ledger.jsonl");
@@ -149,22 +152,6 @@ const append = (rows, file = LEDGER) => {
   appendFileSync(file, rows.map((row) => JSON.stringify(row) + "\n").join(""));
 };
 
-// the transcript's whole lines after `from` (from the start, if it has
-// since shrunk), and the offset just past them
-const unread = (transcript, from) => {
-  const fd = openSync(transcript, "r");
-  try {
-    const { size } = fstatSync(fd);
-    const start = from <= size ? from : 0;
-    const buffer = Buffer.alloc(size - start);
-    readSync(fd, buffer, 0, buffer.length, start);
-    const end = buffer.lastIndexOf(10) + 1;
-    return { text: buffer.subarray(0, end).toString("utf8"), to: start + end };
-  } finally {
-    closeSync(fd);
-  }
-};
-
 // a row per assistant message in `rows` (one message spans several lines,
 // each with the same id and usage) and per compaction
 const messages = (lines, who) => {
@@ -176,19 +163,7 @@ const messages = (lines, who) => {
       continue;
     }
     if (!counted(line) || rows.has(message.id)) continue;
-    const usage = message.usage;
-    rows.set(message.id, {
-      kind: "message",
-      id: message.id,
-      at: timestamp,
-      ...who,
-      model: message.model,
-      cacheRead: usage.cache_read_input_tokens ?? 0,
-      cacheWrite: usage.cache_creation_input_tokens ?? 0,
-      ...(usage.cache_creation && { cacheWrite1h: usage.cache_creation.ephemeral_1h_input_tokens ?? 0 }),
-      output: usage.output_tokens ?? 0,
-      input: usage.input_tokens ?? 0,
-    });
+    rows.set(message.id, { kind: "message", id: message.id, at: timestamp, ...who, model: message.model, ...tokensOf(message.usage) });
   }
   return [...rows.values()];
 };
@@ -213,7 +188,7 @@ const record = (input) => {
     const load = loadavg()[0];
     // the agent's whole profile, before the rows land: a finished
     // background agent's notification follows its last stop's hook, and
-    // the breakdown it brings reads this row (~0.7 s for a 77 MB builder)
+    // the breakdown it brings reads this row
     let steps = [];
     if (agent)
       try {
@@ -633,7 +608,7 @@ const week = (day) => {
     const rows = messages.filter(within(period));
     const main = rows.filter((row) => !row.agent);
     const days = new Set(rows.map((row) => new Date(row.at).toLocaleDateString("sv"))).size;
-    const context = main.map((row) => row.cacheRead + row.cacheWrite + row.input).sort((a, b) => a - b);
+    const context = main.map(contextOf).sort((a, b) => a - b);
     const auto = compactions.filter(within(period)).filter((row) => row.trigger === "auto");
     const compacted = auto.map((row) => row.preTokens).filter(Number.isFinite).sort((a, b) => a - b);
     const all = weighed(rows);
