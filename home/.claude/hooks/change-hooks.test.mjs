@@ -2403,6 +2403,7 @@ describe("steps", () => {
       ["Read", { file_path: "/r/src/a.ts" }, []],
       ["Grep", { pattern: "Home", path: "docs/ux-log.md" }, ["/r/docs/ux-log.md"]],
       ["Grep", { pattern: "Home", path: "docs", glob: "*.md" }, ["/r/docs/*.md"]],
+      ["Grep", { pattern: "Home", path: "docs/ux-log.md", glob: "*.md" }, ["/r/docs/ux-log.md"]],
       ["Grep", { pattern: "Home" }, []],
       ["Bash", { command: "rg -n 'Home|failed' docs/ux-log.md docs/testing-log.md" }, ["/r/docs/ux-log.md", "/r/docs/testing-log.md"]],
       ["Bash", { command: "cd /s && sed -n '1,40p' README.md" }, ["/s/README.md"]],
@@ -2413,6 +2414,19 @@ describe("steps", () => {
       ["Edit", { file_path: "/r/docs/ux.md" }, []],
     ])
       assert.deepEqual(steps.docsOf({ name, input }, "/r"), docs, `${name} ${JSON.stringify(input)}`);
+  });
+
+  // round 1 F6: a search of a folder names no file, but brings in the rows it matches
+  test("docsFound: the Markdown a search's result shows, by each line's path, with its lines' characters", () => {
+    const row = "/r/docs/ux-log.md:39:| Client portal > Payment Method | Where does a Client retry a failed charge? |";
+    for (const [name, input, text, found] of [
+      ["Grep", { pattern: "failed", path: "/r/docs", output_mode: "content" }, `${row}\n${row}\n/r/src/a.ts:3:failed`, { "/r/docs/ux-log.md": 2 * (row.length + 1) }],
+      ["Grep", { pattern: "failed", path: "docs", output_mode: "files_with_matches" }, "Found 1 file\n/r/docs/ux-log.md", { "/r/docs/ux-log.md": 18 }],
+      ["Bash", { command: "cd /s && rg -n failed docs" }, "docs/ux.md:3:failed", { "/s/docs/ux.md": 20 }],
+      ["Grep", { pattern: "x", path: "/r/.git" }, "/r/.git/worktrees/w/claude/survey-x.md:1:x", {}],
+      ["Bash", { command: "pnpm test:change" }, "docs/ux.md:3:failed", {}],
+    ])
+      assert.deepEqual(steps.docsFound({ name, input }, text, "/r"), found, `${name} ${JSON.stringify(input)}`);
   });
 
   test("profileOf: a step per message id, its time, its kind, and the waits and compactions between", () => {
@@ -2481,6 +2495,18 @@ describe("steps", () => {
       "/repo/docs/b.md": { reads: 1, chars: 270, reread: 540, held: 10 },
       "/repo/docs/big.md": { reads: 1, chars: 1350, reread: 1350, held: 25 },
     });
+  });
+
+  test("profileOf: a search of a folder counts the Markdown lines it brought in, named from the agent's folder", () => {
+    const line = `/w/docs/ux-log.md:39:${"a".repeat(78)}`;
+    const rows = [
+      ...step("m1", 1, 1000, [["Grep", { pattern: "failed", path: "/w/docs", output_mode: "content" }]]).map((row) => ({ ...row, cwd: "/w" })),
+      { type: "user", timestamp: at(2), message: { content: [{ type: "tool_result", tool_use_id: "m1-0", content: `${line}\n${line}\n/w/src/a.ts:1:failed` }] } },
+      ...step("m2", 3, 2000),
+    ];
+    const { docs } = steps.profileOf(rows, cost);
+    assert.deepEqual(Object.keys(docs), ["docs/ux-log.md"]);
+    assert.deepEqual([docs["docs/ux-log.md"].reads, docs["docs/ux-log.md"].chars, docs["docs/ux-log.md"].reread], [1, 200, 200]);
   });
 
   // plan review F4: a builder's plan review was told apart by the word
