@@ -2402,7 +2402,7 @@ describe("steps", () => {
       ["Read", { file_path: "/r/docs/ux-log.md" }, ["/r/docs/ux-log.md"]],
       ["Read", { file_path: "/r/src/a.ts" }, []],
       ["Grep", { pattern: "Home", path: "docs/ux-log.md" }, ["/r/docs/ux-log.md"]],
-      ["Grep", { pattern: "Home", path: "docs", glob: "*.md" }, ["/r/docs/*.md"]],
+      ["Grep", { pattern: "Home", path: "docs", glob: "*.md" }, []],
       ["Grep", { pattern: "Home", path: "docs/ux-log.md", glob: "*.md" }, ["/r/docs/ux-log.md"]],
       ["Grep", { pattern: "Home" }, []],
       ["Bash", { command: "rg -n 'Home|failed' docs/ux-log.md docs/testing-log.md" }, ["/r/docs/ux-log.md", "/r/docs/testing-log.md"]],
@@ -2416,13 +2416,20 @@ describe("steps", () => {
       assert.deepEqual(steps.docsOf({ name, input }, "/r"), docs, `${name} ${JSON.stringify(input)}`);
   });
 
-  // round 1 F6: a search of a folder names no file, but brings in the rows it matches
-  test("docsFound: the Markdown a search's result shows, by each line's path, with its lines' characters", () => {
+  // round 1 F6: a search of a folder names no file, but brings in the rows it matches;
+  // round 3 F8: a line with no path is the named files', one with another path no doc's
+  test("docsFound: the Markdown a search brought in, by each line of its result", () => {
     const row = "/r/docs/ux-log.md:39:| Client portal > Payment Method | Where does a Client retry a failed charge? |";
     for (const [name, input, text, found] of [
       ["Grep", { pattern: "failed", path: "/r/docs", output_mode: "content" }, `${row}\n${row}\n/r/src/a.ts:3:failed`, { "/r/docs/ux-log.md": 2 * (row.length + 1) }],
-      ["Grep", { pattern: "failed", path: "docs", output_mode: "files_with_matches" }, "Found 1 file\n/r/docs/ux-log.md", { "/r/docs/ux-log.md": 18 }],
-      ["Bash", { command: "cd /s && rg -n failed docs" }, "docs/ux.md:3:failed", { "/s/docs/ux.md": 20 }],
+      ["Grep", { pattern: "failed", path: "docs", output_mode: "files_with_matches" }, "Found 1 file\n/r/docs/ux-log.md", { "/r/docs/ux-log.md": 17 }],
+      ["Bash", { command: "cd /s && rg -n failed docs" }, "docs/ux.md:3:failed", { "/s/docs/ux.md": 19 }],
+      // a named file's sed beside a folder search: its lines and its rows the search found
+      ["Bash", { command: "sed -n 1,2p docs/ux-log.md; rg -n failed docs" }, "# Log\n| a |\ndocs/ux-log.md:39:failed\ndocs/ux.md:3:failed", { "/r/docs/ux-log.md": 37, "/r/docs/ux.md": 19 }],
+      // a named file the search didn't match, beside code it did: no doc's
+      ["Bash", { command: "rg -n failed src docs/ux-log.md" }, "src/a.ts:3:failed\nsrc/b.ts:9:failed", {}],
+      // a context line (`-C`) is its file's
+      ["Grep", { pattern: "failed", path: "docs", "-C": 1 }, "docs/ux-log.md-38-| x |\ndocs/ux-log.md:39:failed\n--\n2026-11-25 x", { "/r/docs/ux-log.md": 49 }],
       ["Grep", { pattern: "x", path: "/r/.git" }, "/r/.git/worktrees/w/claude/survey-x.md:1:x", {}],
       ["Bash", { command: "pnpm test:change" }, "docs/ux.md:3:failed", {}],
     ])
@@ -2521,11 +2528,11 @@ describe("steps", () => {
     ];
     const chars = (input, content) => Object.fromEntries(Object.entries(steps.profileOf(searched(input, content), cost).docs).map(([name, doc]) => [name, doc.chars]));
     // a folder with a glob: the log's rows, not `docs/ux*.md`
-    assert.deepEqual(chars({ pattern: "failed", path: "docs", glob: "ux*.md", output_mode: "content" }, `${ux}\n${ux}`), { "docs/ux-log.md": 200 });
+    assert.deepEqual(chars({ pattern: "failed", path: "docs", glob: "ux*.md", output_mode: "content" }, `${ux}\n${ux}`), { "docs/ux-log.md": 199 });
     // a folder and a file: each file its own lines
-    assert.deepEqual(chars({ command: "rg -n failed docs README.md" }, `${ux}\n${readme}`), { "docs/ux-log.md": 100, "README.md": 54 });
+    assert.deepEqual(chars({ command: "rg -n failed docs README.md" }, `${ux}\n${readme}`), { "docs/ux-log.md": 100, "README.md": 53 });
     // two files, one matched: the other brought none
-    assert.deepEqual(chars({ command: "rg -n failed docs/ux-log.md docs/testing-log.md" }, ux), { "docs/ux-log.md": 100 });
+    assert.deepEqual(chars({ command: "rg -n failed docs/ux-log.md docs/testing-log.md" }, ux), { "docs/ux-log.md": 99 });
     // one file: no path in its lines, so the file it names
     assert.deepEqual(chars({ pattern: "failed", path: "docs/ux-log.md", output_mode: "content" }, "39:failed"), { "docs/ux-log.md": 9 });
   });

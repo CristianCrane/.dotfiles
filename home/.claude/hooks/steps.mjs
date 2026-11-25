@@ -29,8 +29,8 @@
 //   build) and PR (`gh pr create`).
 // - A single read is a step whose one call reads (`reads`): the change
 //   skill asks for a step's reads in one turn.
-// - Docs: the Markdown its calls read (`docsOf`, or the paths a search's
-//   result shows, `docsFound`), each file's reads, the
+// - Docs: the Markdown its calls read (`docsOf`, or for a search, its
+//   result's lines, `docsFound`), each file's reads, the
 //   characters its results brought into the context, those characters
 //   again at every later step they stay in up to a compaction (reread),
 //   and the cost of rereading them (held, as above). A result's tokens are
@@ -128,16 +128,16 @@ const markdown = (named, base) => {
 };
 
 // the Markdown a call that reads names, each file as an absolute path
-// (from `cwd`, or a leading `cd`): Read's file, Grep's path or its glob
-// under it (the ux-reviewer's search of a log), a Bash command's arguments
-// (`git show ref:path` by its path). A search whose result shows its files'
-// paths is counted by those instead (`docsFound`).
+// (from `cwd`, or a leading `cd`): Read's file, Grep's path, a Bash
+// command's arguments (`git show ref:path` by its path). A search is
+// counted by its result's lines instead (`docsFound`), so a Grep's glob
+// names nothing: its result shows the files it matched.
 export const docsOf = (call, cwd = "/") => {
   if (!reads(call)) return [];
   const input = call.input ?? {};
   let named = [];
   if (call.name === "Read") named = [input.file_path];
-  else if (call.name === "Grep") named = [input.glob && !String(input.path).endsWith(".md") ? `${input.path ?? "."}/${input.glob}` : input.path];
+  else if (call.name === "Grep") named = [input.path];
   else if (call.name === "Bash") named = [...String(input.command ?? "").matchAll(/(?<=^|[\s'"=(])[\w.\/~@+:-]+\.md(?=$|[\s'"|;&)>,])/g)].map(([token]) => token.replace(/^.*:/, ""));
   return markdown(named, baseOf(call, cwd));
 };
@@ -145,20 +145,36 @@ export const docsOf = (call, cwd = "/") => {
 // a search: Grep, or a shell rg, grep or git grep
 const searches = (call) => call.name === "Grep" || (call.name === "Bash" && /(?:^|[;&|(]\s*)(?:rg|grep|git\s+grep)\b/.test(String(call.input?.command ?? "")));
 
-// the Markdown a search's result shows, by the path that starts each line
-// (Grep's and rg's `path:line:text`, or a path alone), each with the
-// characters of its lines: a search of a folder (Grep on `docs`, `rg` over
-// the repo) names no file, or a glob, but brings in the log rows it matches.
-// A search of one file prints no path, and keeps the file it names.
+// the path a search's result line starts with: `path:N:` or `path:` (a
+// search over several files), `path-N-` (a context line) or a path alone
+// (a list of files). A path has a `/` or an extension, so a file's own
+// lines (`39:…`, `2026-11-25 …`) start with none.
+const pathOf = (line) => {
+  const path = /^([^\s:]+?\.\w+)-\d+-/.exec(line)?.[1] ?? /^([^\s:]+)(?=:|$)/.exec(line)?.[1];
+  return path && (path.includes("/") || /\.[A-Za-z]\w*$/.test(path)) ? path : undefined;
+};
+
+// the Markdown a search brought in, by each line of its result: a line
+// that starts with a Markdown path is that file's, one that starts with
+// another path (`src/a.ts:12:`) is no doc's, and one with no path (a
+// one-file search's `39:…`, or a `sed` of a named file beside the search
+// in one command) is shared evenly by the files the call names. A search
+// of a folder (Grep on `docs`, `rg` over the repo) names no file but
+// brings in the log rows it matches.
 export const docsFound = (call, text, cwd = "/") => {
   if (!reads(call) || !searches(call)) return {};
   const base = baseOf(call, cwd);
   const found = {};
-  for (const line of text.split("\n")) {
-    const path = /^(\/?[^\s:]+\.md)(?=:|$)/.exec(line)?.[1];
-    const [absolute] = path ? markdown([path], base) : [];
-    if (absolute) found[absolute] = (found[absolute] ?? 0) + line.length + 1;
-  }
+  let loose = 0;
+  const lines = text.split("\n");
+  lines.forEach((line, i) => {
+    const chars = line.length + (i < lines.length - 1 ? 1 : 0);
+    const path = pathOf(line);
+    if (!path) loose += chars;
+    else for (const absolute of path.endsWith(".md") ? markdown([path], base) : []) found[absolute] = (found[absolute] ?? 0) + chars;
+  });
+  const named = docsOf(call, cwd);
+  if (loose) for (const absolute of named) found[absolute] = (found[absolute] ?? 0) + loose / named.length;
   return found;
 };
 
@@ -223,14 +239,10 @@ export const profileOf = (rows, cost) => {
         if (!call) continue;
         const text = textOf(part.content);
         call.chars = text.length;
-        // a search whose result shows its files' paths is counted by them,
-        // each file its own lines, summed by name: a search over several
-        // files shows every one it matched, so a file it named that the
-        // result doesn't show (a glob, or a file with no match) brought none
-        const found = docsFound(call, text, call.cwd);
-        if (!Object.keys(found).length) continue;
+        // a search is counted by its result's lines (`docsFound`), summed by name
+        if (!searches(call)) continue;
         const shares = {};
-        for (const [path, chars] of Object.entries(found)) {
+        for (const [path, chars] of Object.entries(docsFound(call, text, call.cwd))) {
           const name = nameOf(path, call.cwd);
           shares[name] = (shares[name] ?? 0) + chars;
         }
