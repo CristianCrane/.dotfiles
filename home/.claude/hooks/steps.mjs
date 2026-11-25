@@ -29,8 +29,8 @@
 //   build) and PR (`gh pr create`).
 // - A single read is a step whose one call reads (`reads`): the change
 //   skill asks for a step's reads in one turn.
-// - Docs: the Markdown its calls read (`docsOf`, or a folder search's
-//   result, `docsFound`), each file's reads, the
+// - Docs: the Markdown its calls read (`docsOf`, or the paths a search's
+//   result shows, `docsFound`), each file's reads, the
 //   characters its results brought into the context, those characters
 //   again at every later step they stay in up to a compaction (reread),
 //   and the cost of rereading them (held, as above). A result's tokens are
@@ -130,8 +130,8 @@ const markdown = (named, base) => {
 // the Markdown a call that reads names, each file as an absolute path
 // (from `cwd`, or a leading `cd`): Read's file, Grep's path or its glob
 // under it (the ux-reviewer's search of a log), a Bash command's arguments
-// (`git show ref:path` by its path). A search that names none counts the
-// Markdown its result shows (`docsFound`).
+// (`git show ref:path` by its path). A search whose result shows its files'
+// paths is counted by those instead (`docsFound`).
 export const docsOf = (call, cwd = "/") => {
   if (!reads(call)) return [];
   const input = call.input ?? {};
@@ -148,7 +148,8 @@ const searches = (call) => call.name === "Grep" || (call.name === "Bash" && /(?:
 // the Markdown a search's result shows, by the path that starts each line
 // (Grep's and rg's `path:line:text`, or a path alone), each with the
 // characters of its lines: a search of a folder (Grep on `docs`, `rg` over
-// the repo) names no file, but brings in the log rows it matches
+// the repo) names no file, or a glob, but brings in the log rows it matches.
+// A search of one file prints no path, and keeps the file it names.
 export const docsFound = (call, text, cwd = "/") => {
   if (!reads(call) || !searches(call)) return {};
   const base = baseOf(call, cwd);
@@ -222,10 +223,19 @@ export const profileOf = (rows, cost) => {
         if (!call) continue;
         const text = textOf(part.content);
         call.chars = text.length;
-        if (call.docs.length) continue;
-        const found = Object.entries(docsFound(call, text, call.cwd));
-        call.docs = found.map(([path]) => nameOf(path, call.cwd));
-        call.shares = Object.fromEntries(found.map(([path, chars], i) => [call.docs[i], chars]));
+        // a search whose result shows its files' paths is counted by them,
+        // each file its own lines, summed by name: a search over several
+        // files shows every one it matched, so a file it named that the
+        // result doesn't show (a glob, or a file with no match) brought none
+        const found = docsFound(call, text, call.cwd);
+        if (!Object.keys(found).length) continue;
+        const shares = {};
+        for (const [path, chars] of Object.entries(found)) {
+          const name = nameOf(path, call.cwd);
+          shares[name] = (shares[name] ?? 0) + chars;
+        }
+        call.docs = Object.keys(shares);
+        call.shares = shares;
       }
       if (!results.length && gap >= GAP) span.waitMs += gap;
       continue;

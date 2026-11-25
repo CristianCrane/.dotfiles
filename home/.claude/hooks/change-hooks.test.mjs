@@ -2509,6 +2509,27 @@ describe("steps", () => {
     assert.deepEqual([docs["docs/ux-log.md"].reads, docs["docs/ux-log.md"].chars, docs["docs/ux-log.md"].reread], [1, 200, 200]);
   });
 
+  // round 2 F7: a search that names Markdown (a glob, or a file beside a
+  // folder) is counted by the paths its result shows, not by what it names
+  test("profileOf: a search that names Markdown is counted by the files its result shows", () => {
+    const ux = `docs/ux-log.md:39:${"a".repeat(81)}`;
+    const readme = `README.md:2:${"b".repeat(41)}`;
+    const searched = (input, content) => [
+      ...step("m1", 1, 1000, [[input.command ? "Bash" : "Grep", input]]).map((row) => ({ ...row, cwd: "/w" })),
+      { type: "user", timestamp: at(2), message: { content: [{ type: "tool_result", tool_use_id: "m1-0", content }] } },
+      ...step("m2", 3, 2000),
+    ];
+    const chars = (input, content) => Object.fromEntries(Object.entries(steps.profileOf(searched(input, content), cost).docs).map(([name, doc]) => [name, doc.chars]));
+    // a folder with a glob: the log's rows, not `docs/ux*.md`
+    assert.deepEqual(chars({ pattern: "failed", path: "docs", glob: "ux*.md", output_mode: "content" }, `${ux}\n${ux}`), { "docs/ux-log.md": 200 });
+    // a folder and a file: each file its own lines
+    assert.deepEqual(chars({ command: "rg -n failed docs README.md" }, `${ux}\n${readme}`), { "docs/ux-log.md": 100, "README.md": 54 });
+    // two files, one matched: the other brought none
+    assert.deepEqual(chars({ command: "rg -n failed docs/ux-log.md docs/testing-log.md" }, ux), { "docs/ux-log.md": 100 });
+    // one file: no path in its lines, so the file it names
+    assert.deepEqual(chars({ pattern: "failed", path: "docs/ux-log.md", output_mode: "content" }, "39:failed"), { "docs/ux-log.md": 9 });
+  });
+
   // plan review F4: a builder's plan review was told apart by the word
   // "plan" in its brief; the order of its calls decides it, whatever a brief says
   test("profileOf: stages by the order of the change skill's steps, and single reads", () => {
