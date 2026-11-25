@@ -400,6 +400,9 @@ const STATES = {
       passRecheckOpen: { review: "# Change review: feature @ abc1234, recheck of round 1, 1 open change findings\n" },
       // a recheck of HEAD leaves nothing to read; one of an older commit does
       passRecheckDone: { review: (head) => `# Change review: feature @ ${head}, recheck of round 1, 0 open change findings\n` },
+      // round 1 of HEAD, clean, still gets its recheck: the one place a case
+      // against a U<n>, C<n> or [text] is heard (recheck F17)
+      passRound1Head: { review: (head) => `# Change review: feature @ ${head}, round 1, 0 open change findings\n` },
       passRecheckOld: { review: "# Change review: feature @ abc1234, recheck of round 1, 0 open change findings\n" },
       passUx: { "ux-review": "# UX review: feature @ abc1234, first pass, 2 open findings (0 high)\n" },
       passCriticalPlan: { "critical-review": "# Critical review: feature @ abc1234, plan, 0 open findings\n" },
@@ -633,6 +636,8 @@ const CASES = [
   ["passRecheckOpen", "change-reviewer: recheck, output <out>/review-feature.md", THROUGH],
   ["passRecheckDone", "change-reviewer: recheck, output <out>/review-feature.md", /review-feature\.md already reads HEAD .* and leaves no change finding open/],
   ["passRecheckOld", "change-reviewer: recheck, output <out>/review-feature.md", THROUGH],
+  ["passRound1Head", "change-reviewer: recheck, output <out>/review-feature.md", THROUGH],
+  ["passRound1Head", "critical-reviewer: diff of feature", /prompt names no output path/],
   ["passUx", "ux-reviewer: shots, output <out>/ux-review-feature.md", /ux-review-feature\.md is written/],
   ["passUx", "ux-reviewer: design, output <out>/ux-review-design-feature.md", THROUGH],
   ["passCriticalPlan", "critical-reviewer: mode: diff, output <out>/critical-review-feature.md", THROUGH],

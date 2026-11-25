@@ -40,7 +40,7 @@ const pastCap = (type, prompt) => {
     return `${out.path} is written, and ${CAP}: revise the survey for its findings, or give round 1 your case against one. A survey redone with a new Expected files (the 1.5x size cap) gets a plan pass of its own.`;
   }
   if (out.kind === "review") {
-    if (pass.open || !pass.sha || !stillHead(checkoutOf(out.path), pass.sha)) return;
+    if (!pass.recheck || pass.open || !pass.sha || !stillHead(checkoutOf(out.path), pass.sha)) return;
     return `${out.path} already reads HEAD (${pass.sha}, or only comment lines since) and leaves no change finding open, and ${CAP}. A finding after it goes into a new issue the PR links, unless it's a real bug or untrue text.`;
   }
   // the critical review's diff pass, once, after its plan pass
