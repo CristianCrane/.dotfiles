@@ -1999,10 +1999,10 @@ describe("usage", () => {
     };
     const notified = said({ hook_event_name: "UserPromptSubmit", prompt: "<task-notification>\n<task-id>a1</task-id>\n<status>completed</status>\n</task-notification>" });
     assert.equal(notified.hookEventName, "UserPromptSubmit");
-    assert.match(notified.additionalContext, /^Agent a1 finished \(Fix issue 1\)\. From usage\.mjs, for the update:\nTokens: .*\nWhere it went \(this agent and the 3 below it/);
+    assert.match(notified.additionalContext, /^Agent a1 finished \(Fix issue 1\)\. Measured by the usage\.mjs hook from its ledger, for the update \(nothing to run\):\nTokens: .*\nWhere it went \(this agent and the 3 below it/);
     const returned = said({ hook_event_name: "PostToolUse", tool_name: "Agent", tool_response: { status: "completed", agentId: "r2", content: [] } });
     assert.equal(returned.hookEventName, "PostToolUse");
-    assert.match(returned.additionalContext, /^Agent r2 finished \(Round 1 review\)\. From usage\.mjs, for the update:\nTokens: .*\nWhere it went \(this agent;/);
+    assert.match(returned.additionalContext, /^Agent r2 finished \(Round 1 review\)\. Measured by the usage\.mjs hook from its ledger, for the update \(nothing to run\):\nTokens: .*\nWhere it went \(this agent;/);
     for (const input of [
       // in an agent: its reviewers' reports would sit in its context
       { hook_event_name: "PostToolUse", agent_id: "a1", tool_name: "Agent", tool_response: { status: "completed", agentId: "r2" } },

@@ -465,7 +465,7 @@ const finished = (input) => {
     .map((id) => {
       const text = report(id, book);
       const { description, type } = book.agents.get(id) ?? {};
-      return text && `Agent ${id} finished${description ? ` (${description})` : type ? ` (${type})` : ""}. From usage.mjs, for the update:\n${text}`;
+      return text && `Agent ${id} finished${description ? ` (${description})` : type ? ` (${type})` : ""}. Measured by the usage.mjs hook from its ledger, for the update (nothing to run):\n${text}`;
     })
     .filter(Boolean);
   if (reports.length) return context(event, reports.join("\n\n"));
