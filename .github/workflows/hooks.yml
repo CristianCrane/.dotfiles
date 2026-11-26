@@ -2,7 +2,9 @@
 # merges by the agent once they're green (docs/process.md, Landing). They
 # run with the flake's own node and Claude Code (settings-format drives
 # `claude plugin`, whose output must match the version the user runs), from
-# flake.lock's inputs.
+# flake.lock's inputs. The docs job runs doc-check.yml, the workflow every
+# repo with a docs map calls, so a change to it runs here before any caller
+# does (this repo has no docs map, so it passes as not opted in).
 name: Hook tests
 on:
   pull_request:
@@ -15,3 +17,5 @@ jobs:
       - uses: actions/checkout@v4
       - uses: cachix/install-nix-action@v31
       - run: nix shell --inputs-from . nixpkgs#nodejs nix-claude-code -c node --test 'home/.claude/hooks/*.test.mjs'
+  docs:
+    uses: ./.github/workflows/doc-check.yml

@@ -8,7 +8,9 @@ This file is the curator's brief, and the change reviewer's when a diff touches 
 
 ### Guidance
 
-**Guidance** is everything an agent reads or obeys that we own (D1): the global CLAUDE.md (`home/.claude/CLAUDE.md`), this repo's CLAUDE.md, each repo's CLAUDE.md and the docs it says to read first, memory (`~/.claude/projects/*/memory`), our skills, agent types and hooks (`home/.claude/`), `settings.json`, and the session-start messages (`home/.claude/hooks/main-session.md`). A third-party plugin's skill counts only as on or off (`enabledPlugins`).
+**Guidance** is everything an agent reads or obeys that we own (D1): the global CLAUDE.md (`home/.claude/CLAUDE.md`), this repo's CLAUDE.md, each repo's CLAUDE.md and, in a repo with no docs map, the docs it says to read first, memory (`~/.claude/projects/*/memory`), our skills, agent types and hooks (`home/.claude/`), `settings.json`, and the session-start messages (`home/.claude/hooks/main-session.md`). A third-party plugin's skill counts only as on or off (`enabledPlugins`).
+
+A repo with a docs map (`docs/map.md`) keeps its docs with the `doc-curator` (D32): its `docs/`, READMEs, `GLOSSARY.md` and ADRs are no guidance here, and a lesson that teaches one of its rules is forwarded (The curator). The dotfiles' own docs stay here.
 
 One policy and one log, here, for every repo (D4). A repo keeps only what is about it.
 
@@ -28,7 +30,7 @@ Each line of guidance holds four things, and a line missing one is a finding (D2
 | how the user works, or any project | the global CLAUDE.md |
 | main sessions only (updates, turns, notes) | the main-session message; agents never get it |
 | Claude Code's config, the dotfiles, this layer | the dotfiles' CLAUDE.md, or a doc it points at |
-| one repo's code, product or workflow | that repo's CLAUDE.md, or a doc it says to read first |
+| one repo's code, product or workflow | that repo's CLAUDE.md, or a doc it says to read first; with a docs map, its doc inbox (D32) |
 | temporary project state, or a fact about the user | memory (D12): every lasting rule lives in a versioned file |
 | one kind of task, every repo | a skill, or the agent type that runs it |
 
@@ -106,7 +108,7 @@ The `curator` agent type (D9): a fresh view, never the session that made the mis
 
 - whether it teaches anything, and which signals are the same lesson (a **repeat**);
 - the rule that should have caught it, or "no rule" (D23);
-- the form and place (Form, Place, the principles), and the exact words;
+- the form and place (Form, Place, the principles), and the exact words; a lesson whose place is a doc of a repo with a docs map is a forward: a note, in the `change` skill's note shape, that the change applying the yes adds to that repo's doc inbox (`~/.claude/process/doc-inbox/<project>.md`), for the doc curator's weekly sweep to place;
 - what the change replaces or prunes.
 
 A signal teaches a **lesson** only when all four hold:

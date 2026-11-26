@@ -11,7 +11,7 @@ The user wants a layer that keeps using their feedback and the conclusions both 
 ## Decisions
 
 ### Round 1
-- **D1 Scope:** everything an agent reads or obeys that we own: global CLAUDE.md, repo CLAUDE.md, the repo docs it says to read first, memory, our skills, agent types, hooks, settings, start-of-session messages. Third-party plugin skills count only as on or off. The layer also decides the *form* a lesson takes: a rule line (and where), a new skill, a new agent type, a hook.
+- **D1 Scope:** everything an agent reads or obeys that we own: global CLAUDE.md, repo CLAUDE.md, the repo docs it says to read first (in a repo with no docs map: D32), memory, our skills, agent types, hooks, settings, start-of-session messages. Third-party plugin skills count only as on or off. The layer also decides the *form* a lesson takes: a rule line (and where), a new skill, a new agent type, a hook.
 - **D2 Measure:** the main measure is learning: repeated mistakes, and corrections the user has to make that a rule should have caught. Size, tokens per PR and PR grades are guard rails.
 - **D3 Signals:** corrections in conversation, and also moments where we both reach an understanding ("this one's important"), plus lessons, review findings and the weekly numbers.
 - **D4 Home:** one policy and one log in the dotfiles, for every repo; repos keep only their own specifics.
@@ -56,6 +56,7 @@ The user wants their judgement to become the curator's over time, without being 
 - **D29 Existing lines:** the first curator run checks every existing line against the policy (reason, one copy, end condition, right place); a line with no reason found gets "keep, cite a reason" or "remove".
 - **D30 One gate for every route:** the change reviewer checks any diff touching guidance against the policy and principles, whoever wrote it; dictated settings changes stay exempt.
 - **D31 Written down:** `docs/process.md` in the dotfiles (policy, principles, design), with an ADR-style decision record beside it.
+- **D32 Repo docs go to the doc curator** (2026-11-26, .dotfiles#61 Q1, Q11): in a repo with a docs map (`docs/map.md`), its `docs/`, READMEs, `GLOSSARY.md` and ADRs are the `doc-curator`'s, which alone writes them, from notes. This layer keeps the CLAUDE.md files, skills, agents, memory and `process.md`, and forwards a lesson that teaches one of that repo's rules to its doc inbox. The dotfiles' own docs stay here. Supersedes D1's "repo docs it says to read first" for such a repo.
 
 ## Calls made while building step 1
 

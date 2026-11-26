@@ -12,8 +12,9 @@
 // review owes a fix its recheck (a header's `<r> to recheck` above 0, less
 // what the user ruled on), the change review has read every commit since
 // its last pass that names no finding it fixes nor CI (lib's unreadSince),
-// and the branch's lessons file (the `lessons` skill) says where every
-// cost went.
+// the doc curator has marked every note in the branch's doc notes (in a
+// repo with a docs map: .dotfiles#61, docs.mjs), and the branch's lessons
+// file (the `lessons` skill) says where every cost went.
 // The closing check is the backstop for the reviewer's last word (the
 // change skill, Review), not a rule of its own: in words alone, the
 // principle failed three times in two days, builders answering UX
@@ -112,6 +113,19 @@ const lessonsMissing = (cwd, work) => {
   const unsaid = items.filter((line) => !/→\s*\S/.test(line));
   if ((items.length === 0 && !reasoned) || unsaid.length)
     return `The lessons file for ${work.branch} (${file}) ${items.length ? `has ${unsaid.length} cost(s) that don't say where they went` : "lists none"}: ${how}.`;
+};
+
+// why the branch's PR can't leave draft yet for its doc notes (the change
+// skill's Build): a note the doc curator hasn't marked `done: <sha>` or
+// `dropped: <why>`. A note is a list item from its `- fact:` line to the
+// next item; no notes file, no hold
+const notesOpen = (cwd, work) => {
+  const file = stateFile(cwd, "doc-notes", work.key);
+  if (!existsSync(file)) return null;
+  const notes = readFileSync(file, "utf8").split(/^(?=[-*] )/m).filter((note) => /^[-*] fact:/.test(note));
+  const open = notes.filter((note) => !/^\s+(?:done|dropped):\s*\S/m.test(note));
+  if (!open.length) return null;
+  return `${work.branch} has ${open.length} doc note(s) the doc curator hasn't written yet (${file}): run the doc-curator agent on the branch (the \`change\` skill's Review, before round 1), which commits the docs' changes and marks each note \`done: <sha>\` or \`dropped: <why>\`.`;
 };
 
 // the PR body's labelled parts (the `change` skill's PR body step), in its
@@ -350,8 +364,8 @@ const owedOf = (one, section, transcript) => {
 // why the PR can't leave draft (`gh pr ready`, or a create without
 // `--draft`), beside its body's closings (unclosedAll), if it can't: a
 // review owes a fix its recheck, a commit since the change review's last
-// pass names no finding it fixes (nor CI, which rests on trust), or the
-// lessons are missing. A commit that fixes nothing is new work, which the
+// pass names no finding it fixes (nor CI, which rests on trust), a doc
+// note is still open (notesOpen), or the lessons are missing. A commit that fixes nothing is new work, which the
 // change-reviewer reads (agent-gate lets it through)
 const notReady = (cwd, work, found, section, seen, transcript) => {
   const { why, reviews } = reviewsOf(cwd, work, found, seen);
@@ -364,7 +378,7 @@ const notReady = (cwd, work, found, section, seen, transcript) => {
     if (unnamed.length)
       return `${unnamed.map((sha) => sha.slice(0, 7)).join(", ")} came after the change review's last pass (${found.sha}) and name${unnamed.length === 1 ? "s" : ""} no finding it fixes (\`F<n>\`, \`C<n>\`, \`U<n>\`) nor \`CI\`: name the finding a fix fixes in its message (\`git commit --amend\` or a reword); a commit that fixes none is new work no review has read, so run the change-reviewer on HEAD (the \`change\` skill's Review).`;
   }
-  return lessonsMissing(cwd, work);
+  return notesOpen(cwd, work) ?? lessonsMissing(cwd, work);
 };
 
 // gh pr create: the PR's branch (not a prototype, and the one checked

@@ -1,6 +1,6 @@
 // The change hooks' cases (CristianCrane/.dotfiles#10): the gates'
 // (survey-gate, review-gate, agent-gate, process-gate, scratch-gate,
-// reviewer-gate), each fed to the hook as Claude Code runs it (`node
+// doc-gate, reviewer-gate), each fed to the hook as Claude Code runs it (`node
 // <hook>.mjs`, the tool call's JSON on stdin, with the input fields
 // MORE_INPUT adds, in a scratch repo), and below them plain tests of
 // scratch-gate at a subagent's start, reviewer-gate's other callers, the curator and the ux-reviewer, capture (the process layer's inbox), user-words (the inbox's words for a ux-reviewer), the
@@ -14,8 +14,8 @@
 // SessionStart check that the weekly review is due), steps (one agent's
 // profile from its transcript), main-session (the
 // main session's SessionStart message), pr-conflict (the note that a PR
-// conflicting with its base runs no CI), settings-format, and the repo's
-// .githooks (pre-commit, which runs settings-format, and post-commit). Run
+// conflicting with its base runs no CI), settings-format, docs (CI's
+// doc-trailer check and the curator's lint), and the repo's .githooks (pre-commit, which runs settings-format, and post-commit). Run
 // from the repo root:
 //
 //   node --test 'home/.claude/hooks/*.test.mjs'
@@ -81,6 +81,12 @@ const scratchDir = () => {
   const dir = mkdtempSync(join(tmpdir(), "change-hooks-"));
   dirs.push(dir);
   return dir;
+};
+
+// the hook modules (not their tests) into a folder, for a test that runs a
+// hook from a tree of its own: all of them, as each imports others
+const copyHooks = (dir) => {
+  for (const name of readdirSync(HOOKS)) if (/(?<!\.test)\.mjs$/.test(name)) copyFileSync(join(HOOKS, name), join(dir, name));
 };
 
 const git = (cwd, ...args) => execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
@@ -228,10 +234,54 @@ const mergedMain = (state, { edit, message = "c.txt" } = {}) => {
   return state;
 };
 
+// a repo with a docs map (docs.mjs; .dotfiles#61), on `branch` off main,
+// its docs and one file that's no doc committed on main; `files` replaces
+// or adds a file (null leaves it out)
+const DOC_MAP = "# Docs map\n\n- `docs/ux.md` (rule): the UX rules\n- `docs/adr/*.md` (decision): the decisions\n- `**/README.md`: each package's how-to\n";
+const docsRepo = (branch = BRANCH, files = {}) => {
+  const repo = scratchDir();
+  git(repo, "init", "-qb", "main");
+  const all = { "docs/map.md": DOC_MAP, "docs/ux.md": "- a rule\n", "docs/adr/0001-a.md": "# A\n", "README.md": "# r\n", "pkg/README.md": "# p\n", "pkg/a.ts": "a\n", ...files };
+  for (const [file, text] of Object.entries(all)) {
+    if (text === null) continue;
+    mkdirSync(dirname(join(repo, file)), { recursive: true });
+    writeFileSync(join(repo, file), text);
+  }
+  git(repo, "add", "-A");
+  git(repo, "commit", "-qm", "start");
+  git(repo, "switch", "-qc", branch);
+  return repo;
+};
+// the doc notes a builder leaves for the doc curator (the change skill's
+// Build): one open, and one of each mark
+const NOTE = (mark = "") => `- fact: e2e ports are leased per run.\n  evidence: tests/lease.ts\n  kind: rule\n  doc: docs/testing.md\n${mark}`;
+const NOTES_OPEN = `${NOTE("  done: abc1234\n")}${NOTE()}`;
+const NOTES_MARKED = `${NOTE("  done: abc1234\n")}${NOTE("  dropped: history, which git keeps\n")}`;
+// the doc gate's turn-down of `rel`, written by `how`
+const docHeld = (rel, how) =>
+  new RegExp(`^${rel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} is a doc \\(${how}\\): in this repo only the doc-curator agent writes docs`);
+
 // each state: the hook it feeds, and how its scratch repo is built
 const STATES = {
   ready: ["review-gate", () => scratchRepo({ review: true, lessons: ROUTED })],
   noLessons: ["review-gate", () => scratchRepo({ review: true })],
+  // the branch's doc notes: one the doc curator hasn't marked, or each marked
+  notesOpen: [
+    "review-gate",
+    () => {
+      const state = scratchRepo({ review: true, lessons: ROUTED });
+      write(state.repo, "doc-notes", NOTES_OPEN);
+      return state;
+    },
+  ],
+  notesMarked: [
+    "review-gate",
+    () => {
+      const state = scratchRepo({ review: true, lessons: ROUTED });
+      write(state.repo, "doc-notes", NOTES_MARKED);
+      return state;
+    },
+  ],
   lessonNoArrow: ["review-gate", () => scratchRepo({ review: true, lessons: "- A lesson\n" })],
   lessonsEmpty: ["review-gate", () => scratchRepo({ review: true, lessons: "" })],
   lessonsNone: ["review-gate", () => scratchRepo({ review: true, lessons: "None: a one-line fix\n" })],
@@ -594,6 +644,46 @@ const STATES = {
       return { ...state, out: dirname(stateFile(state.repo, "review", BRANCH)) };
     },
   ],
+  // the cap doesn't count a docs map's docs: the branch changes b.txt and
+  // c.txt (2, the cap), and the map and a doc beside them
+  cappedDocs: [
+    "survey-gate",
+    () => {
+      const state = scratchRepo();
+      commit(state.repo, "c.txt", "c\n");
+      mkdirSync(join(state.repo, "docs"));
+      commit(state.repo, "docs/map.md", "- `docs/*.md`\n");
+      commit(state.repo, "docs/x.md", "x\n");
+      write(state.repo, "survey", "Change: b.\nFiles: b.txt\nExpected files: 1\n");
+      write(state.repo, "plan-review", "# Change review: feature @ abc1234, plan, 0 to recheck, 1 expected files\n");
+      return state;
+    },
+  ],
+  // a doc sweep: a `doc-sweep-<date>` branch with its survey and no plan
+  // review; `first`, a file it changed before ([file, text]); `branch`
+  // another name
+  ...Object.fromEntries(
+    Object.entries({
+      docSweep: {},
+      docSweepMixed: { first: ["pkg/a.ts", "b\n"] },
+      docSweepNamed: { branch: BRANCH },
+    }).map(([name, { first, branch = "doc-sweep-2026-11-26" }]) => [
+      name,
+      [
+        "survey-gate",
+        () => {
+          const repo = docsRepo(branch);
+          if (first) commit(repo, ...first);
+          writeFileSync(stateFile(repo, "survey", branch), "Change: the weekly doc sweep.\nFiles: docs/ux.md\n");
+          return { repo };
+        },
+      ],
+    ]),
+  ),
+  // doc-gate: an agent's call (not the doc-curator's) in a repo with a
+  // docs map, run in it or from a folder outside it
+  docs: ["doc-gate", () => ({ repo: docsRepo() })],
+  docsElsewhere: ["doc-gate", () => ({ repo: docsRepo(), cwd: scratchDir() })],
   // process-gate reads only the command
   process: ["process-gate", () => ({ repo: scratchDir() })],
   // scratch-gate: a subagent's call, the repo standing for the session's
@@ -660,6 +750,9 @@ const CASES = [
   ["lessonsNoneAfter", "gh pr ready 12", NAMED],
   ["lessonsOnlyNone", "gh pr ready 12", NAMED],
   ["lessonsNoneEmpty", "gh pr ready", /lists none/],
+  ["notesOpen", "gh pr ready", /^feature has 1 doc note\(s\) the doc curator hasn't written yet \(.*doc-notes-feature\.md\): run the doc-curator agent/],
+  ["notesMarked", "gh pr ready", THROUGH],
+  ["notesMarked", "gh pr ready 12", NAMED],
   ["lessonUnroutedNone", "gh pr ready", /1 cost\(s\) that don't say where they went/],
   ["lessonsNone", "gh pr ready 12", NAMED],
   ["noLessons", "gh pr ready --undo", THROUGH],
@@ -850,6 +943,55 @@ const CASES = [
   ["capped", "<repo>/b.txt", THROUGH],
   ["capped", "<repo>/d.txt", /feature is past 1\.5x the 1 files its plan review counted \(3 with this edit, against 2;/],
   ["capped", "<out>/review-feature.md", /is a reviewer's file/],
+  ["cappedDocs", "<repo>/docs/y.md", THROUGH],
+  ["cappedDocs", "<repo>/d.txt", /feature is past 1\.5x the 1 files its plan review counted \(3 with this edit, against 2;/],
+  // a doc sweep's survey takes no plan review while it changes only docs
+  ["docSweep", "<repo>/docs/ux.md", THROUGH],
+  ["docSweep", "<repo>/docs/adr/0002-new.md", THROUGH],
+  ["docSweep", "<repo>/pkg/a.ts", /the survey for doc-sweep-2026-11-26 has no plan review/],
+  ["docSweepMixed", "<repo>/docs/ux.md", /the survey for doc-sweep-2026-11-26 has no plan review/],
+  ["docSweepNamed", "<repo>/docs/ux.md", /the survey for feature has no plan review/],
+
+  // doc-gate (.dotfiles#61 Q12): every shell way of writing a doc, turned
+  // down for any agent but the doc-curator, and the calls that only read
+  // one or name one in words beside them
+  ["docs", "sed -i s/a/b/ docs/ux.md", docHeld("docs/ux.md", "`sed` doesn't only read")],
+  ["docs", "cat > docs/ux.md <<'EOF'\n- a rule\nEOF", docHeld("docs/ux.md", "`>.*` writes it")],
+  ["docs", "echo x >> docs/adr/0002-new.md", docHeld("docs/adr/0002-new.md", "`>>.*` writes it")],
+  ["docs", "cp pkg/a.ts docs/ux.md", docHeld("docs/ux.md", "`cp` doesn't only read")],
+  ["docs", "mv docs/ux.md docs/old.md", docHeld("docs/ux.md", "`mv` doesn't only read")],
+  ["docs", "echo x | tee -a docs/ux.md", docHeld("docs/ux.md", "`tee` doesn't only read")],
+  ["docs", "rm -r docs", docHeld("docs/", "`rm` doesn't only read")],
+  ["docs", "sed -i s/a/b/ docs/*.md", docHeld("docs/map.md", "`sed` doesn't only read")], // the first doc it matches
+  ["docs", "git checkout main -- docs/ux.md", docHeld("docs/ux.md", "`git` doesn't only read")],
+  ["docs", "cd pkg && sed -i s/a/b/ README.md", docHeld("pkg/README.md", "`sed` doesn't only read")],
+  ["docs", "echo $(sed -i s/a/b/ docs/ux.md)", docHeld("docs/ux.md", "`sed` doesn't only read")],
+  ["docs", "bash -c 'sed -i s/a/b/ docs/ux.md'", docHeld("docs/ux.md", "`bash`.*")],
+  ["docs", `node -e "require('fs').writeFileSync('docs/ux.md', 'x')"`, docHeld("docs/ux.md", "`node`'s program names it")],
+  ["docs", "python3 - <<'EOF'\nopen('docs/ux.md', 'w').write('x')\nEOF", docHeld("docs/ux.md", "`python3`'s program names it")],
+  // review F15: a program's turn-down says how a script that only reads goes through
+  ["docs", "node - <<'EOF'\nconsole.log(require('fs').readFileSync('docs/ux.md', 'utf8'))\nEOF", /A script that only reads the doc runs as `node --permission --allow-fs-read='\*'`, which goes through; one that writes it: Leave a note/],
+  ["docs", "node --permission --allow-fs-read='*' - <<'EOF'\nconsole.log(require('fs').readFileSync('docs/ux.md', 'utf8'))\nEOF", THROUGH],
+  ["docs", "<repo>/docs/ux.md", docHeld("docs/ux.md", "an edit of it")],
+  ["docs", "<repo>/docs/adr/0002-new.md", docHeld("docs/adr/0002-new.md", "an edit of it")],
+  ["docs", "<repo>/docs/map.md", docHeld("docs/map.md", "an edit of it")],
+  ["docs", "sed -i s/a/b/ docs/ux.md", /Leave a note instead, in \S*claude\/doc-notes-feature\.md, as the `change` skill's Build says/],
+  ["docs", "<repo>/pkg/a.ts", THROUGH],
+  ["docs", "sed -i s/a/b/ pkg/a.ts", THROUGH],
+  ["docs", "cp docs/ux.md /tmp/ux.md", THROUGH],
+  ["docs", "rm -r pkg", THROUGH], // a folder holding a file that's no doc
+  ["docs", "cat docs/ux.md && sed -i s/a/b/ pkg/a.ts", THROUGH],
+  ["docs", "rg rule docs > /tmp/rules.txt", THROUGH],
+  ["docs", "sed -n 1p docs/ux.md", THROUGH],
+  ["docs", "git diff main -- docs/ux.md", THROUGH],
+  ["docs", "git commit -m 'Change: docs/ux.md gets its rule'", THROUGH],
+  ["docs", "git commit -F - <<'EOF'\nChange: docs/ux.md gets its rule\nEOF", THROUGH],
+  ["docs", "gh pr create --draft --body 'see docs/ux.md'", THROUGH],
+  // what it can't read, which CI's trailer check catches (docs.mjs check)
+  ["docs", "rg -l rule docs | xargs sed -i s/a/b/", THROUGH],
+  ["docsElsewhere", "sed -i s/a/b/ <repo>/docs/ux.md", docHeld("docs/ux.md", "`sed` doesn't only read")],
+  ["docsElsewhere", "<repo>/README.md", docHeld("README.md", "an edit of it")],
+  ["docsElsewhere", "cat <repo>/docs/ux.md", THROUGH],
 
   // process-gate: a full-command-line pgrep/pkill matches its own shell (dotfiles#15)
   ...[
@@ -1041,12 +1183,14 @@ const TOOL_INPUT = {
   "process-gate": (command) => ({ command }),
   "scratch-gate": (call) => (call.startsWith("/") ? { file_path: call, content: "x\n" } : { command: call }),
   "reviewer-gate": (call) => (call.startsWith("/") ? { file_path: call, content: "x\n" } : { command: call }),
+  "doc-gate": (call) => (call.startsWith("/") ? { file_path: call, content: "x\n" } : { command: call }),
 };
 
 // what else a gate reads from the hook's input
 const MORE_INPUT = {
   "scratch-gate": (state) => ({ agent_id: AGENT, scratchpad_dir: state.repo }),
   "reviewer-gate": () => ({ agent_id: AGENT, agent_type: "change-reviewer" }),
+  "doc-gate": () => ({ agent_id: AGENT, agent_type: "builder" }),
   "review-gate": (state) => (state.transcript ? { transcript_path: state.transcript } : {}),
 };
 
@@ -1586,6 +1730,168 @@ test("substitutions: each the shell runs, outermost first", () => {
   assert.deepEqual(inner("echo $(a"), ["a"]);
   const [found] = substitutions("x $(a) y");
   assert.deepEqual([found.start, found.end], [2, 6]);
+});
+
+// the doc curator's locks (.dotfiles#61): doc-gate for who it is, and
+// docs.mjs, CI's trailer check and the curator's lint, run as CI and the
+// curator run it (`node docs.mjs check --base <ref>`, `lint`)
+describe("docs", () => {
+  const docs = (repo, ...args) => spawnSync(process.execPath, [join(HOOKS, "docs.mjs"), ...args], { cwd: repo, encoding: "utf8" });
+  const gate = (repo, who, tool_input) => runHook("doc-gate", { tool_input, cwd: repo, session_id: "s", ...who }).stdout;
+  const HELD = /only the doc-curator agent writes docs/;
+  // a commit of `files` ({ path: text }), with a `Doc-curator:` trailer of
+  // `trailer` when given; its sha
+  const change = (repo, files, { message = "Change: a", trailer } = {}) => {
+    for (const [file, text] of Object.entries(files)) {
+      if (text === null) rmSync(join(repo, file));
+      else {
+        mkdirSync(dirname(join(repo, file)), { recursive: true });
+        writeFileSync(join(repo, file), text);
+      }
+    }
+    git(repo, "add", "-A");
+    git(repo, "commit", "-qm", message, ...(trailer ? ["--trailer", `Doc-curator: ${trailer}`] : []));
+    return git(repo, "rev-parse", "HEAD");
+  };
+  const words = (n) => Array(n).fill("w").join(" ");
+
+  test("doc-gate: the doc-curator writes docs; the same calls by any other agent, or the main session, are turned down", () => {
+    const repo = docsRepo();
+    const calls = [
+      { file_path: join(repo, "docs/ux.md"), content: "x\n" },
+      { command: "sed -i s/a/b/ docs/ux.md" },
+      { command: "cat > docs/adr/0002-b.md <<'EOF'\n# B\nEOF" },
+    ];
+    for (const call of calls) {
+      const what = JSON.stringify(call);
+      assert.equal(gate(repo, { agent_id: AGENT, agent_type: "doc-curator" }, call), "", what);
+      assert.match(gate(repo, {}, call), HELD, what);
+      assert.match(gate(repo, { agent_id: AGENT, agent_type: "curator" }, call), HELD, what);
+    }
+  });
+
+  test("doc-gate: in a repo with no docs map, docs are anyone's", () => {
+    const repo = docsRepo(BRANCH, { "docs/map.md": null });
+    const calls = [{ file_path: join(repo, "docs/ux.md"), content: "x\n" }, { command: "sed -i s/a/b/ docs/ux.md" }];
+    for (const call of calls) assert.equal(gate(repo, { agent_id: AGENT, agent_type: "builder" }, call), "", JSON.stringify(call));
+    writeFileSync(join(repo, "docs/map.md"), DOC_MAP); // opted in: the same calls held
+    for (const call of calls) assert.match(gate(repo, { agent_id: AGENT, agent_type: "builder" }, call), HELD, JSON.stringify(call));
+  });
+
+  test("check: a commit that changes a doc without the curator's trailer is red; with it, green", () => {
+    const repo = docsRepo();
+    change(repo, { "pkg/a.ts": "b\n" });
+    const clean = docs(repo, "check", "--base", "main");
+    assert.equal(clean.status, 0, clean.stdout);
+    assert.match(clean.stdout, /every doc change is the curator's, and the lint is clean/);
+    // each way a doc's change goes without the trailer: none, a value that's
+    // no mode, the map itself
+    for (const [files, trailer] of [
+      [{ "docs/ux.md": "- b rule\n" }],
+      [{ "pkg/README.md": "# q\n" }, "yes"],
+      [{ "docs/map.md": `${DOC_MAP}- \`docs/screens.md\`\n` }],
+    ]) {
+      git(repo, "reset", "-q", "--hard", "main");
+      const sha = change(repo, files, { trailer });
+      const red = docs(repo, "check", "--base", "main");
+      assert.equal(red.status, 1, red.stdout);
+      assert.match(red.stdout, new RegExp(`^${sha.slice(0, 8)} Change: a\\n  changes ${Object.keys(files)[0]} with no \`Doc-curator:\` trailer$`, "m"));
+    }
+    for (const mode of ["per-PR", "sweep"]) {
+      git(repo, "reset", "-q", "--hard", "main");
+      change(repo, { "docs/ux.md": "- b rule\n", "docs/adr/0002-b.md": "# B\n" }, { trailer: mode });
+      const green = docs(repo, "check", "--base", "main");
+      assert.equal(green.status, 0, `${mode}: ${green.stdout}`);
+    }
+  });
+
+  test("check: merging main in brings none of main's doc commits; a merge's own edit of a doc counts", () => {
+    const repo = docsRepo();
+    change(repo, { "pkg/a.ts": "b\n" });
+    git(repo, "switch", "-q", "main");
+    change(repo, { "docs/ux.md": "- main's rule\n" }); // no trailer: main's own, before this branch
+    git(repo, "switch", "-q", BRANCH);
+    git(repo, "merge", "-q", "--no-ff", "-m", "Merge main", "main");
+    // the base is main's tip, as a PR's is
+    const merged = docs(repo, "check", "--base", "main");
+    assert.equal(merged.status, 0, merged.stdout);
+    git(repo, "reset", "-q", "--hard", "HEAD^");
+    git(repo, "merge", "-q", "--no-ff", "--no-commit", "main");
+    writeFileSync(join(repo, "docs/ux.md"), "- the merge's rule\n");
+    git(repo, "add", "-A");
+    git(repo, "commit", "-qm", "Merge main");
+    const edited = docs(repo, "check", "--base", "main");
+    assert.equal(edited.status, 1, edited.stdout);
+    assert.match(edited.stdout, /Merge main\n {2}changes docs\/ux\.md with no/);
+  });
+
+  test("check: a repo with no docs map hasn't opted in; a branch that deletes its map is still read", () => {
+    const none = docsRepo(BRANCH, { "docs/map.md": null });
+    change(none, { "docs/ux.md": "- b rule\n" });
+    const ran = docs(none, "check", "--base", "main");
+    assert.equal(ran.status, 0, ran.stdout);
+    assert.match(ran.stdout, /no docs map at main or HEAD, so this repo hasn't opted in: nothing to check/);
+    assert.match(docs(none, "lint").stdout, /has no docs map \(docs\/map\.md\), so it hasn't opted in/);
+    const deleted = docsRepo();
+    change(deleted, { "docs/map.md": null, "docs/ux.md": "- b rule\n" });
+    const red = docs(deleted, "check", "--base", "main");
+    assert.equal(red.status, 1, red.stdout);
+    assert.match(red.stdout, /changes docs\/map\.md, docs\/ux\.md with no/);
+  });
+
+  test("check: a push that made its branch (a base of zeros) reads HEAD alone; a base that's no commit here says to fetch", () => {
+    const repo = docsRepo();
+    change(repo, { "docs/ux.md": "- b rule\n" });
+    change(repo, { "pkg/a.ts": "b\n" });
+    assert.equal(docs(repo, "check", "--base", "main").status, 1);
+    const zeros = docs(repo, "check", "--base", "0".repeat(40));
+    assert.equal(zeros.status, 0, zeros.stdout);
+    const missing = docs(repo, "check", "--base", "deadbeef");
+    assert.equal(missing.status, 1);
+    assert.match(missing.stderr, /the base deadbeef isn't a commit here \(fetch the history: actions\/checkout's fetch-depth: 0\)/);
+  });
+
+  test("check: lints the docs the branch changed; a finding elsewhere waits for the sweep (review F16)", () => {
+    const repo = docsRepo(BRANCH, { "docs/ux.md": `- ${words(101)}\n` }); // past its budget on main already
+    change(repo, { "pkg/a.ts": "b\n" });
+    const elsewhere = docs(repo, "check", "--base", "main");
+    assert.equal(elsewhere.status, 0, elsewhere.stdout);
+    assert.equal(docs(repo, "lint").status, 1); // the sweep's lint still finds it
+    change(repo, { "docs/adr/0001-a.md": `# A\n${words(601)}\n` }, { trailer: "per-PR" });
+    const changed = docs(repo, "check", "--base", "main");
+    assert.equal(changed.status, 1, changed.stdout);
+    assert.match(changed.stdout, /^docs\/adr\/0001-a\.md:1: a decision of 602 words, past its 600$/m);
+    assert.doesNotMatch(changed.stdout, /docs\/ux\.md/);
+  });
+
+  test("lint: each kind's budget in words, a file's, and screen names against the screen map; a doc with no kind is skipped", () => {
+    const fence = "```\n" + words(5000) + "\n```";
+    const repo = docsRepo(BRANCH, {
+      "docs/map.md": "- `docs/rules.md` (rule)\n- `docs/big.md` (rule)\n- `docs/screens.md` (screen)\n- `GLOSSARY.md` (term)\n- `docs/adr/*.md` (decision)\n- `docs/notes.md`\n",
+      // a rule of 100 words, one of 101 (line 4), code not counted (5,000
+      // words of it, under the file's budget), and an unknown screen (line 9)
+      "docs/rules.md": `# Rules\n\n- ${words(100)}\n- ${words(101)}\n\n${fence}\nOpen the Home screen, then the Settings page.\n`,
+      "docs/big.md": Array.from({ length: 60 }, () => `- ${words(90)}`).join("\n"),
+      "docs/screens.md": `# Screens\n\n## Home\n${words(50)}\n\n## Bills\n${words(51)}\n`,
+      "GLOSSARY.md": `# Glossary\n\n${words(101)}\n\n${words(100)}\n`,
+      "docs/adr/0001-a.md": `# A\n${words(600)}\n`,
+      "docs/adr/0002-b.md": `# B\n${words(599)}\n`,
+      "docs/notes.md": `${words(6000)}\nthe Nowhere screen\n`,
+    });
+    const ran = docs(repo, "lint");
+    assert.equal(ran.status, 1, ran.stdout);
+    assert.deepEqual(ran.stdout.trim().split("\n").sort(), [
+      "GLOSSARY.md:3: a term of 101 words, past its 100",
+      "docs/adr/0001-a.md:1: a decision of 601 words, past its 600",
+      "docs/big.md:1: 5400 words, past the file's 5000",
+      'docs/rules.md:9: "Settings" is no screen the screen map names',
+      "docs/rules.md:4: a rule of 101 words, past its 100",
+      "docs/screens.md:6: a screen of 51 words, past its 50",
+      "docs: 6 past a budget (the doc curator fixes them).",
+    ].sort());
+    const clean = docsRepo();
+    assert.equal(docs(clean, "lint").status, 0);
+  });
 });
 
 // prune-merged.mjs, run by hand and as the SessionStart hook, on a scratch
@@ -2611,7 +2917,7 @@ describe("usage", () => {
     const tree = scratchDir();
     mkdirSync(join(tree, "home/.claude/hooks"), { recursive: true });
     mkdirSync(join(tree, "docs"));
-    for (const name of ["usage", "lib", "steps"]) copyFileSync(join(HOOKS, `${name}.mjs`), join(tree, `home/.claude/hooks/${name}.mjs`));
+    copyHooks(join(tree, "home/.claude/hooks"));
     const log = join(tree, "docs/token-review.md");
     const offered = join(home, ".claude/usage/review-offered");
     const start = (input = {}) =>
@@ -2724,6 +3030,15 @@ describe("steps", () => {
       ["Bash", { command: "cd /s && sed -n '1,40p' README.md" }, ["/s/README.md"]],
       ["Bash", { command: "git show origin/main:docs/ux.md | head" }, ["/r/docs/ux.md"]],
       ["Bash", { command: "rg -n x --glob '*.md' docs" }, []],
+      // review F14: a path a variable or a substitution builds names nothing; a
+      // search's pattern is no path; the program of an interpreter a reader
+      // pipes into is read (a call led by one: steps' reads)
+      ["Bash", { command: "cat $D/survey-x.md ${D}/b.md" }, []],
+      ["Bash", { command: 'cat "$(git rev-parse --git-dir)/docs/ux.md" `pwd`/a.md' }, []],
+      ["Bash", { command: "rg 'see docs/ux.md' docs/testing.md" }, ["/r/docs/testing.md"]],
+      ["Bash", { command: "rg -e 'x' docs/ux.md" }, ["/r/docs/ux.md"]],
+      ["Bash", { command: "git log -1 --format=%s | node --permission - <<'EOF'\nrequire('fs').readFileSync('docs/ux.md')\nEOF" }, ["/r/docs/ux.md"]],
+      ["Bash", { command: `head -1 docs/ux.md | node --permission -e "require('fs').readFileSync('docs/testing.md')"` }, ["/r/docs/ux.md", "/r/docs/testing.md"]],
       ["Read", { file_path: "/r/.git/worktrees/w/claude/survey-x.md" }, []],
       ["Read", { file_path: "/tmp/claude-1000/x/notes.md" }, []],
       ["Edit", { file_path: "/r/docs/ux.md" }, []],
@@ -3453,8 +3768,7 @@ describe("git hooks", () => {
     mkdirSync(join(repo, "home/.claude/hooks"), { recursive: true });
     const hooks = join(HOOKS, "../../../.githooks");
     for (const name of readdirSync(hooks)) copyFileSync(join(hooks, name), join(repo, ".githooks", name));
-    for (const name of ["settings-format", "lib"])
-      copyFileSync(join(HOOKS, `${name}.mjs`), join(repo, `home/.claude/hooks/${name}.mjs`));
+    copyHooks(join(repo, "home/.claude/hooks"));
     writeFileSync(join(repo, SETTINGS), committed);
     git(repo, "add", "-A");
     git(repo, "commit", "-qm", "start", "--no-verify");
