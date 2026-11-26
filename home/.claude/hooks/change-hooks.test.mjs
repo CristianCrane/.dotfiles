@@ -441,10 +441,18 @@ const STATES = {
       passNothingOwed: { review: (head) => `# Change review: feature @ ${head}, recheck 1, 0 to recheck\n` },
       // round 1 F29: a commit since the change review's last pass that names
       // no finding, or a rebase past it (abc1234), is new work no review has
-      // read; one naming a finding is a fix, read only while one is owed
-      passUnread: { review: (head) => `# Change review: feature @ ${head}, round 1, 0 to recheck\n`, commit: "Cleanup: a stale line" },
+      // read, the change-reviewer's and no other's; one naming a finding is
+      // a fix, read only while one is owed
+      passUnread: {
+        review: (head) => `# Change review: feature @ ${head}, round 1, 0 to recheck\n`,
+        "ux-review": "# UX review: feature @ abc1234, first pass, 0 to recheck\n",
+        commit: "Cleanup: a stale line",
+      },
       passFixNamed: { review: (head) => `# Change review: feature @ ${head}, round 1, 0 to recheck\n`, commit: "Change: the stale line, F1" },
-      passRebased: { review: "# Change review: feature @ abc1234, round 1, 0 to recheck\n" },
+      passRebased: {
+        review: "# Change review: feature @ abc1234, round 1, 0 to recheck\n",
+        "ux-review": "# UX review: feature @ abc1234, first pass, 0 to recheck\n",
+      },
       // a fix the change review marks [recheck] opens the critical review's
       // later pass too, as one at stakes is its to read
       passCriticalOwed: {
@@ -706,12 +714,14 @@ const CASES = [
   ["passOwedAtHead", "change-reviewer: recheck, output <out>/review-feature.md", /review-feature\.md already reads HEAD \([0-9a-f]+, or only comment lines since\), .*: commit the fixes first/],
   ["passNothingOwed", "change-reviewer: recheck, output <out>/review-feature.md", /^No fix the change-reviewer reads is owed a recheck \([^,]*\/review-feature\.md: each header reads 0 to recheck/],
   ["passUnread", "change-reviewer: recheck, output <out>/review-feature.md", THROUGH],
+  ["passUnread", "ux-reviewer: shots, output <out>/ux-review-feature.md", /^No fix the ux-reviewer reads is owed a recheck/],
   ["passFixNamed", "change-reviewer: recheck, output <out>/review-feature.md", /^No fix the change-reviewer reads is owed a recheck/],
   ["passChangeOwes", "change-reviewer: recheck, output <out>/review-feature.md", THROUGH],
   ["passChangeOwes", "ux-reviewer: shots, output <out>/ux-review-feature.md", /^No fix the ux-reviewer reads is owed a recheck/],
   ["passUxOwes", "ux-reviewer: shots, output <out>/ux-review-feature.md", THROUGH],
   ["passUxOwes", "change-reviewer: recheck, output <out>/review-feature.md", /^No fix the change-reviewer reads is owed a recheck/],
   ["passRebased", "change-reviewer: recheck, output <out>/review-feature.md", THROUGH],
+  ["passRebased", "ux-reviewer: shots, output <out>/ux-review-feature.md", /^No fix the ux-reviewer reads is owed a recheck/],
   ["passCriticalOwed", "critical-reviewer: recheck, output <out>/critical-review-feature.md", THROUGH],
   ["passUx", "ux-reviewer: shots, output <out>/ux-review-feature.md", /^No fix the ux-reviewer reads is owed a recheck/],
   ["passUx", "ux-reviewer: design, output <out>/ux-review-design-feature.md", THROUGH],
