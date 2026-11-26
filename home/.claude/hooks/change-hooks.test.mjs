@@ -83,6 +83,12 @@ const scratchDir = () => {
   return dir;
 };
 
+// the hook modules (not their tests) into a folder, for a test that runs a
+// hook from a tree of its own: all of them, as each imports others
+const copyHooks = (dir) => {
+  for (const name of readdirSync(HOOKS)) if (/(?<!\.test)\.mjs$/.test(name)) copyFileSync(join(HOOKS, name), join(dir, name));
+};
+
 const git = (cwd, ...args) => execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
 
 // runs hooks/<name>.mjs as Claude Code does: `input` as JSON on stdin (none
@@ -2611,7 +2617,7 @@ describe("usage", () => {
     const tree = scratchDir();
     mkdirSync(join(tree, "home/.claude/hooks"), { recursive: true });
     mkdirSync(join(tree, "docs"));
-    for (const name of ["usage", "lib", "steps"]) copyFileSync(join(HOOKS, `${name}.mjs`), join(tree, `home/.claude/hooks/${name}.mjs`));
+    copyHooks(join(tree, "home/.claude/hooks"));
     const log = join(tree, "docs/token-review.md");
     const offered = join(home, ".claude/usage/review-offered");
     const start = (input = {}) =>
@@ -3453,8 +3459,7 @@ describe("git hooks", () => {
     mkdirSync(join(repo, "home/.claude/hooks"), { recursive: true });
     const hooks = join(HOOKS, "../../../.githooks");
     for (const name of readdirSync(hooks)) copyFileSync(join(hooks, name), join(repo, ".githooks", name));
-    for (const name of ["settings-format", "lib"])
-      copyFileSync(join(HOOKS, `${name}.mjs`), join(repo, `home/.claude/hooks/${name}.mjs`));
+    copyHooks(join(repo, "home/.claude/hooks"));
     writeFileSync(join(repo, SETTINGS), committed);
     git(repo, "add", "-A");
     git(repo, "commit", "-qm", "start", "--no-verify");
