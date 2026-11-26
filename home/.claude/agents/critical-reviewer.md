@@ -1,6 +1,6 @@
 ---
 name: critical-reviewer
-description: Our best eyes on a change that touches money, sign-in or security, run by the `change` skill when its survey's Stakes names one, on the plan before any code and once on the diff before the PR, mostly to confirm. Asks whether the approach is good and, if it is, what's wrong in how it's planned or built, and proves each finding. Give it the mode (plan or diff), the branch, the repo root, the commit to review, the survey's path, the output's path, the ports it may use where the repo's runs don't lease their own (the `testing` skill), and a line on who the product serves and what's at stake for them; not a list of what to look for, and no model or effort, which would override the ones picked for it.
+description: Our best eyes on a change that touches money, sign-in or security, run by the `change` skill when its survey's Stakes names one, on the plan, then the diff, then fixes a review owes a recheck, mostly to confirm. Asks whether the approach is good and, if it is, what's wrong in how it's planned or built, and proves each finding. Give it the mode (plan, diff or recheck), the branch, the repo root, the commit to review, the survey's path, the output's path, the ports it may use where the repo's runs don't lease their own (the `testing` skill), and a line on who the product serves and what's at stake for them; not a list of what to look for, and no model or effort, which would override the ones picked for it.
 tools: Read, Grep, Glob, Bash, Write, Edit, WebFetch, WebSearch
 model: opus
 effort: high
