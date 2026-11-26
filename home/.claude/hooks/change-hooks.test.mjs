@@ -210,6 +210,23 @@ const prBody = (head, change = "- New: nothing\n", parts = {}) =>
     .filter((part) => part !== null)
     .join("\n");
 const BODY = (head) => prBody(head);
+// main moves on by a commit (its `message` naming no finding unless
+// given), and BRANCH merges it in, the merge itself writing `edit` into
+// b.txt when given (a conflict's resolution, its own edit); the state
+const mergedMain = (state, { edit, message = "c.txt" } = {}) => {
+  git(state.repo, "switch", "-q", "main");
+  writeFileSync(join(state.repo, "c.txt"), "c\n");
+  git(state.repo, "add", "c.txt");
+  git(state.repo, "commit", "-qm", message);
+  git(state.repo, "switch", "-q", BRANCH);
+  git(state.repo, "merge", "-q", "--no-ff", "--no-commit", "main");
+  if (edit) {
+    writeFileSync(join(state.repo, "b.txt"), edit);
+    git(state.repo, "add", "b.txt");
+  }
+  git(state.repo, "commit", "-qm", "Merge main into feature");
+  return state;
+};
 
 // each state: the hook it feeds, and how its scratch repo is built
 const STATES = {
@@ -244,6 +261,13 @@ const STATES = {
       return state;
     },
   ],
+  // main merged in after the review's last pass: its commits aren't the
+  // branch's, so none waits on a read (red at a411298, which listed main's
+  // c.txt); a merge's own edit is, as no pass read it (red at a411298,
+  // which skipped every merge; main's commit names F9 here, so only the
+  // merge can be what's listed)
+  mergedMain: ["review-gate", () => mergedMain(scratchRepo({ review: true, lessons: ROUTED }))],
+  mergedEdited: ["review-gate", () => mergedMain(scratchRepo({ review: true, lessons: ROUTED }), { edit: "b2\n", message: "Change: c, F9" })],
   // ready to open as a draft: a review and a PR body, no lessons
   createDraft: ["review-gate", () => scratchRepo({ review: true, body: BODY })],
   noReview: ["review-gate", () => scratchRepo({ lessons: ROUTED, body: BODY })],
@@ -439,6 +463,9 @@ const STATES = {
       passOwed: { review: "# Change review: feature @ abc1234, round 1, 2 to recheck\n" },
       passOwedAtHead: { review: (head) => `# Change review: feature @ ${head}, round 1, 1 to recheck\n` },
       passNothingOwed: { review: (head) => `# Change review: feature @ ${head}, recheck 1, 0 to recheck\n` },
+      // main merged in since: nothing of the branch's own to read (red at
+      // a411298, which read main's c.txt as a fix)
+      passOwedMerged: { review: (head) => `# Change review: feature @ ${head}, round 1, 1 to recheck\n`, merged: true },
       // round 1 F29: a commit since the change review's last pass that names
       // no finding, or a rebase past it (abc1234), is new work no review has
       // read, the change-reviewer's and no other's; one naming a finding is
@@ -481,13 +508,14 @@ const STATES = {
         () => {
           const state = scratchRepo();
           const head = git(state.repo, "rev-parse", "--short", "HEAD");
-          const { commit: message, ...kinds } = files;
+          const { commit: message, merged, ...kinds } = files;
           for (const [kind, text] of Object.entries(kinds)) write(state.repo, kind, typeof text === "function" ? text(head) : text);
           if (message) {
             writeFileSync(join(state.repo, "c.txt"), "c\n");
             git(state.repo, "add", ".");
             git(state.repo, "commit", "-qm", message);
           }
+          if (merged) mergedMain(state);
           return { ...state, out: dirname(stateFile(state.repo, "review", BRANCH)) };
         },
       ],
@@ -577,6 +605,9 @@ const CASES = [
   ["staleReview", "gh pr ready", /^[0-9a-f]{7} came after the change review's last pass \([0-9a-f]+\) and names no finding it fixes \(`F<n>`, `C<n>`, `U<n>`\) nor `CI`: .* run the change-reviewer on HEAD/],
   ["fixNamed", "gh pr ready", THROUGH],
   ["fixNamed", "gh pr ready 12", NAMED],
+  ["mergedMain", "gh pr ready", THROUGH],
+  ["mergedMain", "gh pr ready 12", NAMED],
+  ["mergedEdited", "gh pr ready", /^[0-9a-f]{7} came after the change review's last pass/],
 
   // naming another PR: turned down
   ...NAMING.map((args) => ["ready", `gh pr ready ${args}`, NAMED]),
@@ -712,6 +743,7 @@ const CASES = [
   ["passPlanRedone", "change-reviewer: plan, survey <out>/survey-feature.md, output <out>/plan-review-feature.md", THROUGH],
   ["passOwed", "change-reviewer: recheck, output <out>/review-feature.md", THROUGH],
   ["passOwedAtHead", "change-reviewer: recheck, output <out>/review-feature.md", /review-feature\.md already reads HEAD \([0-9a-f]+, or only comment lines since\), .*: commit the fixes first/],
+  ["passOwedMerged", "change-reviewer: recheck, output <out>/review-feature.md", /review-feature\.md already reads HEAD/],
   ["passNothingOwed", "change-reviewer: recheck, output <out>/review-feature.md", /^No fix the change-reviewer reads is owed a recheck \([^,]*\/review-feature\.md: each header reads 0 to recheck/],
   ["passUnread", "change-reviewer: recheck, output <out>/review-feature.md", THROUGH],
   ["passUnread", "ux-reviewer: shots, output <out>/ux-review-feature.md", /^No fix the ux-reviewer reads is owed a recheck/],
