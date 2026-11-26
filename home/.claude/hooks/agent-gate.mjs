@@ -11,19 +11,20 @@
 // plan review once (again only for a redone survey, whose Expected files
 // differ from the count it recorded), the change review's round 1, the UX
 // review's first pass, the critical review's plan pass and one diff pass.
-// After it, a reviewer's pass goes through only while some review of the
-// change owes a fix a recheck (a header's `<r> to recheck` above 0) and
-// HEAD has moved past what this reviewer last read, so there are fixes to
-// read. The change-reviewer also reads a commit since its last pass that
-// names no finding it fixes, or the branch rebased past it (lib's
-// unreadSince): new work, a first look's (round 1 F29). A process batch's
-// change review rechecks any commit after it, as its merge needs a review
-// of HEAD (review-gate's batchUnapproved). A design's UX review passes
-// again while its own count is above 0: a design is fixed in place, with
-// no commit. The counts are the review files' own
-// headers (lib's passOf), beside the output path the prompt names, as an
-// Agent call's cwd is the spawning session's folder, not the change's
-// checkout.
+// After it, a reviewer's pass goes through only while its own review owes
+// a fix a recheck (a header's `<r> to recheck` above 0), or for the
+// critical-reviewer any review of the change, as a fix at stakes is its to
+// read whoever found it (OWED_BY; round 1 F32), and HEAD has moved past
+// what this reviewer last read, so there are fixes to read. The
+// change-reviewer also reads a commit since its last pass that names no
+// finding it fixes, or the branch rebased past it (lib's unreadSince): new
+// work, a first look's (round 1 F29). A process batch's change review
+// rechecks any commit after it, as its merge needs a review of HEAD
+// (review-gate's batchUnapproved). A design's UX review passes again while
+// its own count is above 0: a design is fixed in place, with no commit.
+// The counts are the review files' own headers (lib's passOf), beside the
+// output path the prompt names, as an Agent call's cwd is the spawning
+// session's folder, not the change's checkout.
 import { existsSync, readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { branchOf, checkoutOf, deny, hook, passOf, processBatch, reviewFiles, stillHead, unreadSince } from "./lib.mjs";
@@ -33,11 +34,15 @@ const KINDS = {
   "ux-reviewer": ["ux-review", "ux-review-design"],
   "critical-reviewer": ["critical-review"],
 };
-// the reviews whose fixes open a later pass of any reviewer (a fix at
-// stakes reaches the critical-reviewer whoever found it): a plan review's
-// findings ride round 1, and a design's are its own
-const OWING = ["review", "ux-review", "critical-review"];
-const RULE = "after the first look a reviewer comes back only to read fixes some review marks `[recheck]` (the `change` skill's Review, 2026-11-26)";
+// the reviews whose counts open each later pass: a reviewer's own, and
+// every review's for the critical-reviewer. A plan review's findings ride
+// round 1, and a design's pass is its own
+const OWED_BY = {
+  review: ["review"],
+  "ux-review": ["ux-review"],
+  "critical-review": ["review", "ux-review", "critical-review"],
+};
+const RULE = "after the first look a reviewer comes back only to read fixes its own review marks `[recheck]`, the critical-reviewer any review's (the `change` skill's Review, 2026-11-26)";
 
 // why this reviewer's pass isn't worth running, if it isn't
 const pastCap = (type, prompt) => {
@@ -61,9 +66,11 @@ const pastCap = (type, prompt) => {
     if ((mode?.[1] ?? mode?.[2])?.toLowerCase() === "diff") return;
     return `${out.path} holds the plan pass, which runs once; the critical review's next is its diff pass, which names \`mode: diff\` in its prompt.`;
   }
-  // a later pass: some review owes a recheck, and there are fixes to read
+  // a later pass: a review it reads for owes a recheck, and there are fixes
+  // to read
   const key = basename(out.path).slice(out.kind.length + 1);
-  const owed = OWING.reduce((sum, kind) => sum + (passOf(join(dirname(out.path), `${kind}-${key}`))?.toRecheck ?? 0), 0);
+  const owers = OWED_BY[out.kind].map((kind) => join(dirname(out.path), `${kind}-${key}`));
+  const owed = owers.reduce((sum, path) => sum + (passOf(path)?.toRecheck ?? 0), 0);
   const checkout = checkoutOf(out.path);
   let batch = false;
   try {
@@ -71,7 +78,7 @@ const pastCap = (type, prompt) => {
     if (out.kind === "review" && pass.sha && unreadSince(checkout, pass.sha).length) return;
   } catch {}
   if (!owed && !batch)
-    return `No review of this change owes a recheck (each header beside ${out.path} reads 0 to recheck), and ${RULE}. Fix what's left with no pass: each commit names the finding it fixes, and the PR body closes it; a case against one goes to the user, whose ruling closes it.`;
+    return `No fix the ${type} reads is owed a recheck (${owers.join(", ")}: each header reads 0 to recheck, or there's no file), and ${RULE}. Fix what's left with no pass: each commit names the finding it fixes, and the PR body closes it; a case against one goes to the user, whose ruling closes it.`;
   if (pass.sha && stillHead(checkout, pass.sha))
     return `${out.path} already reads HEAD (${pass.sha}, or only comment lines since), and ${RULE}: commit the fixes first. A case against a finding with no fix to read goes to the user, whose ruling closes it (\`ruled by the user:\`).`;
 };
