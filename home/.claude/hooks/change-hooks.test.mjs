@@ -28,7 +28,7 @@
 // A gate's case is a row: [state, command, expected]. The command (for
 // scratch-gate, a path to Write or a shell command) is what TOOL_INPUT
 // makes the tool call from; its <body>, <repo>, <outside> and <own> stand
-// for the state's paths. Expected is THROUGH or the gist of the
+// for the state's paths, run from the state's `cwd` when it has one. Expected is THROUGH or the gist of the
 // turn-down, so a case held for one reason can't pass for another. Every
 // state with a through row has a row it holds too (a test below checks),
 // so a hook that fails silently (lib's `hook()` swallows errors) can't
@@ -210,6 +210,23 @@ const prBody = (head, change = "- New: nothing\n", parts = {}) =>
     .filter((part) => part !== null)
     .join("\n");
 const BODY = (head) => prBody(head);
+// main moves on by a commit (its `message` naming no finding unless
+// given), and BRANCH merges it in, the merge itself writing `edit` into
+// b.txt when given (a conflict's resolution, its own edit); the state
+const mergedMain = (state, { edit, message = "c.txt" } = {}) => {
+  git(state.repo, "switch", "-q", "main");
+  writeFileSync(join(state.repo, "c.txt"), "c\n");
+  git(state.repo, "add", "c.txt");
+  git(state.repo, "commit", "-qm", message);
+  git(state.repo, "switch", "-q", BRANCH);
+  git(state.repo, "merge", "-q", "--no-ff", "--no-commit", "main");
+  if (edit) {
+    writeFileSync(join(state.repo, "b.txt"), edit);
+    git(state.repo, "add", "b.txt");
+  }
+  git(state.repo, "commit", "-qm", "Merge main into feature");
+  return state;
+};
 
 // each state: the hook it feeds, and how its scratch repo is built
 const STATES = {
@@ -244,6 +261,18 @@ const STATES = {
       return state;
     },
   ],
+  // main merged in after the review's last pass: its commits aren't the
+  // branch's, so none waits on a read (red at a411298, which listed main's
+  // c.txt); a merge's own edit is, as no pass read it (red at a411298,
+  // which skipped every merge; main's commit names F9 here, so only the
+  // merge can be what's listed)
+  mergedMain: ["review-gate", () => mergedMain(scratchRepo({ review: true, lessons: ROUTED }))],
+  mergedEdited: ["review-gate", () => mergedMain(scratchRepo({ review: true, lessons: ROUTED }), { edit: "b2\n", message: "Change: c, F9" })],
+  // ready, run from another repo's checkout (`cwd`, one with no review),
+  // as an agent's shell starts in its session's folder: a leading cd is
+  // where it runs (2026-11-26, the agents that stopped on "bare, as its own
+  // command")
+  readyElsewhere: ["review-gate", () => ({ ...scratchRepo({ review: true, lessons: ROUTED }), cwd: scratchRepo().repo })],
   // ready to open as a draft: a review and a PR body, no lessons
   createDraft: ["review-gate", () => scratchRepo({ review: true, body: BODY })],
   noReview: ["review-gate", () => scratchRepo({ lessons: ROUTED, body: BODY })],
@@ -265,19 +294,47 @@ const STATES = {
   // each kind of line that doesn't close its finding, F1 to F8: F5's word
   // isn't the review's, F6's `answered:` closed one until 2026-11-23, F7's
   // word is in its finding's text but not the review's word on it, and F8
-  // is fixed in the survey by the body alone (the old gate took F7 and F8)
+  // owes a recheck but is fixed in the survey by the body alone (the old
+  // gate took F7 and F8), and F9's `fixed elsewhere` says nowhere
   unanswered: [
     "review-gate",
     () =>
       scratchRepo({
-        review: "## Previous findings\n- F5 e → held: it's real\n- F7 the gate takes `conceded:` anywhere → open: still wrong\n## Findings\nF1. [recheck] a\nF2. b\nF3. [recheck] c\nF4. [recheck] d\nF6. f\nF8. h\n",
+        review: "## Previous findings\n- F5 e → held: it's real\n- F7 the gate takes `conceded:` anywhere → open: still wrong\n## Findings\nF1. [recheck] a\nF2. b\nF3. [recheck] c\nF4. [recheck] d\nF6. f\nF8. [recheck] h\nF9. i\n",
         body: (head) =>
           prBody(
             head,
-            "- Review: F1 a → fixed in deadbee0\n- Review: F2 b → fixed: #313's body revised\n- Review: F3 c → answered on #266\n- Review: F5 e → turned down: rare\n- Review: F6 f → answered: a rare state\n- Review: F7 the gate takes `conceded:` anywhere → conceded: x\n- Review: F8 h → fixed in the survey\n",
+            "- Review: F1 a → fixed in deadbee0\n- Review: F2 b → fixed: #313's body revised\n- Review: F3 c → answered on #266\n- Review: F5 e → turned down: rare\n- Review: F6 f → answered: a rare state\n- Review: F7 the gate takes `conceded:` anywhere → conceded: x\n- Review: F8 h → fixed in the survey\n- Review: F9 i → fixed elsewhere\n",
           ),
       }),
   ],
+  // findings owing no recheck, fixed off the branch on the body's word
+  // alone: paperwork no pass comes back for (red on the old gate, which
+  // asked the review's word and so stopped #565's builder)
+  bodyFixed: [
+    "review-gate",
+    () =>
+      scratchRepo({
+        review: "## Findings\nF1. a\nF2. [polish] b\n",
+        body: (head) => prBody(head, "- Review: F1 a → fixed in the survey\n- Review: F2 b → fixed elsewhere: #313's body\n"),
+      }),
+  ],
+  // a survey at stakes needs its critical review before any file of it
+  // exists (red on the old gate, which needed one only once it existed),
+  // and one at none needs none
+  ...Object.fromEntries(
+    Object.entries({ stakesMoney: "money: a charge", stakesNone: "none: the gates only" }).map(([name, stakes]) => [
+      name,
+      [
+        "review-gate",
+        () => {
+          const state = scratchRepo({ review: true, lessons: ROUTED, body: (head) => prBody(head) });
+          write(state.repo, "survey", `Change: c.\nStakes: ${stakes}\n`);
+          return state;
+        },
+      ],
+    ]),
+  ),
   // a PR body with Before / after, and the UX review it then needs
   ...Object.fromEntries(
     Object.entries({
@@ -301,6 +358,9 @@ const STATES = {
     Object.entries({
       criticalClosed: (head) => `- Critical review: C1 a → fixed in ${head.slice(0, 7)}\n`,
       criticalUnclosed: () => "",
+      // every critical finding owes a recheck, so the body's word alone
+      // closes none
+      criticalSurvey: () => "- Critical review: C1 a → fixed in the survey\n",
     }).map(([name, change]) => [
       name,
       [
@@ -439,6 +499,9 @@ const STATES = {
       passOwed: { review: "# Change review: feature @ abc1234, round 1, 2 to recheck\n" },
       passOwedAtHead: { review: (head) => `# Change review: feature @ ${head}, round 1, 1 to recheck\n` },
       passNothingOwed: { review: (head) => `# Change review: feature @ ${head}, recheck 1, 0 to recheck\n` },
+      // main merged in since: nothing of the branch's own to read (red at
+      // a411298, which read main's c.txt as a fix)
+      passOwedMerged: { review: (head) => `# Change review: feature @ ${head}, round 1, 1 to recheck\n`, merged: true },
       // round 1 F29: a commit since the change review's last pass that names
       // no finding, or a rebase past it (abc1234), is new work no review has
       // read, the change-reviewer's and no other's; one naming a finding is
@@ -481,13 +544,14 @@ const STATES = {
         () => {
           const state = scratchRepo();
           const head = git(state.repo, "rev-parse", "--short", "HEAD");
-          const { commit: message, ...kinds } = files;
+          const { commit: message, merged, ...kinds } = files;
           for (const [kind, text] of Object.entries(kinds)) write(state.repo, kind, typeof text === "function" ? text(head) : text);
           if (message) {
             writeFileSync(join(state.repo, "c.txt"), "c\n");
             git(state.repo, "add", ".");
             git(state.repo, "commit", "-qm", message);
           }
+          if (merged) mergedMain(state);
           return { ...state, out: dirname(stateFile(state.repo, "review", BRANCH)) };
         },
       ],
@@ -537,7 +601,7 @@ const STATES = {
 
 const THROUGH = null;
 const NO_LESSONS = /can't leave draft before its lessons/;
-const NAMED = /Run `gh pr ready` bare/;
+const NAMED = /^Run `cd <the PR's own checkout> && gh pr ready`, with no number, as one command: .*Nothing in this command ran, .*\(a leading `cd <dir> &&` is no step, only where it runs\)/;
 const NO_SURVEY = /there is no survey for feature/;
 const PROTOTYPE_BRANCH = "prototype-look";
 const PROTOTYPE = /^prototype-look is a prototype branch: .* never becomes a PR\. Build the pick on its own branch/;
@@ -577,6 +641,12 @@ const CASES = [
   ["staleReview", "gh pr ready", /^[0-9a-f]{7} came after the change review's last pass \([0-9a-f]+\) and names no finding it fixes \(`F<n>`, `C<n>`, `U<n>`\) nor `CI`: .* run the change-reviewer on HEAD/],
   ["fixNamed", "gh pr ready", THROUGH],
   ["fixNamed", "gh pr ready 12", NAMED],
+  ["readyElsewhere", "cd <repo> && gh pr ready", THROUGH],
+  ["readyElsewhere", "gh pr ready", /change review for feature isn't ready \(missing\)/],
+  ["readyElsewhere", "cd <repo> && gh pr ready 12", NAMED],
+  ["mergedMain", "gh pr ready", THROUGH],
+  ["mergedMain", "gh pr ready 12", NAMED],
+  ["mergedEdited", "gh pr ready", /^[0-9a-f]{7} came after the change review's last pass/],
 
   // naming another PR: turned down
   ...NAMING.map((args) => ["ready", `gh pr ready ${args}`, NAMED]),
@@ -610,7 +680,13 @@ const CASES = [
   // `answered:` and read no reviewer's word)
   ["unanswered", "gh pr create --draft --body-file <body>", /F5: it says `turned down`, but the review's own word on it doesn't/],
   ["unanswered", "gh pr create --draft --body-file <body>", /F7: it says `conceded`, but the review's own word on it doesn't/],
-  ["unanswered", "gh pr create --draft --body-file <body>", /F8: it says `fixed in the survey`, but the review's own word on it doesn't/],
+  ["unanswered", "gh pr create --draft --body-file <body>", /F8: it says `fixed in the survey`, but it owes a recheck/],
+  ["unanswered", "gh pr create --draft --body-file <body>", /F9: `fixed elsewhere` says where, after its colon/],
+  ["bodyFixed", "gh pr create --draft --body-file <body>", THROUGH],
+  ["stakesMoney", "gh pr create --draft --body-file <body>", /critical review \(.*critical-review-feature\.md\) isn't ready \(missing, and the survey's Stakes isn't `none`\)/],
+  ["stakesNone", "gh pr create --draft --body-file <body>", THROUGH],
+  ["stakesNone", "gh pr create --draft --body-file <body> --head other", /--head other runs from feature's checkout/],
+  ["bodyFixed", "gh pr create --draft --body-file <body> --head other", /--head other runs from feature's checkout/],
   ["unanswered", "gh pr create --draft --body-file <body>", /F6: `answered` closes nothing/],
   // a body with Before / after needs a UX review, its findings closed as
   // the change review's (red on the old gate, which read no UX review)
@@ -630,6 +706,7 @@ const CASES = [
   ["criticalClosed", "gh pr create --draft --body-file <body>", THROUGH],
   ["criticalClosed", "gh pr create --draft --body-file <body> --head other", /--head other runs from feature's checkout/],
   ["criticalUnclosed", "gh pr create --draft --body-file <body>", /C1: no line names it/],
+  ["criticalSurvey", "gh pr create --draft --body-file <body>", /C1: it says `fixed in the survey`, but it owes a recheck/],
 
   // what runs before gh: a prefix or wrapper is gated, a mention isn't
   ...[`FOO="a b"`, `FOO='a b'`, "env", "command", "time", "nohup", "exec"].map((prefix) => [
@@ -712,6 +789,7 @@ const CASES = [
   ["passPlanRedone", "change-reviewer: plan, survey <out>/survey-feature.md, output <out>/plan-review-feature.md", THROUGH],
   ["passOwed", "change-reviewer: recheck, output <out>/review-feature.md", THROUGH],
   ["passOwedAtHead", "change-reviewer: recheck, output <out>/review-feature.md", /review-feature\.md already reads HEAD \([0-9a-f]+, or only comment lines since\), .*: commit the fixes first/],
+  ["passOwedMerged", "change-reviewer: recheck, output <out>/review-feature.md", /review-feature\.md already reads HEAD/],
   ["passNothingOwed", "change-reviewer: recheck, output <out>/review-feature.md", /^No fix the change-reviewer reads is owed a recheck \([^,]*\/review-feature\.md: each header reads 0 to recheck/],
   ["passUnread", "change-reviewer: recheck, output <out>/review-feature.md", THROUGH],
   ["passUnread", "ux-reviewer: shots, output <out>/ux-review-feature.md", /^No fix the ux-reviewer reads is owed a recheck/],
@@ -942,7 +1020,7 @@ const MORE_INPUT = {
 const answer = (hookName, state, command) => {
   const filled = command.replace(/<(body|repo|outside|own|out)>/g, (_, name) => state[name]);
   const toolInput = TOOL_INPUT[hookName](filled);
-  const cwd = filled.startsWith(state.outside ?? "\0") ? state.outside : state.repo;
+  const cwd = state.cwd ?? (filled.startsWith(state.outside ?? "\0") ? state.outside : state.repo);
   const ran = runHook(hookName, { tool_input: toolInput, cwd, session_id: "s", ...MORE_INPUT[hookName]?.(state) });
   assert.equal(ran.status, 0, ran.stderr);
   if (!ran.stdout.trim()) return null;

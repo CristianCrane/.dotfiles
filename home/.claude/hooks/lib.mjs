@@ -647,23 +647,23 @@ const commentReader = (file) => {
   };
 };
 
-// whether every line changed from `sha` to HEAD is blank or a comment
+// whether every line changed from `from` to `to` is blank or a comment
 // line, each in a file whose comments these know; a new, deleted or
 // renamed file, a submodule, a mode change, or any other kind of file
 // isn't. Both diffs are plumbing (diff-tree, run from the top of the
 // checkout), which skips most diff config: relative paths, colour,
 // external drivers and textconv never apply, though suppressBlankEmpty
 // still does (see below).
-const commentOnly = (cwd, sha) => {
+const commentOnly = (cwd, from, to) => {
   try {
     const top = topOf(cwd);
     const diffOf = (...args) => git(top, "diff-tree", "-r", "--ignore-submodules=none", ...args);
-    return lines(diffOf("--name-status", "--no-renames", sha, "HEAD")).every((entry) => {
+    return lines(diffOf("--name-status", "--no-renames", from, to)).every((entry) => {
       const [status, file] = entry.split("\t");
       if (status !== "M" || !(HASH.test(file) || C_STYLE.test(file))) return false;
       // the whole file as context, so each side's block comments are
       // followed; a file .gitattributes marks binary has no hunk
-      const diff = diffOf("-p", "--unified=100000000", sha, "HEAD", "--", file);
+      const diff = diffOf("-p", "--unified=100000000", from, to, "--", file);
       const hunk = diff.search(/^@@/m);
       if (hunk < 0 || /^(?:old|new) mode /m.test(diff)) return false;
       const read = { "-": commentReader(file), "+": commentReader(file) };
@@ -688,20 +688,43 @@ const commentOnly = (cwd, sha) => {
   }
 };
 
-// whether a review of `sha` still reads HEAD: it is HEAD, or the commits
-// since change only comment lines
-export const stillHead = (cwd, sha) => headSha(cwd).startsWith(sha) || commentOnly(cwd, sha);
-
-// the commits a change review of `sha` hasn't read: each since it that
-// names no finding it fixes (`F<n>`, `C<n>`, `U<n>`) nor `CI`, or every
-// commit of the branch once a rebase moves `sha` off it. Review-gate holds
-// the PR in draft on them, and agent-gate lets the change-reviewer read
-// them: new work, a first look's, not a recheck (round 1 F29)
-export const unreadSince = (cwd, sha) => {
+// the branch's own commits after `sha`, or all of them when `sha` is
+// none of its own (a rebase moved it off): what HEAD reaches that neither
+// `sha` nor the base does, so main's commits, merged in, aren't among them
+// (they listed after a merge of main, 2026-11-26: PR 57's four on
+// doc-lookups). A merge counts only for its own edits, a conflict's
+// resolution (`diff-tree --cc` shows nothing of a clean one), which no
+// pass has read
+const ownSince = (cwd, sha) => {
   const on = onBranch(cwd, sha);
-  return lines(git(cwd, "rev-list", "--no-merges", `${on ? sha : base(cwd)}..HEAD`)).filter(
-    (one) => !on || !/\b(?:[FCU]\d+|CI)\b/.test(git(cwd, "log", "-1", "--format=%B", one)),
-  );
+  const commits = lines(git(cwd, "rev-list", "--parents", "HEAD", `^${base(cwd)}`, ...(on ? [`^${sha}`] : [])));
+  const own = commits
+    .map((line) => line.split(" "))
+    .filter(([one, ...parents]) => parents.length < 2 || git(cwd, "diff-tree", "--cc", "--no-commit-id", one) !== "")
+    .map(([one, parent]) => ({ sha: one, parent }));
+  return { on, own };
+};
+
+// whether a review of `sha` still reads HEAD: it is HEAD, or the
+// branch's own commits since change only comment lines (any change when
+// `sha` is no commit of its own, from `sha` to HEAD)
+export const stillHead = (cwd, sha) => {
+  if (headSha(cwd).startsWith(sha)) return true;
+  const { on, own } = ownSince(cwd, sha);
+  return on ? own.every((one) => commentOnly(cwd, one.parent, one.sha)) : commentOnly(cwd, sha, "HEAD");
+};
+
+// the commits a change review of `sha` hasn't read: each of the branch's
+// own since it (ownSince) that names no finding it fixes (`F<n>`, `C<n>`,
+// `U<n>`) nor `CI`, or every one of them once a rebase moves `sha` off
+// it. Review-gate holds the PR in draft on them, and agent-gate lets the
+// change-reviewer read them: new work, a first look's, not a recheck
+// (round 1 F29)
+export const unreadSince = (cwd, sha) => {
+  const { on, own } = ownSince(cwd, sha);
+  return own
+    .map((one) => one.sha)
+    .filter((one) => !on || !/\b(?:[FCU]\d+|CI)\b/.test(git(cwd, "log", "-1", "--format=%B", one)));
 };
 
 // the reviewer's read of the diff: a valid header ("… @ <sha>, round 1 |

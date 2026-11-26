@@ -88,7 +88,7 @@ const headOf = (command, hidden, end) => {
 // a turn-down stops the whole command, so it says so: a push or an edit of
 // the body chained before the gh command didn't run either
 const turnDown = (reason, verb) =>
-  deny(`${reason} Nothing in this command ran, steps before gh pr ${verb} included: run each one as its own command.`);
+  deny(`${reason} Nothing in this command ran, steps before gh pr ${verb} included: run each step as its own command (a leading \`cd <dir> &&\` is no step, only where it runs).`);
 
 // a prototype branch's PR, turned down whatever else it has
 const prototypeTurnDown = (branch, verb) =>
@@ -182,10 +182,12 @@ const shapeOf = (text, cwd) => {
 // the words that close a finding with no fix on the branch: the reviewer's
 // own, as it has the last word (the `change` skill, Review), so a PR body's
 // line passes with one only when the review gives the finding it too, as
-// the word after the last → of its own line for the finding. Both lines
-// are read after their last →, as a finding's text before it can quote
-// one of the words (dotfiles review F13, 2026-11-23)
-const REVIEWERS_WORDS = ["fixed in the survey", "fixed elsewhere", "conceded", "turned down", "ruled by the user"];
+// the word after the last → of its own line for the finding, but for a
+// fix off the branch (FIXED_WORDS) to a finding owing no recheck (unclosed).
+// Both lines are read after their last →, as a finding's text before it
+// can quote one of the words (dotfiles review F13, 2026-11-23)
+const FIXED_WORDS = ["fixed in the survey", "fixed elsewhere"];
+const REVIEWERS_WORDS = [...FIXED_WORDS, "conceded", "turned down", "ruled by the user"];
 // the user outranks the reviewer: a case put to them, when no pass of the
 // reviewer runs to weigh it, closes by their ruling in the body alone,
 // quoted (`ruled by the user: "<their words>"`) from a message they typed
@@ -212,15 +214,27 @@ const laterPass = (path) => {
   return Boolean(pass?.recheck || pass?.pass);
 };
 const closingOf = (line) => line.split("→").at(-1).trim();
+// finding `id`'s first line in `review` (its path and text), and whether
+// its fix owes a recheck: in a critical review every finding but a
+// `[polish]` one (critical-reviewer.md, Output), in any other one marked
+// `[recheck]`
+const findingLine = (review, id) => lines(review.text).find((line) => new RegExp(`^(?:- )?${id}\\b`).test(line)) ?? "";
+const owesRecheck = (review, id) => {
+  const line = findingLine(review, id);
+  return review.path.includes("/critical-review-") ? !line.includes("[polish]") : line.includes("[recheck]");
+};
 const wordOf = (line) => REVIEWERS_WORDS.find((word) => closingOf(line).startsWith(word));
 
 // why no line of the Change section closes finding `id` of `review` (its
 // path and text), or null when one does: `fixed in <sha>` (a commit on
 // this branch), `listed` or `filed in #<n>` for a later pass's `[polish]`
 // finding, the user's ruling in their words (userRuled), or the review's
-// own word on it (`fixed in the survey` among them). `answered:` closed
-// one until 2026-11-23, when builders answered real findings away
-// (empire-cleaning #527, #536, #538)
+// own word on it. `fixed in the survey` and `fixed elsewhere:` close one
+// owing no recheck on the body's word alone: its fix is paperwork no
+// reviewer comes back for, and asking the review's word on it stopped
+// builders with no pass to give it (empire-cleaning #565's F11, F12,
+// 2026-11-26). `answered:` closed one until 2026-11-23, when builders
+// answered real findings away (empire-cleaning #527, #536, #538)
 const unclosed = (cwd, section, id, review, transcript) => {
   const named = section.filter((line) => new RegExp(`\\b${id}\\b`).test(line));
   if (!named.length) return "no line names it";
@@ -238,16 +252,18 @@ const unclosed = (cwd, section, id, review, transcript) => {
     if (word === RULED && userRuled(line, transcript)) return null;
     if (word === RULED && !words.includes(word))
       return "`ruled by the user:` closes it with the user's own words in quotes (`ruled by the user: \"<their words>\"`, 8 characters or more), as they typed them in this session, and the review's own word on it doesn't say it either";
-    if (word)
-      return words.includes(word)
-        ? null
-        : `it says \`${word}\`, but the review's own word on it doesn't: the reviewer has the last word, so put your case in its next pass`;
+    if (word && words.includes(word)) return null;
+    if (word === "fixed elsewhere" && !/^fixed elsewhere:\s*\S/.test(line)) return "`fixed elsewhere` says where, after its colon (`fixed elsewhere: <where>`)";
+    if (FIXED_WORDS.includes(word) && !owesRecheck(review, id)) return null;
+    if (FIXED_WORDS.includes(word))
+      return `it says \`${word}\`, but it owes a recheck (\`[recheck]\`, or any critical finding but \`[polish]\`), so only the review's own word on it closes it. A fix outside a commit gets no pass of its own (agent-gate runs one only on commits since its last read): a pass a later commit brings can give that word, or else the user rules on it (\`ruled by the user:\`)`;
+    if (word) return `it says \`${word}\`, but the review's own word on it doesn't: the reviewer has the last word, so put your case in its next pass`;
     const sha = line.match(/fixed in ([0-9a-f]{7,40})\b/)?.[1];
     if (sha) return onBranch(cwd, sha) ? null : `\`fixed in ${sha}\` is no commit on this branch: after a rebase or an amend, give the new sha; a fix that landed elsewhere (main, another PR) is \`fixed elsewhere: <where>\`, as the review says`;
     if (/\bfixed\b/.test(line))
       return "it says fixed, but in no commit on this branch: a fix to the survey's text is `fixed in the survey`, one anywhere else (an issue, a comment) is `fixed elsewhere: <where>`, as the review says";
     if (/\banswered\b/.test(line))
-      return "`answered` closes nothing: a finding is `fixed in <sha>`, or takes the review's own word on it (`fixed in the survey`, `fixed elsewhere:`, `conceded:`, `turned down:`, `ruled by the user:`)";
+      return "`answered` closes nothing: a finding is `fixed in <sha>`, `fixed in the survey` or `fixed elsewhere:` (one owing a recheck in the review's own word too), or takes the review's own word on it (`conceded:`, `turned down:`), or `ruled by the user:`";
     return "its line says neither `fixed in`, `listed` or `filed in #<n>` for a `[polish]` finding, `ruled by the user:`, nor the review's own word on it";
   });
   return whys.includes(null) ? null : whys[0];
@@ -268,11 +284,24 @@ const otherReview = (cwd, work, kind, title, letter, pass) => {
   if (!onBranch(cwd, sha)) return { path, reason: `it read ${sha}, no commit on this branch` };
   return { path, ok: true, text, ids: idsOf(text, letter), toRecheck };
 };
+// whether the survey's `Stakes:` names money, sign-in or security (the
+// `change` skill, Survey); a survey with no such line (a dictated one)
+// isn't at stakes
+const atStakes = (cwd, work) => {
+  const path = stateFile(cwd, "survey", work.key);
+  const stakes = existsSync(path) ? readFileSync(path, "utf8").match(/^Stakes:\s*(.*)$/m)?.[1] : undefined;
+  return stakes !== undefined && !/^none\b/.test(stakes);
+};
 // the branch's UX review, which a PR body with Before / after needs, and
-// the critical review, when the change is at stakes (it went unread here
-// until 2026-11-25)
+// the critical review, which a survey at stakes needs. It went unread here
+// until 2026-11-25, and was needed only once its file existed until
+// 2026-11-26, when a survey's Stakes, fixed from `none`, could close
+// `fixed in the survey` on the body's word with no critical pass run
+// (dotfiles review F9)
 const uxReview = (cwd, work) => otherReview(cwd, work, "ux-review", "UX review", "U", "<first pass | pass <n>>") ?? { path: stateFile(cwd, "ux-review", work.key), reason: "missing" };
-const criticalReview = (cwd, work) => otherReview(cwd, work, "critical-review", "Critical review", "C", "<plan | diff | recheck <n>>");
+const criticalReview = (cwd, work) =>
+  otherReview(cwd, work, "critical-review", "Critical review", "C", "<plan | diff | recheck <n>>") ??
+  (atStakes(cwd, work) ? { path: stateFile(cwd, "critical-review", work.key), reason: "missing, and the survey's Stakes isn't `none`" } : null);
 
 // a review not ready, in words for a turn-down
 const otherNotReady = (other, branch) =>
@@ -300,7 +329,7 @@ const unclosedAll = (cwd, work, found, body, section, seen, transcript) => {
     .flatMap((one) => one.ids.map((id) => [id, unclosed(cwd, section, id, one, transcript)]))
     .flatMap(([id, why]) => (why ? [`${id}: ${why}`] : []));
   if (open.length)
-    return `The PR body's Change section (${body}) doesn't close every finding of ${reviews.map((one) => one.path).join(" and ")}: ${open.join("; ")}. Each finding gets its own line ending \`fixed in <sha>\` (a commit on this branch), \`listed\` or \`filed in #<n>\` for a \`[polish]\` finding, \`ruled by the user: "<their words>"\`, or the review's own word on it, after its line's last → (\`fixed in the survey\`, \`fixed elsewhere:\`, \`conceded:\`, \`turned down:\`).`;
+    return `The PR body's Change section (${body}) doesn't close every finding of ${reviews.map((one) => one.path).join(" and ")}: ${open.join("; ")}. Each finding gets its own line ending \`fixed in <sha>\` (a commit on this branch), \`listed\` or \`filed in #<n>\` for a \`[polish]\` finding, \`ruled by the user: "<their words>"\`, \`fixed in the survey\` or \`fixed elsewhere:\` (one owing a recheck in the review's own word too), or the review's own word on it, after its line's last → (\`conceded:\`, \`turned down:\`).`;
 };
 
 // the fixes a review still owes a recheck: its header's `<r> to recheck`,
@@ -310,10 +339,9 @@ const unclosedAll = (cwd, work, found, body, section, seen, transcript) => {
 // after its last →, or one that says it still stands (`open`, `held`,
 // `reopened`)
 const owedOf = (one, section, transcript) => {
-  const every = one.path.includes("/critical-review-");
   const ruled = one.ids.filter((id) => {
-    const line = lines(one.text).find((line) => new RegExp(`^(?:- )?${id}\\b`).test(line)) ?? "";
-    const open = (every ? !line.includes("[polish]") : line.includes("[recheck]")) && (!line.includes("→") || /^(?:open|held|reopened)\b/.test(closingOf(line)));
+    const line = findingLine(one, id);
+    const open = owesRecheck(one, id) && (!line.includes("→") || /^(?:open|held|reopened)\b/.test(closingOf(line)));
     return open && (section ?? []).some((named) => new RegExp(`\\b${id}\\b`).test(named) && userRuled(closingOf(named), transcript));
   });
   return Math.max(0, one.toRecheck - ruled.length);
@@ -355,7 +383,7 @@ const createGate = (command, hidden, match, input) => {
   // a branch's review lives with its own checkout
   if (head && head !== branch)
     return turnDownCreate(
-      `gh pr create --head ${head} runs from ${branch}'s checkout (${cwd}), but a branch's change review lives with its own checkout. Run it from ${head}'s checkout: git switch ${head} first, as its own command, or in its worktree.`,
+      `gh pr create --head ${head} runs from ${branch}'s checkout (${cwd}), but a branch's change review lives with its own checkout. Run it from ${head}'s checkout: git switch ${head} first, as its own command, or \`cd <its worktree> && gh pr create …\`.`,
     );
   const work = workOf(cwd, input);
   if (!work) return;
@@ -387,9 +415,6 @@ const createGate = (command, hidden, match, input) => {
   if (unready) return turnDownCreate(`${unready} Or open it as a draft (\`--draft\`) and mark it ready once that's done.`);
 };
 
-// gh pr ready, run bare from the PR's own checkout: the review, the body's
-// closings as edited onto the PR, and notReady. --undo puts a PR back in
-// draft, which waits for nothing
 // a `gh pr <step>` and where it runs: its own arguments, whether it names
 // the repo elsewhere, its checkout, and whether it's bare. A bare one acts
 // on the PR of the branch checked out where it runs, so a gate can read
@@ -403,18 +428,24 @@ const stepOf = (command, hidden, match, input) => {
   return { args, elsewhere, cwd, bare: !args.trim() && !elsewhere };
 };
 
+// gh pr ready, run bare from the PR's own checkout: the review, the body's
+// closings as edited onto the PR, and notReady. --undo puts a PR back in
+// draft, which waits for nothing
 const readyGate = (command, hidden, match, input) => {
   const { args, cwd, bare } = stepOf(command, hidden, match, input);
   if (/(?:^|\s)--undo(?=\s|$)/.test(args)) return;
-  const branch = branchOf(cwd);
 
   // The gate reads the lessons and review of the branch checked out where
-  // it runs (stepOf's bare), so a PR named another way is turned down
+  // it runs (stepOf's bare), so a PR named another way is turned down. Its
+  // words give the one form that works from any folder, as an agent's
+  // shell starts in its session's on every call: agents read "bare, as its
+  // own command" as no `cd`, and stopped (2026-11-26, doc-lookups)
   if (!bare)
     return turnDown(
-      `Run \`gh pr ready\` bare, as its own command, from the PR's own checkout (for ${branch}'s, in ${cwd}): the gate checks the lessons and review of the branch checked out where it runs, so it can't vouch for a PR named another way (a number, -R, --repo, GH_REPO).`,
+      `Run \`cd <the PR's own checkout> && gh pr ready\`, with no number, as one command: the gate checks the lessons and review of the branch checked out where gh pr ready runs, so it takes no PR named another way (a number, a URL, -R, --repo, GH_REPO). A worktree's checkout is its folder (\`git worktree list\` names each).`,
       "ready",
     );
+  const branch = branchOf(cwd);
   if (prototypeBranch(branch)) return prototypeTurnDown(branch, "ready");
   const work = workOf(cwd, input);
   if (!work) return;
