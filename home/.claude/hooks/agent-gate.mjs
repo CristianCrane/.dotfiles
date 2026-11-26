@@ -18,7 +18,10 @@
 // what this reviewer last read, so there are fixes to read. The
 // change-reviewer also reads a commit since its last pass that names no
 // finding it fixes, or the branch rebased past it (lib's unreadSince): new
-// work, a first look's (round 1 F29). A process batch's change review
+// work, a first look's (round 1 F29). The UX review likewise sees a
+// commit since its shots that changes what a person sees and names no
+// `U<n>` (lib's unseenScreens): a new screen state, a first look's
+// (signal 656c8229: empire-cleaning #561, #508). A process batch's change review
 // rechecks any commit after it, as its merge needs a review of HEAD
 // (review-gate's batchUnapproved). A design's UX review passes again while
 // its own count is above 0: a design is fixed in place, with no commit.
@@ -27,7 +30,7 @@
 // session's folder, not the change's checkout.
 import { existsSync, readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
-import { branchOf, checkoutOf, deny, hook, passOf, processBatch, reviewFiles, stillHead, unreadSince } from "./lib.mjs";
+import { branchOf, checkoutOf, deny, hook, passOf, processBatch, reviewFiles, stillHead, unreadSince, unseenScreens } from "./lib.mjs";
 
 const KINDS = {
   "change-reviewer": ["review", "plan-review"],
@@ -76,9 +79,10 @@ const pastCap = (type, prompt) => {
   try {
     batch = out.kind === "review" && processBatch(branchOf(checkout));
     if (out.kind === "review" && pass.sha && unreadSince(checkout, pass.sha).length) return;
+    if (out.kind === "ux-review" && pass.sha && unseenScreens(checkout, pass.sha).length) return;
   } catch {}
   if (!owed && !batch)
-    return `No fix the ${type} reads is owed a recheck (${owers.join(", ")}: each header reads 0 to recheck, or there's no file), and ${RULE}. Fix what's left with no pass: each commit names the finding it fixes, and the PR body closes it; a case against one goes to the user, whose ruling closes it.`;
+    return `No fix the ${type} reads is owed a recheck (${owers.join(", ")}: each header reads 0 to recheck, or there's no file)${out.kind === "ux-review" ? ", and no commit since its shots changes what a person sees (a screen's file or its words, naming no `U<n>`)" : ""}, and ${RULE}. Fix what's left with no pass: each commit names the finding it fixes, and the PR body closes it; a case against one goes to the user, whose ruling closes it.`;
   if (pass.sha && stillHead(checkout, pass.sha))
     return `${out.path} already reads HEAD (${pass.sha}, or only comment lines since), and ${RULE}: commit the fixes first. A case against a finding with no fix to read goes to the user, whose ruling closes it (\`ruled by the user:\`).`;
 };

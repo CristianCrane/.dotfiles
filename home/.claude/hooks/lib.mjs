@@ -727,6 +727,27 @@ export const unreadSince = (cwd, sha, fixes = /\b(?:[FCU]\d+|CI)\b/) => {
     .filter((one) => !on || !fixes.test(git(cwd, "log", "-1", "--format=%B", one)));
 };
 
+// a file that changes what a person sees: one a page is drawn from (its
+// markup, styles), or source whose path names screens or their words, as
+// a server message or an email's text lives in .ts (empire-cleaning's
+// whats-next.ts, messages/quotes.ts, emails.ts: 48 of 508 such commits
+// since 2026-11-10 touched only those). Not a test, story or shot spec.
+// Logic alone draws nothing: those commits were 620 more
+const SEEN = /\.(tsx|jsx|vue|svelte|astro|html|css|scss|sass|less|mdx)$|(^|\/)(screens?|pages?|components?|views?|layouts?|messages?|emails?|copy|i18n|locales?)(\/|\.)[^/]*\.[cm]?[jt]s$/;
+const UNSEEN = /(^|\/)(e2e|tests?|__tests__)\/|\.(test|spec|stories|shots)\.[^/]+$/;
+
+// the commits a UX review of the shots at `sha` hasn't seen: those of
+// unreadSince's that name no `U<n>` (a UX fix is a recheck, read only
+// while one is owed) and change more than comments in a file a person
+// sees. Each is a new screen state, a first look's (signal 656c8229:
+// empire-cleaning #561 and #508 changed screens after a pass owing none)
+export const unseenScreens = (cwd, sha) =>
+  unreadSince(cwd, sha, /\bU\d+\b/).filter(
+    (one) =>
+      !commentOnly(cwd, `${one}^`, one) &&
+      lines(git(cwd, "diff-tree", "-r", "--cc", "--name-only", "--no-commit-id", one)).some((file) => SEEN.test(file) && !UNSEEN.test(file)),
+  );
+
 // the reviewer's read of the diff: a valid header ("… @ <sha>, round 1 |
 // recheck <n>, <r> to recheck"), of a commit on the branch. What else a PR
 // needs before it leaves draft (no fix owed a recheck, every commit since
