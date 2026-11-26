@@ -88,7 +88,7 @@ const headOf = (command, hidden, end) => {
 // a turn-down stops the whole command, so it says so: a push or an edit of
 // the body chained before the gh command didn't run either
 const turnDown = (reason, verb) =>
-  deny(`${reason} Nothing in this command ran, steps before gh pr ${verb} included: run each one as its own command.`);
+  deny(`${reason} Nothing in this command ran, steps before gh pr ${verb} included: run each step as its own command (a leading \`cd <dir> &&\` is no step, only where it runs).`);
 
 // a prototype branch's PR, turned down whatever else it has
 const prototypeTurnDown = (branch, verb) =>
@@ -363,7 +363,7 @@ const createGate = (command, hidden, match, input) => {
   // a branch's review lives with its own checkout
   if (head && head !== branch)
     return turnDownCreate(
-      `gh pr create --head ${head} runs from ${branch}'s checkout (${cwd}), but a branch's change review lives with its own checkout. Run it from ${head}'s checkout: git switch ${head} first, as its own command, or in its worktree.`,
+      `gh pr create --head ${head} runs from ${branch}'s checkout (${cwd}), but a branch's change review lives with its own checkout. Run it from ${head}'s checkout: git switch ${head} first, as its own command, or \`cd <its worktree> && gh pr create …\`.`,
     );
   const work = workOf(cwd, input);
   if (!work) return;
@@ -395,9 +395,6 @@ const createGate = (command, hidden, match, input) => {
   if (unready) return turnDownCreate(`${unready} Or open it as a draft (\`--draft\`) and mark it ready once that's done.`);
 };
 
-// gh pr ready, run bare from the PR's own checkout: the review, the body's
-// closings as edited onto the PR, and notReady. --undo puts a PR back in
-// draft, which waits for nothing
 // a `gh pr <step>` and where it runs: its own arguments, whether it names
 // the repo elsewhere, its checkout, and whether it's bare. A bare one acts
 // on the PR of the branch checked out where it runs, so a gate can read
@@ -411,18 +408,24 @@ const stepOf = (command, hidden, match, input) => {
   return { args, elsewhere, cwd, bare: !args.trim() && !elsewhere };
 };
 
+// gh pr ready, run bare from the PR's own checkout: the review, the body's
+// closings as edited onto the PR, and notReady. --undo puts a PR back in
+// draft, which waits for nothing
 const readyGate = (command, hidden, match, input) => {
   const { args, cwd, bare } = stepOf(command, hidden, match, input);
   if (/(?:^|\s)--undo(?=\s|$)/.test(args)) return;
-  const branch = branchOf(cwd);
 
   // The gate reads the lessons and review of the branch checked out where
-  // it runs (stepOf's bare), so a PR named another way is turned down
+  // it runs (stepOf's bare), so a PR named another way is turned down. Its
+  // words give the one form that works from any folder, as an agent's
+  // shell starts in its session's on every call: agents read "bare, as its
+  // own command" as no `cd`, and stopped (2026-11-26, doc-lookups)
   if (!bare)
     return turnDown(
-      `Run \`gh pr ready\` bare, as its own command, from the PR's own checkout (for ${branch}'s, in ${cwd}): the gate checks the lessons and review of the branch checked out where it runs, so it can't vouch for a PR named another way (a number, -R, --repo, GH_REPO).`,
+      `Run \`cd <the PR's own checkout> && gh pr ready\`, with no number, as one command: the gate checks the lessons and review of the branch checked out where gh pr ready runs, so it takes no PR named another way (a number, a URL, -R, --repo, GH_REPO). A worktree's checkout is its folder (\`git worktree list\` names each).`,
       "ready",
     );
+  const branch = branchOf(cwd);
   if (prototypeBranch(branch)) return prototypeTurnDown(branch, "ready");
   const work = workOf(cwd, input);
   if (!work) return;

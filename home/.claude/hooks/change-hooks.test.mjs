@@ -28,7 +28,7 @@
 // A gate's case is a row: [state, command, expected]. The command (for
 // scratch-gate, a path to Write or a shell command) is what TOOL_INPUT
 // makes the tool call from; its <body>, <repo>, <outside> and <own> stand
-// for the state's paths. Expected is THROUGH or the gist of the
+// for the state's paths, run from the state's `cwd` when it has one. Expected is THROUGH or the gist of the
 // turn-down, so a case held for one reason can't pass for another. Every
 // state with a through row has a row it holds too (a test below checks),
 // so a hook that fails silently (lib's `hook()` swallows errors) can't
@@ -268,6 +268,11 @@ const STATES = {
   // merge can be what's listed)
   mergedMain: ["review-gate", () => mergedMain(scratchRepo({ review: true, lessons: ROUTED }))],
   mergedEdited: ["review-gate", () => mergedMain(scratchRepo({ review: true, lessons: ROUTED }), { edit: "b2\n", message: "Change: c, F9" })],
+  // ready, run from another repo's checkout (`cwd`, one with no review),
+  // as an agent's shell starts in its session's folder: a leading cd is
+  // where it runs (2026-11-26, the agents that stopped on "bare, as its own
+  // command")
+  readyElsewhere: ["review-gate", () => ({ ...scratchRepo({ review: true, lessons: ROUTED }), cwd: scratchRepo().repo })],
   // ready to open as a draft: a review and a PR body, no lessons
   createDraft: ["review-gate", () => scratchRepo({ review: true, body: BODY })],
   noReview: ["review-gate", () => scratchRepo({ lessons: ROUTED, body: BODY })],
@@ -565,7 +570,7 @@ const STATES = {
 
 const THROUGH = null;
 const NO_LESSONS = /can't leave draft before its lessons/;
-const NAMED = /Run `gh pr ready` bare/;
+const NAMED = /^Run `cd <the PR's own checkout> && gh pr ready`, with no number, as one command: .*Nothing in this command ran, .*\(a leading `cd <dir> &&` is no step, only where it runs\)/;
 const NO_SURVEY = /there is no survey for feature/;
 const PROTOTYPE_BRANCH = "prototype-look";
 const PROTOTYPE = /^prototype-look is a prototype branch: .* never becomes a PR\. Build the pick on its own branch/;
@@ -605,6 +610,9 @@ const CASES = [
   ["staleReview", "gh pr ready", /^[0-9a-f]{7} came after the change review's last pass \([0-9a-f]+\) and names no finding it fixes \(`F<n>`, `C<n>`, `U<n>`\) nor `CI`: .* run the change-reviewer on HEAD/],
   ["fixNamed", "gh pr ready", THROUGH],
   ["fixNamed", "gh pr ready 12", NAMED],
+  ["readyElsewhere", "cd <repo> && gh pr ready", THROUGH],
+  ["readyElsewhere", "gh pr ready", /change review for feature isn't ready \(missing\)/],
+  ["readyElsewhere", "cd <repo> && gh pr ready 12", NAMED],
   ["mergedMain", "gh pr ready", THROUGH],
   ["mergedMain", "gh pr ready 12", NAMED],
   ["mergedEdited", "gh pr ready", /^[0-9a-f]{7} came after the change review's last pass/],
@@ -974,7 +982,7 @@ const MORE_INPUT = {
 const answer = (hookName, state, command) => {
   const filled = command.replace(/<(body|repo|outside|own|out)>/g, (_, name) => state[name]);
   const toolInput = TOOL_INPUT[hookName](filled);
-  const cwd = filled.startsWith(state.outside ?? "\0") ? state.outside : state.repo;
+  const cwd = state.cwd ?? (filled.startsWith(state.outside ?? "\0") ? state.outside : state.repo);
   const ran = runHook(hookName, { tool_input: toolInput, cwd, session_id: "s", ...MORE_INPUT[hookName]?.(state) });
   assert.equal(ran.status, 0, ran.stderr);
   if (!ran.stdout.trim()) return null;
