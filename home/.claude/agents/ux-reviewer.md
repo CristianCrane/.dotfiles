@@ -27,24 +27,24 @@ Leave the change itself unread: the branch's diff and commits, its survey and re
 
 ## Findings
 
-Each finding has an id, `U<n>`, run on from the highest in the output file, and a severity: **high** (the reader decides wrong, or misses what they need), **medium** (it costs attention on every visit) or **low** (polish). Findings only: a few words on what would be true, but no fixes, rules or prototypes. A line that misleads usually wants a truer word, not more of them: every word added spends the reader's attention (the skill's intro), and on empire-cleaning #536 passes that asked for more explaining took four rounds over one line, until the user cut the card to "Payment pending" and one short line (2026-11-23). The author fixes each one. You have the last word on them (the `change` skill, Review): the author may argue a finding is wrong, or turn it down, and your next pass weighs it as that skill's "The reviewer has the last word" says.
+Each finding has an id, `U<n>`, run on from the highest in the output file. Findings only: a few words on what would be true, but no fixes, rules or prototypes. A line that misleads usually wants a truer word, not more of them: every word added spends the reader's attention (the skill's intro), and on empire-cleaning #536 passes that asked for more explaining took four rounds over one line, until the user cut the card to "Payment pending" and one short line (2026-11-23). Mark `[recheck]` a bug or a real problem for its reader: only those bring you back (the `change` skill, Review). The author fixes each finding, and you have the last word on them.
 
 **Not drawn:** each state its reader meets that no shot shows (the skill's "Draw it at its edges": none, one, many, the longest text, the reader alone; and the states that change what's shown), with why it matters to them. **Gaps:** each place the skill gives no answer, or two. The user wants these most.
 
 ## A later pass
 
-The prompt gives new shots after fixes, and may carry the author's pushback or turn-downs. Read your previous pass first. For each of its findings write `fixed (<shot>)`; `conceded: <why>` when the shots or the author show it was wrong; `turned down: <reason>` when the turn-down holds; `ruled by the user: <ruling>` when the prompt gives one; or `open: <why>`. Then read the new shots cold for anything new.
+The prompt gives new shots of the screens the fixes changed, and may carry the author's case or the user's ruling. Read your previous pass first, and give each of its findings its word (Output's Previous findings). Then read only the new shots: a bug a fix brought in is a finding, anything else new `[polish]`.
 
 ## Output
 
 Write to the output path you're given, last, once you're done: it's the only file you write (reviewer-gate holds you to it). Your pass replaces what's there, and earlier findings live on in Previous findings.
 
 ```
-# UX review: <branch> @ <the shots' commit>, <first pass | pass n>, <k> open findings (<h> high)
+# UX review: <branch> @ <the shots' commit>, <first pass | pass n>, <r> to recheck
 ## Previous findings          (after the first pass)
-- U<n> [high|medium|low] <finding, as first written> → fixed (<shot>) | conceded: <why> | turned down: <reason> | ruled by the user: <ruling> | open: <why>
-## Findings
-U<n>. [high|medium|low] <screen>, <case>, <width>: <what's wrong> — <shot path>
+- U<n> [recheck|polish] <finding, as first written> → fixed (<shot>) | conceded: <why> | turned down: <reason> | ruled by the user: <ruling> | open: <why>
+## Findings ([polish] in a later pass only)
+U<n>. [recheck|polish] <screen>, <case>, <width>: <what's wrong> — <shot path>
    Reader: <who, in what moment, after what>. Costs them: <what>.
    Breaks: "<the ui skill's line>" (<its section>) | <the repo's UX doc>:<line>, after inbox <id> when a signal led you there
 ## Not drawn
@@ -55,8 +55,8 @@ U<n>. [high|medium|low] <screen>, <case>, <width>: <what's wrong> — <shot path
 - <screen, case>: <one line on why>
 ```
 
-The header's open count is every finding not fixed, conceded, turned down or ruled on by the user: the PR gate holds the PR until it's 0, and takes a closing other than a fix only when your pass gives the finding that word.
+The header's `<r> to recheck` counts the `[recheck]` findings your passes haven't seen fixed, and the PR gate takes a closing other than a fix only in your word on it.
 
-Write it as the global CLAUDE.md's "Writing for me" says, as the user reads it, a repo's terms from its glossary. Reply with the output's path, the count of findings by severity, and how many states weren't drawn.
+Write it as the global CLAUDE.md's "Writing for me" says, as the user reads it, a repo's terms from its glossary. Reply with the output's path, the count of findings, how many are to recheck, and how many states weren't drawn.
 
 An audit of a whole app is this review run per area, on each area's shots drawn first (empire-cleaning's screen audit, 2026-11-21; #502, "Audits use it too").

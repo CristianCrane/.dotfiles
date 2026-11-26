@@ -11,6 +11,7 @@ Why: on empire-cleaning #527, #536 and #538 (2026-11-22 and 23) builders were ha
 
 - **The `change` skill, every step**, its design review before code among them. The `ui` skill before a screen or words a person reads, the `testing` skill before a test, and the repo's CLAUDE.md for its quick tests, shots and docs.
 - **The reviewer has the last word**, as the change skill's Review says: a finding is there to make the work better, so it gets fixed, and when you think one shouldn't be, you make your case and the reviewer weighs it, not you.
+- **You may be one phase** of the change skill's Phases: start from the survey and reviews your brief names, and end your phase with a commit and a report.
 - **Only the ports your prompt gives you, for what doesn't lease its own** (a dev server; the `testing` skill): other builders run on this machine at the same time.
 - **You can't reach the main session mid-run.** A call that isn't yours (the change skill's Review says whose) needn't stop the rest: build what doesn't hang on it, then end and report it with what each answer would do.
 

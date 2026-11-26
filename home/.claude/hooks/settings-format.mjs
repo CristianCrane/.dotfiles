@@ -4,14 +4,19 @@
 // pull on 2026-11-18). Claude Code is the only source of its key order and
 // layout: the file goes through a `claude plugin disable`/`enable` round
 // trip of one enabledPlugins entry, back to that entry's own value, in a
-// throwaway config dir. Run by .githooks/pre-commit, or by hand:
+// throwaway config dir. Claude Code runs its migrations on a config it
+// hasn't seen, and one can change a value ("opus" to "opus[1m]" in
+// 2.1.308), so that dir is first made its own: `claude plugin list`, run
+// there before the file is, writes its state file with every migration
+// the installed version has marked as run (a migrationVersion kept here
+// falls behind each release that adds one). Run by .githooks/pre-commit,
+// or by hand:
 //
 //   node ~/.claude/hooks/settings-format.mjs <file>   (formats it in place)
 //
 // It refuses, writing nothing, on invalid JSON, on no enabledPlugins entry
 // to flip, and when Claude Code's output holds other values than the input
-// (a migration it runs on load, such as "opus" to "opus[1m]" before
-// migrationVersion 14).
+// (a migration it runs anyway).
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -19,12 +24,7 @@ import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { flagsOf } from "./lib.mjs";
 
-// Claude Code's own state file in the throwaway config dir: the migrations it
-// is told have already run, so it runs none on the file. Tests pass {} to
-// see the values check catch one.
-const MIGRATED = { migrationVersion: 14 };
-
-export const formatSettings = (text, { claudeJson = MIGRATED } = {}) => {
+export const formatSettings = (text) => {
   let settings;
   try {
     settings = JSON.parse(text);
@@ -41,21 +41,21 @@ export const formatSettings = (text, { claudeJson = MIGRATED } = {}) => {
   try {
     const [config, home, work] = ["config", "home", "work"].map((name) => join(dir, name));
     for (const each of [config, home, work]) mkdirSync(each);
-    const file = join(config, "settings.json");
-    writeFileSync(file, text);
-    writeFileSync(join(config, ".claude.json"), JSON.stringify(claudeJson));
-    for (const action of enabled ? ["disable", "enable"] : ["enable", "disable"]) {
-      const ran = spawnSync("claude", ["plugin", action, plugin, "--scope", "user"], {
+    const claude = (...args) => {
+      const ran = spawnSync("claude", ["plugin", ...args], {
         cwd: work,
         encoding: "utf8",
         timeout: 30_000,
         env: { PATH: process.env.PATH, HOME: home, CLAUDE_CONFIG_DIR: config },
       });
       if (ran.status !== 0)
-        throw new Error(
-          `\`claude plugin ${action} ${plugin}\` failed: ${(ran.stderr || ran.stdout || "").trim() || ran.error?.message}`,
-        );
-    }
+        throw new Error(`\`claude plugin ${args.join(" ")}\` failed: ${(ran.stderr || ran.stdout || "").trim() || ran.error?.message}`);
+    };
+    // its migrations run here, on no settings, and are marked as run
+    claude("list");
+    const file = join(config, "settings.json");
+    writeFileSync(file, text);
+    for (const action of enabled ? ["disable", "enable"] : ["enable", "disable"]) claude(action, plugin, "--scope", "user");
     const formatted = readFileSync(file, "utf8");
     if (!isDeepStrictEqual(JSON.parse(formatted), settings))
       throw new Error("Claude Code changed values, not only the form (a migration?); left as it was");

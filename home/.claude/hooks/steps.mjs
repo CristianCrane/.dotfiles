@@ -31,6 +31,7 @@
 //   skill asks for a step's reads in one turn.
 import { readFileSync } from "node:fs";
 import { jsonLines } from "./lib.mjs";
+import { reviewFiles } from "./lib.mjs";
 
 const GAP = 5 * 60 * 1000;
 
@@ -103,6 +104,13 @@ const REVIEWERS = ["change-reviewer", "critical-reviewer"];
 
 // the stage a call starts, given the stages already started
 const stageAt = ({ name, input }, started) => {
+  // a phase run as a fresh agent (the change skill's Phases): the build's
+  // reading the plan review, a reviewer named a diff review's output, and
+  // after the review its fixes and the critical diff pass stay review
+  const read = name === "Read" ? reviewFiles(input?.file_path) : [];
+  if (read.some((one) => one.kind === "plan-review") && !started.has("build") && !started.has("review")) return "plan review";
+  if (name === "Agent" && REVIEWERS.includes(input?.subagent_type) && reviewFiles(input?.prompt).some((one) => one.kind === "review")) return "review";
+  if (started.has("review") && (TOOLS.edits.includes(name) || REVIEWERS.includes(input?.subagent_type))) return;
   if (name === "Agent" && REVIEWERS.includes(input?.subagent_type)) return started.has("build") ? "review" : "plan review";
   if (TOOLS.edits.includes(name) && started.has("plan review") && !/\/\.git\/|^\/tmp\//.test(String(input?.file_path))) return "build";
   if (name === "Bash" && /\bgh\s+pr\s+create\b/.test(String(input?.command))) return "PR";
