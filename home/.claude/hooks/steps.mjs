@@ -38,7 +38,8 @@
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
-import { jsonLines } from "./lib.mjs";
+import { dirOf, jsonLines, masked } from "./lib.mjs";
+import { pathsOf } from "./readers.mjs";
 import { reviewFiles } from "./lib.mjs";
 
 const GAP = 5 * 60 * 1000;
@@ -116,10 +117,11 @@ export const own = (path) => /\/\.git\/|^\/tmp\//.test(String(path));
 // characters or more, p10 2.27, p90 2.90; every transcript, 2026-11-25)
 export const CHARS_PER_TOKEN = 2.7;
 
-// where a call's relative paths start: `cwd`, or a Bash command's leading `cd`
+// where a call's relative paths start: `cwd`, or the folder a Bash
+// command's last `cd` leaves (lib's dirOf)
 const baseOf = (call, cwd) => {
-  const cd = call.name === "Bash" && /^cd\s+(?:"([^"]+)"|'([^']+)'|([^\s;&]+))/.exec(String(call.input?.command ?? ""));
-  return cd ? resolve(cwd, cd[1] ?? cd[2] ?? cd[3]) : cwd;
+  const command = call.name === "Bash" && String(call.input?.command ?? "");
+  return command ? dirOf(command, masked(command), command.length, cwd) : cwd;
 };
 
 // absolute paths of the Markdown named, an agent's own files left out (`own`)
@@ -129,8 +131,9 @@ const markdown = (named, base) => {
 };
 
 // the Markdown a call that reads names, each file as an absolute path
-// (from `cwd`, or a leading `cd`): Read's file, Grep's path, a Bash
-// command's arguments (`git show ref:path` by its path). A search is
+// (from `cwd`, or the folder a `cd` leaves): Read's file, Grep's path, a
+// Bash command's words and `<` inputs (readers.mjs's pathsOf: `git show
+// ref:path` by its path), a glob aside. A search is
 // counted by its result's lines instead (`docsFound`), so a Grep's glob
 // names nothing: its result shows the files it matched.
 export const docsOf = (call, cwd = "/") => {
@@ -139,8 +142,12 @@ export const docsOf = (call, cwd = "/") => {
   let named = [];
   if (call.name === "Read") named = [input.file_path];
   else if (call.name === "Grep") named = [input.path];
-  else if (call.name === "Bash") named = [...String(input.command ?? "").matchAll(/(?<=^|[\s'"=(])[\w.\/~@+:-]+\.md(?=$|[\s'"|;&)>,])/g)].map(([token]) => token.replace(/^.*:/, ""));
-  return markdown(named, baseOf(call, cwd));
+  else if (call.name === "Bash")
+    named = pathsOf(String(input.command ?? ""), cwd).flatMap(({ paths, redirects }) => [
+      ...paths.filter(({ glob }) => !glob).map(({ path }) => path),
+      ...redirects.filter(({ op, path }) => op === "<" && path).map(({ path }) => path),
+    ]);
+  return markdown(named, cwd);
 };
 
 // a search: Grep, or a shell rg, grep or git grep

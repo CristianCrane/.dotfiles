@@ -3,8 +3,12 @@
 // doc gate turns down a simple command that names a doc unless it reads.
 // The walk (`walk`) gives each simple command's words, each redirect, each
 // substitution and each heredoc; `notReader` judges one simple command's
-// words; `notReading` is the two together, for a whole command.
-import { BOUNDARY, has, HEREDOC, masked, positional, REDIRECT, substitutions, unquote, WORD } from "./lib.mjs";
+// words; `notReading` is the two together, for a whole command; `pathsOf`
+// reads the paths each simple command names (the doc gate's, and the steps
+// audit's Markdown).
+import { homedir } from "node:os";
+import { resolve } from "node:path";
+import { BOUNDARY, dirOf, has, HEREDOC, masked, positional, REDIRECT, substitutions, unquote, WORD } from "./lib.mjs";
 
 // the words after a wrapper's own options, where `valued` options take the
 // next word (unless their value is attached)
@@ -296,4 +300,44 @@ export const notReading = (command) => {
     if (why) return why;
   }
   return null;
+};
+
+// a word as the path it names: a NAME= or --flag= word by its value, a
+// `ref:path` (git show's) by its path, `~` as home; null for an empty one
+const pathIn = (word, dir) => {
+  const value = word
+    .replace(/^(?:\w+|--?[\w-]+)=/, "")
+    .replace(/^.*:(?!\/\/)/, "")
+    .replace(/^~(?=\/|$)/, homedir());
+  return value ? { path: resolve(dir, value), glob: /[*?[]/.test(value) } : null;
+};
+
+// The paths each simple command names, a substitution's commands first:
+// each command as the walk gives it, with the folder it runs in (`dir`,
+// lib's dirOf: the last `cd` before it), every word but its name as a
+// path from there (`paths`, each { path, glob }), and the redirects
+// (each with its `path`) and heredoc bodies within it. Every word counts,
+// as which are paths is the caller's to say (a doc, a Markdown file). What
+// it can't read: a path in a variable or built by an expansion, or one
+// inside an interpreter's program (a heredoc's body is there to search).
+export const pathsOf = (command, cwd) => {
+  const { text, subs, redirects, heredocs, commands } = walk(command);
+  const hidden = masked(text);
+  const within = ({ start, end }) => (one) => one.at >= start && one.at < end;
+  return [
+    ...subs.flatMap(({ inner, start }) => pathsOf(inner, dirOf(text, hidden, start, cwd))),
+    ...commands.map((one) => {
+      const dir = dirOf(text, hidden, one.start, cwd);
+      const words = unwrapped(one.words);
+      const name = words.findIndex((word) => !/^\w+=/.test(word));
+      return {
+        ...one,
+        words,
+        dir,
+        paths: words.flatMap((word, at) => (at === name ? [] : (pathIn(word, dir) ?? []))),
+        redirects: redirects.filter(within(one)).map((redirect) => ({ ...redirect, path: redirect.target ? resolve(dir, redirect.target.replace(/^~(?=\/|$)/, homedir())) : null })),
+        heredocs: heredocs.filter(within(one)).map(({ body }) => body),
+      };
+    }),
+  ];
 };
