@@ -28,7 +28,7 @@ hook((input) => {
   const cwd = cwdFor(input);
   if (inGitDir(cwd, path)) {
     if (reviewFiles(path).length && !/-reviewer$/.test(input.agent_type ?? ""))
-      return deny(`${path} is a reviewer's file: only its reviewer writes it. Give your case against a finding in the recheck's prompt, as the \`change\` skill's Review says.`);
+      return deny(`${path} is a reviewer's file: only its reviewer writes it. Give your case against a finding in the prompt of that reviewer's next pass, or, with none owed, to the user, whose ruling closes it, as the \`change\` skill's Review says.`);
     return;
   }
   const work = workOf(cwd, input);

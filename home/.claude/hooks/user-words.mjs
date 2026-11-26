@@ -6,8 +6,8 @@
 // work under review, which a cold read leaves unread; a Grep of the inbox
 // returned every field (dotfiles review F12, 2026-11-23: 174 lines,
 // ~31k tokens, two thirds of them Claude's). The words go to a file in the
-// agent's own scratch folder, which the context names, so a hook's
-// context stays under its 10,000
+// agent's own scratch folder, which the context names, so a later pass
+// can leave it unread, and a hook's context stays under its 10,000
 // characters (code.claude.com/docs/en/hooks, JSON output). The inbox is
 // local and never committed: a quote can name a client, so the reviewer
 // cites a signal by its id alone.
@@ -45,6 +45,6 @@ hook((input) => {
   writeFileSync(file, words.join("\n") + "\n");
   return context(
     "SubagentStart",
-    `What the user has said lately (${project}, the last ${DAYS} days, ${words.length} signals, their own words only): ${file}. Read it first (ux-reviewer.md, Read first, item 4).`,
+    `What the user has said lately (${project}, the last ${DAYS} days, ${words.length} signals, their own words only): ${file}. Read it on your first pass (ux-reviewer.md, Read first, item 4); a later pass carries it forward.`,
   );
 });

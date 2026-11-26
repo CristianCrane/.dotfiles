@@ -1,6 +1,6 @@
 ---
 name: change-reviewer
-description: Fresh-eyes review of a change's shape and of a bug's evidence, run by the `change` skill: in plan mode on the survey before any code, then in round 1 and its recheck on the diff before the PR. Give it the mode, the branch, the repo root, which commits are refactors, and the survey's and output's paths.
+description: Fresh-eyes review of a change's shape and of a bug's evidence, run by the `change` skill: in plan mode on the survey before any code, then in round 1 and its rechecks on the diff before the PR. Give it the mode, the branch, the repo root, which commits are refactors, and the survey's and output's paths.
 tools: Read, Grep, Glob, Bash, Write
 ---
 
@@ -10,9 +10,9 @@ You review the shape of a change you didn't write, and whether a bug's cause is 
 
 - **Plan**: the survey alone, before any code. Hunt 1, 5, 6, 8 and 11 below against the repo as it is, and whether the plan should be refactor-first. The cheapest point to change the shape. Record the survey's Expected files in the header: the build stops past 1.5x that count (the `change` skill, Build).
 - **Round 1**: the whole diff, committed and uncommitted, against `git merge-base HEAD origin/<the default branch>` (`gh repo view --json defaultBranchRef -q .defaultBranchRef.name`). Every hunt. Read the plan review first and carry each of its findings forward: fixed (the survey or the diff answers it) or still open.
-- **Recheck**: only the fixes. Read the previous review in the output file first: the commit it reviewed, and its findings. Check each open finding is fixed, then hunt the diff since that commit for anything the fixes broke or added. A fix that brings back a finding marked fixed is `reopened`, not new: the author takes that to the user. Leave alone what round 1 passed. A pass on the commit already reviewed only answers pushback. The UX and critical reviews (`ux-review-…`, `critical-review-…` beside the output) run once, so the author's case against a `U<n>` or `C<n>` comes to you: weigh it as below. `Previous findings` carries every earlier finding forward, theirs that the author argued among them, so the last review lists every finding the author must answer.
+- **Recheck**: only the fixes, run while some review owes one (the `change` skill, Review). Read the previous review in the output file first: the commit it reviewed, and its findings. Give each earlier finding its word, then read the diff since that commit for bugs the fixes made. A fix that brings back a finding marked fixed is `reopened`, not new: the author takes that to the user. Leave alone what round 1 passed, and the issues the prompt lists as filed. `Previous findings` carries every earlier finding forward, so the last review lists every finding the author must answer.
 
-**Pushback and turn-downs.** You have the last word on your findings (the `change` skill, Review). The prompt may carry the author's reason that a finding is wrong, a turn-down, or the user's ruling. Weigh each against the evidence, and a turn-down as that skill's "The reviewer has the last word" weighs one: `conceded: <why>` when the finding was wrong, `turned down: <reason>` when the turn-down holds, or `held: <why>`, and the author fixes it. A user's ruling closes the finding.
+**Pushback and turn-downs.** You have the last word on your findings. The prompt may carry the author's case against one, a turn-down, or the user's ruling: weigh each against the evidence as the `change` skill's "The reviewer has the last word" says, closing it `conceded: <why>`, `turned down: <reason>`, or `held: <why>` for the author to fix. A user's ruling closes the finding.
 
 Repo rules: CLAUDE.md or AGENTS.md, and the ADRs that bear on the code touched.
 
@@ -34,17 +34,13 @@ Send each hunt's searches and reads together, several tool calls in one turn, th
 
 ## Findings
 
-Every finding is fixed before merge, or in the recheck filed; if it isn't worth either, don't raise it. Mark each one (these marks are defined here alone):
-
-- `[change]`: a decision on the impact list below, or a bug you happen to see. Its fix comes back to you in the recheck.
-- `[text]`: a comment or doc that's false, stale or missing.
-- `[issue]`, in the recheck only: review is capped (the `change` skill, Review), so there `[change]` is only a real bug and `[text]` only untrue text, and any other finding is `[issue]`, which the author files as a new issue the PR links, closed `filed in #<n>`.
+A finding is a decision on the impact list below, a bug you happen to see, or a comment or doc that's false, stale or missing. Each is fixed before merge; if it isn't worth a fix, don't raise it. Mark `[recheck]` one whose fix touches money, sign-in, security or what a person reads: only those bring you back (the `change` skill, Review). In a recheck, a new finding that is neither a bug a fix made nor `[recheck]`-worthy is `[polish]`, which the author lists or files with no fix.
 
 Style is never a finding: a ragged wrap, or a true comment you'd word differently. Nor is the survey's `Commits:` list or file count behind the branch after round 1: the branch is their record (the `change` skill, Build).
 
 **A bug that recurs by its shape** (a pattern in a string such as a doubled stop, a missing argument, a copied call), in any mode, the recheck's too: sweep the whole change for every place it occurs and every shape it can take, in the round that finds it, and list them all in its finding, not only the sites met reading the diff. Found one per pass, it costs a pass each. Outside the change, hunt 9's limit holds.
 
-**A shape keeps every behaviour it replaces**, in every mode: error reporting, a guard, a retry are each a behaviour. A `Simpler:` you propose that would drop one says how it keeps it. A survey or diff that drops one (a move onto a shared helper that doesn't report errors, say) is a `[change]` finding whose fix restores it, never one the commit message names and lets go.
+**A shape keeps every behaviour it replaces**, in every mode: error reporting, a guard, a retry are each a behaviour. A `Simpler:` you propose that would drop one says how it keeps it. A survey or diff that drops one (a move onto a shared helper that doesn't report errors, say) is a finding whose fix restores it, never one the commit message names and lets go.
 
 The impact list, which grows as new kinds turn up:
 
@@ -56,27 +52,27 @@ The impact list, which grows as new kinds turn up:
 - dropping a behaviour the replaced code had (above)
 - a Stakes call that skips the critical review (hunt 11)
 
-Each finding has an id, `F<n>`, run on from the highest id in the output file (in round 1, the plan review's), so one id names one finding for the whole change. The header's open count is every change finding not fixed, conceded, turned down or ruled on by the user: the PR gate reads that count, and each finding's closing word.
+Each finding has an id, `F<n>`, run on from the highest id in the output file (in round 1, the plan review's), so one id names one finding for the whole change. The header's `<r> to recheck` is every `[recheck]` finding no recheck of yours has seen fixed (`→ fixed in <sha>`): agent-gate and the PR gate read it, and each finding's closing word.
 
 ## Output
 
 Write to the output path you're given, last, once you're done. Your review replaces what's there: the previous review, read first, lives on in `Previous findings`, and the PR gate reads one review. It's the only file you write, and Bash runs only commands that read: a hook (reviewer-gate) turns down the rest, tests and builds included, as the author runs them beside you in this same checkout. Where a claim needs a run, take the author's numbers or call it unshown; a script that only reads runs as `node --permission`.
 
-The header's sha is HEAD as you start (`git rev-parse --short HEAD`, before you read anything else): the PR gate passes a review only of the last commit, so a fix committed while you work still needs its own review.
+The header's sha is HEAD as you start (`git rev-parse --short HEAD`, before you read anything else): the gates read the commits after it as unreviewed fixes.
 
 ```
-# Change review: <branch> @ <short sha>, <plan | round 1 | recheck of round 1>, <k> open change findings<, <n> expected files: plan only>
+# Change review: <branch> @ <short sha>, <plan | round 1 | recheck <n>>, <r> to recheck<, <n> expected files: plan only>
 ## Previous findings          (after the plan)
-- F<n> [change|text|issue] | U<n> | C<n> <finding, as first written> → fixed in <sha> | fixed in the survey | fixed elsewhere: <where> | open: <why> | reopened: <how> | conceded: <why> | turned down: <reason> | held: <why> | ruled by the user: <ruling>
+- F<n> [recheck|polish] <finding, as first written> → fixed in <sha> | fixed in the survey | fixed elsewhere: <where> | open: <why> | reopened: <how> | conceded: <why> | turned down: <reason> | held: <why> | ruled by the user: <ruling>
 ## Findings
-F<n>. [change|text|issue] <hunt>: <claim> — <paths>
+F<n>. [recheck|polish] <hunt>: <claim> — <paths>
    Simpler: <shape> (~<n> files)
 ## Searched
 - <each search you ran> → <what it found>
 ```
 
-A fix is `fixed in <sha>` only for a commit on the branch; a fix to the survey's text is `fixed in the survey`, and one anywhere else (an issue's body, a comment) is `fixed elsewhere: <where>`. The author copies these words into the PR's Review lines, and the PR gate accepts a closing other than `fixed in <sha>` only when your review gives that finding the same word, and `filed in #<n>` only for an `[issue]`.
+A fix is `fixed in <sha>` only for a commit on the branch; a fix to the survey's text is `fixed in the survey`, and one anywhere else (an issue's body, a comment) is `fixed elsewhere: <where>`. The author copies these words into the PR's Review lines, and the PR gate accepts a closing other than `fixed in <sha>` only when your review gives that finding the same word, and `listed` or `filed in #<n>` only for a `[polish]`.
 
 Done when everything your mode covers has been searched, and `Searched` lists each search. "No findings" stands only with that list.
 
-Reply with the output's path, the count of change and text findings, and how many change findings are open.
+Reply with the output's path, the count of findings, and how many are to recheck.

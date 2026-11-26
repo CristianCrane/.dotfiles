@@ -426,10 +426,11 @@ export const reviewFiles = (text) =>
 
 // a review file's first line, as the reviewer writes it (change-reviewer.md,
 // ux-reviewer.md, critical-reviewer.md, Output): the commit it read, which
-// pass it is, how many findings it leaves open, and, for a plan review, the
-// survey's Expected files it read. The one reader of the headers: review(),
-// review-gate's uxReview and agent-gate take them from it. Null when
-// there's no file
+// pass it is (plan, round 1, recheck <n>, pass <n>), its `<r> to recheck`
+// (the fixes it still owes a look: the `change` skill's Review), and, for a
+// plan review, the survey's Expected files it read. The one reader of the
+// headers: review(), review-gate and agent-gate take them from it. Null
+// when there's no file
 export const passOf = (path) => {
   if (!existsSync(path)) return null;
   const head = readFileSync(path, "utf8").split("\n", 1)[0];
@@ -439,8 +440,9 @@ export const passOf = (path) => {
     sha: head.match(/ @ ([0-9a-f]{7,40}),/)?.[1] ?? null,
     plan: /,\s*plan\b/.test(head),
     round: number(/\bround (\d+)\b/),
-    recheck: /\brecheck of round\b/.test(head),
-    open: number(/\b(\d+) open\b/),
+    recheck: number(/\brecheck (\d+)\b/),
+    pass: number(/\bpass (\d+)\b/),
+    toRecheck: number(/\b(\d+) to recheck\b/),
     files: number(/\b(\d+) expected files?\b/),
   };
 };
@@ -690,17 +692,13 @@ const commentOnly = (cwd, sha) => {
 // since change only comment lines
 export const stillHead = (cwd, sha) => headSha(cwd).startsWith(sha) || commentOnly(cwd, sha);
 
-// the reviewer's read of the diff: it must be of the last commit (written
-// after it isn't enough: a round runs while fixes may land), or of one
-// before it with only comment lines changed since; and it must leave no
-// change finding open, in any round (.dotfiles#45). A draft PR (`draft`)
-// opens after round 1, its fixes not yet rechecked: its review needs only
-// to be of a commit on the branch. The
-// reviewer's header line says all three: "… @ <sha>, round <n>, <k> open
-// change findings", where a recheck says "recheck of round <n>", keeping
-// the number. A dictated change that holds (dictatedHolds) has no review,
+// the reviewer's read of the diff: a valid header ("… @ <sha>, round 1 |
+// recheck <n>, <r> to recheck"), of a commit on the branch. What else a PR
+// needs before it leaves draft (no fix owed a recheck, every commit since
+// naming what it fixes) is review-gate's notReady, which reads the other
+// reviews too. A dictated change that holds (dictatedHolds) has no review,
 // and passes with no findings.
-export const review = (cwd, work, input = {}, draft = false) => {
+export const review = (cwd, work, input = {}) => {
   const path = stateFile(cwd, "review", work.key);
   if (!existsSync(path)) {
     const dictated = dictatedHolds(cwd, work, input, null);
@@ -708,27 +706,19 @@ export const review = (cwd, work, input = {}, draft = false) => {
     return { path, ok: false, reason: dictated ? `missing: its survey is dictated, but ${dictated.why}, so it takes the full flow` : "missing" };
   }
   const text = readFileSync(path, "utf8");
-  const { head, sha, round, recheck, open } = passOf(path);
-  if (!/^# Change review:/.test(head) || !sha || round === null || open === null)
+  const { head, sha, round, recheck, toRecheck } = passOf(path);
+  if (!/^# Change review:/.test(head) || !sha || (round === null && recheck === null) || toRecheck === null)
     return {
       path,
       ok: false,
       reason:
-        "its header has no commit, round and open count: its first line reads `# Change review: <branch> @ <short sha>, round <n>, <k> open change findings` (or `recheck of round <n>`), with anything more after the round",
+        "its header has no commit, pass and count: its first line reads `# Change review: <branch> @ <short sha>, <round 1 | recheck <n>>, <r> to recheck`",
     };
-  const ids = [...new Set([...text.matchAll(/^(?:- )?(F\d+)\b/gm)].map((id) => id[1]))];
-  if (draft) return onBranch(cwd, sha) ? { path, ok: true, ids, text } : { path, ok: false, reason: `it reviewed ${sha}, no commit on this branch` };
-  if (!stillHead(cwd, sha))
-    return { path, ok: false, reason: `it reviewed ${sha}, and the commits since change more than comment lines` };
-  if (open)
-    return {
-      path,
-      ok: false,
-      reason: `round ${round}${recheck ? "'s recheck" : ""} left ${open} change finding(s) open: fix them and run the recheck of those fixes (the \`change\` skill's Review)`,
-    };
+  if (!onBranch(cwd, sha)) return { path, ok: false, reason: `it reviewed ${sha}, no commit on this branch` };
   // the review (each replaces the last) lists every finding of the change,
   // each with the reviewer's word on it
-  return { path, ok: true, ids, text };
+  const ids = [...new Set([...text.matchAll(/^(?:- )?(F\d+)\b/gm)].map((id) => id[1]))];
+  return { path, ok: true, ids, text, sha, toRecheck };
 };
 
 // whether `sha` names a commit the branch adds to its base

@@ -21,7 +21,7 @@ Each finding is shown: a test red on the code as it stands, a reproduction, or a
 
 - **Plan**: the survey, whose `Design:` is the approach, and the code at the commit the plan starts from. Before any code, when changing course costs a paragraph.
 - **Diff**: the branch at the commit given, against where it meets the default branch. Read your plan pass first, in the output file: whether each finding was met, and whether the build is the plan. With no plan pass (a change found at stakes only in its first review of the diff), weigh the approach too, and each finding got in at the plan. Then read the change fresh. Mostly to confirm: what you find here got past the plan, so each new finding says whether the plan already held it or the build brought it in, which is how the author traces it (the `lessons` skill, late catches).
-Each mode runs once (the `change` skill, Review): the change-reviewer's recheck covers the fixes to your diff pass, and weighs the author's case against one.
+- **A later pass**: on fixes, while some review owes a recheck, or on the author's case (the `change` skill, Review). Read your previous pass first and give each finding its word, then read only the commits since: a bug a fix brought in is a finding, anything else new `[polish]`.
 
 ## Your own copy
 
@@ -33,10 +33,10 @@ Read the code, the repo's design records and docs, the survey, and your own earl
 
 ## Output
 
-Write to the output path you're given, last, once you're done: your pass replaces what's there, and earlier findings live on in Previous findings. Each finding has an id, `C<n>`, run on from the highest in the file. The header's open count is every finding not fixed, conceded, turned down or ruled on by the user; the author copies each closing word into the PR's Change, as the `change` skill's PR body says.
+Write to the output path you're given, last, once you're done: your pass replaces what's there, and earlier findings live on in Previous findings. Each finding has an id, `C<n>`, run on from the highest in the file. Every finding but a `[polish]` owes a recheck, unmarked: the header's `<r> to recheck` counts those your passes haven't seen fixed. The author copies each closing word into the PR's Change, as the `change` skill's PR body says.
 
 ```
-# Critical review: <branch> @ <short sha>, <plan | diff>, <k> open findings
+# Critical review: <branch> @ <short sha>, <plan | diff | recheck n>, <r> to recheck
 ## The approach
 <is it good; if you'd build it differently, how, why, and what it costs or saves>
 ## Previous findings          (after the plan)
@@ -48,4 +48,4 @@ C<n>. <shown | suspicion>, <how sure>: <the claim> — <paths>
    Got in: <diff pass only: the plan held it | the build brought it in>
 ```
 
-Reply with the output's path, the count of findings (shown and suspicions), how many are open, and the three that matter most, one line each.
+Reply with the output's path, the count of findings (shown and suspicions), how many are to recheck, and the three that matter most, one line each.
