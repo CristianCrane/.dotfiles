@@ -294,17 +294,29 @@ const STATES = {
   // each kind of line that doesn't close its finding, F1 to F8: F5's word
   // isn't the review's, F6's `answered:` closed one until 2026-11-23, F7's
   // word is in its finding's text but not the review's word on it, and F8
-  // is fixed in the survey by the body alone (the old gate took F7 and F8)
+  // owes a recheck but is fixed in the survey by the body alone (the old
+  // gate took F7 and F8)
   unanswered: [
     "review-gate",
     () =>
       scratchRepo({
-        review: "## Previous findings\n- F5 e → held: it's real\n- F7 the gate takes `conceded:` anywhere → open: still wrong\n## Findings\nF1. [recheck] a\nF2. b\nF3. [recheck] c\nF4. [recheck] d\nF6. f\nF8. h\n",
+        review: "## Previous findings\n- F5 e → held: it's real\n- F7 the gate takes `conceded:` anywhere → open: still wrong\n## Findings\nF1. [recheck] a\nF2. b\nF3. [recheck] c\nF4. [recheck] d\nF6. f\nF8. [recheck] h\n",
         body: (head) =>
           prBody(
             head,
             "- Review: F1 a → fixed in deadbee0\n- Review: F2 b → fixed: #313's body revised\n- Review: F3 c → answered on #266\n- Review: F5 e → turned down: rare\n- Review: F6 f → answered: a rare state\n- Review: F7 the gate takes `conceded:` anywhere → conceded: x\n- Review: F8 h → fixed in the survey\n",
           ),
+      }),
+  ],
+  // findings owing no recheck, fixed off the branch on the body's word
+  // alone: paperwork no pass comes back for (red on the old gate, which
+  // asked the review's word and so stopped #565's builder)
+  bodyFixed: [
+    "review-gate",
+    () =>
+      scratchRepo({
+        review: "## Findings\nF1. a\nF2. [polish] b\n",
+        body: (head) => prBody(head, "- Review: F1 a → fixed in the survey\n- Review: F2 b → fixed elsewhere: #313's body\n"),
       }),
   ],
   // a PR body with Before / after, and the UX review it then needs
@@ -330,6 +342,9 @@ const STATES = {
     Object.entries({
       criticalClosed: (head) => `- Critical review: C1 a → fixed in ${head.slice(0, 7)}\n`,
       criticalUnclosed: () => "",
+      // every critical finding owes a recheck, so the body's word alone
+      // closes none
+      criticalSurvey: () => "- Critical review: C1 a → fixed in the survey\n",
     }).map(([name, change]) => [
       name,
       [
@@ -649,7 +664,9 @@ const CASES = [
   // `answered:` and read no reviewer's word)
   ["unanswered", "gh pr create --draft --body-file <body>", /F5: it says `turned down`, but the review's own word on it doesn't/],
   ["unanswered", "gh pr create --draft --body-file <body>", /F7: it says `conceded`, but the review's own word on it doesn't/],
-  ["unanswered", "gh pr create --draft --body-file <body>", /F8: it says `fixed in the survey`, but the review's own word on it doesn't/],
+  ["unanswered", "gh pr create --draft --body-file <body>", /F8: it says `fixed in the survey`, but it owes a recheck/],
+  ["bodyFixed", "gh pr create --draft --body-file <body>", THROUGH],
+  ["bodyFixed", "gh pr create --draft --body-file <body> --head other", /--head other runs from feature's checkout/],
   ["unanswered", "gh pr create --draft --body-file <body>", /F6: `answered` closes nothing/],
   // a body with Before / after needs a UX review, its findings closed as
   // the change review's (red on the old gate, which read no UX review)
@@ -669,6 +686,7 @@ const CASES = [
   ["criticalClosed", "gh pr create --draft --body-file <body>", THROUGH],
   ["criticalClosed", "gh pr create --draft --body-file <body> --head other", /--head other runs from feature's checkout/],
   ["criticalUnclosed", "gh pr create --draft --body-file <body>", /C1: no line names it/],
+  ["criticalSurvey", "gh pr create --draft --body-file <body>", /C1: it says `fixed in the survey`, but it owes a recheck/],
 
   // what runs before gh: a prefix or wrapper is gated, a mention isn't
   ...[`FOO="a b"`, `FOO='a b'`, "env", "command", "time", "nohup", "exec"].map((prefix) => [

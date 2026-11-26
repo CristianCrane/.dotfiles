@@ -182,10 +182,12 @@ const shapeOf = (text, cwd) => {
 // the words that close a finding with no fix on the branch: the reviewer's
 // own, as it has the last word (the `change` skill, Review), so a PR body's
 // line passes with one only when the review gives the finding it too, as
-// the word after the last → of its own line for the finding. Both lines
-// are read after their last →, as a finding's text before it can quote
-// one of the words (dotfiles review F13, 2026-11-23)
-const REVIEWERS_WORDS = ["fixed in the survey", "fixed elsewhere", "conceded", "turned down", "ruled by the user"];
+// the word after the last → of its own line for the finding, but for a
+// fix off the branch (FIXED_WORDS) to a finding owing no recheck (unclosed).
+// Both lines are read after their last →, as a finding's text before it
+// can quote one of the words (dotfiles review F13, 2026-11-23)
+const FIXED_WORDS = ["fixed in the survey", "fixed elsewhere"];
+const REVIEWERS_WORDS = [...FIXED_WORDS, "conceded", "turned down", "ruled by the user"];
 // the user outranks the reviewer: a case put to them, when no pass of the
 // reviewer runs to weigh it, closes by their ruling in the body alone,
 // quoted (`ruled by the user: "<their words>"`) from a message they typed
@@ -227,9 +229,12 @@ const wordOf = (line) => REVIEWERS_WORDS.find((word) => closingOf(line).startsWi
 // path and text), or null when one does: `fixed in <sha>` (a commit on
 // this branch), `listed` or `filed in #<n>` for a later pass's `[polish]`
 // finding, the user's ruling in their words (userRuled), or the review's
-// own word on it (`fixed in the survey` among them). `answered:` closed
-// one until 2026-11-23, when builders answered real findings away
-// (empire-cleaning #527, #536, #538)
+// own word on it. `fixed in the survey` and `fixed elsewhere:` close one
+// owing no recheck on the body's word alone: its fix is paperwork no
+// reviewer comes back for, and asking the review's word on it stopped
+// builders with no pass to give it (empire-cleaning #565's F11, F12,
+// 2026-11-26). `answered:` closed one until 2026-11-23, when builders
+// answered real findings away (empire-cleaning #527, #536, #538)
 const unclosed = (cwd, section, id, review, transcript) => {
   const named = section.filter((line) => new RegExp(`\\b${id}\\b`).test(line));
   if (!named.length) return "no line names it";
@@ -247,16 +252,16 @@ const unclosed = (cwd, section, id, review, transcript) => {
     if (word === RULED && userRuled(line, transcript)) return null;
     if (word === RULED && !words.includes(word))
       return "`ruled by the user:` closes it with the user's own words in quotes (`ruled by the user: \"<their words>\"`, 8 characters or more), as they typed them in this session, and the review's own word on it doesn't say it either";
-    if (word)
-      return words.includes(word)
-        ? null
-        : `it says \`${word}\`, but the review's own word on it doesn't: the reviewer has the last word, so put your case in its next pass`;
+    if (word && (words.includes(word) || (FIXED_WORDS.includes(word) && !owesRecheck(review, id)))) return null;
+    if (FIXED_WORDS.includes(word))
+      return `it says \`${word}\`, but it owes a recheck (\`[recheck]\`, or any critical finding but \`[polish]\`), so only the review's own word on it closes it: its next pass reads the fix, or the user rules on it (\`ruled by the user:\`)`;
+    if (word) return `it says \`${word}\`, but the review's own word on it doesn't: the reviewer has the last word, so put your case in its next pass`;
     const sha = line.match(/fixed in ([0-9a-f]{7,40})\b/)?.[1];
     if (sha) return onBranch(cwd, sha) ? null : `\`fixed in ${sha}\` is no commit on this branch: after a rebase or an amend, give the new sha; a fix that landed elsewhere (main, another PR) is \`fixed elsewhere: <where>\`, as the review says`;
     if (/\bfixed\b/.test(line))
       return "it says fixed, but in no commit on this branch: a fix to the survey's text is `fixed in the survey`, one anywhere else (an issue, a comment) is `fixed elsewhere: <where>`, as the review says";
     if (/\banswered\b/.test(line))
-      return "`answered` closes nothing: a finding is `fixed in <sha>`, or takes the review's own word on it (`fixed in the survey`, `fixed elsewhere:`, `conceded:`, `turned down:`, `ruled by the user:`)";
+      return "`answered` closes nothing: a finding is `fixed in <sha>`, `fixed in the survey` or `fixed elsewhere:` (one owing a recheck in the review's own word too), or takes the review's own word on it (`conceded:`, `turned down:`), or `ruled by the user:`";
     return "its line says neither `fixed in`, `listed` or `filed in #<n>` for a `[polish]` finding, `ruled by the user:`, nor the review's own word on it";
   });
   return whys.includes(null) ? null : whys[0];
@@ -309,7 +314,7 @@ const unclosedAll = (cwd, work, found, body, section, seen, transcript) => {
     .flatMap((one) => one.ids.map((id) => [id, unclosed(cwd, section, id, one, transcript)]))
     .flatMap(([id, why]) => (why ? [`${id}: ${why}`] : []));
   if (open.length)
-    return `The PR body's Change section (${body}) doesn't close every finding of ${reviews.map((one) => one.path).join(" and ")}: ${open.join("; ")}. Each finding gets its own line ending \`fixed in <sha>\` (a commit on this branch), \`listed\` or \`filed in #<n>\` for a \`[polish]\` finding, \`ruled by the user: "<their words>"\`, or the review's own word on it, after its line's last → (\`fixed in the survey\`, \`fixed elsewhere:\`, \`conceded:\`, \`turned down:\`).`;
+    return `The PR body's Change section (${body}) doesn't close every finding of ${reviews.map((one) => one.path).join(" and ")}: ${open.join("; ")}. Each finding gets its own line ending \`fixed in <sha>\` (a commit on this branch), \`listed\` or \`filed in #<n>\` for a \`[polish]\` finding, \`ruled by the user: "<their words>"\`, \`fixed in the survey\` or \`fixed elsewhere:\` (one owing a recheck in the review's own word too), or the review's own word on it, after its line's last → (\`conceded:\`, \`turned down:\`).`;
 };
 
 // the fixes a review still owes a recheck: its header's `<r> to recheck`,
