@@ -2186,8 +2186,44 @@ describe("usage", () => {
       "- Its own steps by kind, share of its cost (steps): agents 40% (2), reading 20% (1), edits 20% (1), replies 20% (1).",
       "- Its cost by what it reread or wrote: its start 100%.",
       "- Single reads: 20% of its steps (one call that reads; builders were 47% in the 2026-11-22 usage audit, before the change skill asked for a step's reads in one turn).",
+      `${docsRead}none.`,
       "- Not counted: 1 agent below it with no steps recorded (x1).",
     ]);
+  });
+
+  const docsRead = "- Docs read (Markdown outside a git dir and /tmp; in, then reread at each later step up to a compaction, share of the cost): ";
+
+  test("--agent: the Markdown it and each type below it read, in, reread and their share of the cost", () => {
+    const { run, agent } = scratch();
+    const inRepo = (row) => ({ ...row, cwd: "/w/repo" });
+    const text = (id, minute, chars) => ({ type: "user", timestamp: minutes(minute), message: { content: [{ type: "tool_result", tool_use_id: `${id}-0`, content: "x".repeat(chars) }] } });
+    // r1 greps the log: 27,000 characters, 10k tokens, held 500 of its 10,500
+    agent(
+      "r1",
+      [inRepo(stepped("r1a", -20, 100_000, ["Grep", { pattern: "Home", path: "docs/ux-log.md" }])), text("r1a", -19, 27_000), inRepo(stepped("r1b", -18, 110_000))],
+      { description: "UX review", spawnDepth: 2, parentAgentId: "d1" },
+      "ux-reviewer",
+    );
+    // d1 reads ux.md (54,000 characters, held 1,000 at each of 2 steps, of
+    // 17,050) and its own survey, which isn't a doc
+    agent(
+      "d1",
+      [
+        inRepo(stepped("m1", -30, 100_000, ["Read", { file_path: "/w/repo/docs/ux.md" }])),
+        text("m1", -29, 54_000),
+        inRepo(stepped("m2", -28, 120_000, ["Read", { file_path: "/w/repo/.git/claude/survey-x.md" }])),
+        text("m2", -27, 2_700),
+        inRepo(stepped("m3", -26, 121_000)),
+      ],
+      { description: "Fix issue 1", spawnDepth: 1 },
+      "builder",
+    );
+    const ran = run(["--agent", "d1"]);
+    assert.equal(ran.status, 0, ran.stderr);
+    assert.ok(
+      ran.stdout.split("\n").includes(`${docsRead}itself 54KB in, 108KB reread, 12% (docs/ux.md 54KB); ux-reviewer ×1 27KB in, 27KB reread, 5% (docs/ux-log.md 27KB).`),
+      ran.stdout,
+    );
   });
 
   // a finished agent's report reaches the main session by itself: a
@@ -2441,8 +2477,8 @@ describe("usage", () => {
     assert.match(ran.stdout, /^Merged PRs: o\/a 2, o\/b 1$/m);
     assert.match(ran.stdout, /^ {2}main s1 repo {2,}250k {2,}45\.5%$/m);
     assert.match(ran.stdout, /^ {2}change-reviewer {2,}175k {2,}31\.8% {2,}1$/m);
-    // each agent type's steps: a1's one step at 175k, no single read, one compaction
-    assert.match(ran.stdout, /^ {2}change-reviewer {2,}1 {2,}1 {2,}175k {2,}0\.0% {2,}1\.0 {2,}[\d.]+$/m);
+    // each agent type's steps: a1's one step at 175k, no single read, one compaction, no docs read
+    assert.match(ran.stdout, /^ {2}change-reviewer {2,}1 {2,}1 {2,}175k {2,}0\.0% {2,}1\.0 {2,}[\d.]+ {2,}0KB {2,}0\.0%$/m);
     assert.match(ran.stdout, /^ {2}to .*: 50% at .*; 550k weighted by then, about 11k per 1% \(began before the ledger: reads low\)$/m);
     // gh asked for the account's PRs merged in each week, to the second before it ends
     const from = new Date(`${day(-6)}T00:00`);
@@ -2562,6 +2598,47 @@ describe("steps", () => {
       assert.equal(steps.kindOf({ name, input }), kind, `${name} ${JSON.stringify(input)}`);
   });
 
+  // plan review F2, F3: the ux-reviewer searches with Grep, and an agent's
+  // own survey, reviews and scratch aren't the docs it reads
+  test("docsOf: the Markdown a call that reads names, its own files left out", () => {
+    for (const [name, input, docs] of [
+      ["Read", { file_path: "/r/docs/ux-log.md" }, ["/r/docs/ux-log.md"]],
+      ["Read", { file_path: "/r/src/a.ts" }, []],
+      ["Grep", { pattern: "Home", path: "docs/ux-log.md" }, ["/r/docs/ux-log.md"]],
+      ["Grep", { pattern: "Home", path: "docs", glob: "*.md" }, []],
+      ["Grep", { pattern: "Home", path: "docs/ux-log.md", glob: "*.md" }, ["/r/docs/ux-log.md"]],
+      ["Grep", { pattern: "Home" }, []],
+      ["Bash", { command: "rg -n 'Home|failed' docs/ux-log.md docs/testing-log.md" }, ["/r/docs/ux-log.md", "/r/docs/testing-log.md"]],
+      ["Bash", { command: "cd /s && sed -n '1,40p' README.md" }, ["/s/README.md"]],
+      ["Bash", { command: "git show origin/main:docs/ux.md | head" }, ["/r/docs/ux.md"]],
+      ["Bash", { command: "rg -n x --glob '*.md' docs" }, []],
+      ["Read", { file_path: "/r/.git/worktrees/w/claude/survey-x.md" }, []],
+      ["Read", { file_path: "/tmp/claude-1000/x/notes.md" }, []],
+      ["Edit", { file_path: "/r/docs/ux.md" }, []],
+    ])
+      assert.deepEqual(steps.docsOf({ name, input }, "/r"), docs, `${name} ${JSON.stringify(input)}`);
+  });
+
+  // round 1 F6: a search of a folder names no file, but brings in the rows it matches;
+  // round 3 F8: a line with no path is the named files', one with another path no doc's
+  test("docsFound: the Markdown a search brought in, by each line of its result", () => {
+    const row = "/r/docs/ux-log.md:39:| Client portal > Payment Method | Where does a Client retry a failed charge? |";
+    for (const [name, input, text, found] of [
+      ["Grep", { pattern: "failed", path: "/r/docs", output_mode: "content" }, `${row}\n${row}\n/r/src/a.ts:3:failed`, { "/r/docs/ux-log.md": 2 * (row.length + 1) }],
+      ["Grep", { pattern: "failed", path: "docs", output_mode: "files_with_matches" }, "Found 1 file\n/r/docs/ux-log.md", { "/r/docs/ux-log.md": 17 }],
+      ["Bash", { command: "cd /s && rg -n failed docs" }, "docs/ux.md:3:failed", { "/s/docs/ux.md": 19 }],
+      // a named file's sed beside a folder search: its lines and its rows the search found
+      ["Bash", { command: "sed -n 1,2p docs/ux-log.md; rg -n failed docs" }, "# Log\n| a |\ndocs/ux-log.md:39:failed\ndocs/ux.md:3:failed", { "/r/docs/ux-log.md": 37, "/r/docs/ux.md": 19 }],
+      // a named file the search didn't match, beside code it did: no doc's
+      ["Bash", { command: "rg -n failed src docs/ux-log.md" }, "src/a.ts:3:failed\nsrc/b.ts:9:failed", {}],
+      // a context line (`-C`) is its file's
+      ["Grep", { pattern: "failed", path: "docs", "-C": 1 }, "docs/ux-log.md-38-| x |\ndocs/ux-log.md:39:failed\n--\n2026-11-25 x", { "/r/docs/ux-log.md": 49 }],
+      ["Grep", { pattern: "x", path: "/r/.git" }, "/r/.git/worktrees/w/claude/survey-x.md:1:x", {}],
+      ["Bash", { command: "pnpm test:change" }, "docs/ux.md:3:failed", {}],
+    ])
+      assert.deepEqual(steps.docsFound({ name, input }, text, "/r"), found, `${name} ${JSON.stringify(input)}`);
+  });
+
   test("profileOf: a step per message id, its time, its kind, and the waits and compactions between", () => {
     const rows = [
       { type: "user", timestamp: at(0), message: { content: "the brief" } },
@@ -2605,6 +2682,62 @@ describe("steps", () => {
     // m1 50 its start; m2 150: 50 start, 100 the read's; m3 200: 50, 100, and 50 the test's;
     // m4 75: its start 1000 of 1500, the summary the rest
     assert.deepEqual(held, { start: 50 + 50 + 50 + 50, reading: 100 + 100, tests: 50, replies: 0, "compaction summaries": 25 });
+  });
+
+  test("profileOf: the docs it read, in and reread up to a compaction, at most what the context grew by", () => {
+    const text = (id, minute, chars) => ({ type: "user", timestamp: at(minute), message: { content: [{ type: "tool_result", tool_use_id: id, content: [{ type: "text", text: "x".repeat(chars) }] }] } });
+    const rows = [
+      // one command, two files: its 540 characters (200 tokens) split between them
+      ...step("m1", 1, 1000, [["Bash", { command: "cd /repo && git show origin/main:docs/a.md docs/b.md | head" }]]).map((row) => ({ ...row, cwd: "/w" })),
+      text("m1-0", 2, 540),
+      ...step("m2", 3, 1200, [["Read", { file_path: "/repo/docs/big.md" }]]),
+      // 2,700 characters, but the context grew 500 tokens: 1,350 counted
+      text("m2-0", 4, 2700),
+      ...step("m3", 5, 1700),
+      { type: "system", subtype: "compact_boundary", timestamp: at(6) },
+      ...step("m4", 7, 1000),
+    ];
+    const { docs } = steps.profileOf(rows, cost);
+    // held: m2 rereads 1,200 for 60, each 100 of its tokens 5; m3 1,700 for
+    // 85, each 100 tokens 5 and big.md's 500 25; m4 holds none after the compaction
+    assert.deepEqual(docs, {
+      "/repo/docs/a.md": { reads: 1, chars: 270, reread: 540, held: 10 },
+      "/repo/docs/b.md": { reads: 1, chars: 270, reread: 540, held: 10 },
+      "/repo/docs/big.md": { reads: 1, chars: 1350, reread: 1350, held: 25 },
+    });
+  });
+
+  test("profileOf: a search of a folder counts the Markdown lines it brought in, named from the agent's folder", () => {
+    const line = `/w/docs/ux-log.md:39:${"a".repeat(78)}`;
+    const rows = [
+      ...step("m1", 1, 1000, [["Grep", { pattern: "failed", path: "/w/docs", output_mode: "content" }]]).map((row) => ({ ...row, cwd: "/w" })),
+      { type: "user", timestamp: at(2), message: { content: [{ type: "tool_result", tool_use_id: "m1-0", content: `${line}\n${line}\n/w/src/a.ts:1:failed` }] } },
+      ...step("m2", 3, 2000),
+    ];
+    const { docs } = steps.profileOf(rows, cost);
+    assert.deepEqual(Object.keys(docs), ["docs/ux-log.md"]);
+    assert.deepEqual([docs["docs/ux-log.md"].reads, docs["docs/ux-log.md"].chars, docs["docs/ux-log.md"].reread], [1, 200, 200]);
+  });
+
+  // round 2 F7: a search that names Markdown (a glob, or a file beside a
+  // folder) is counted by the paths its result shows, not by what it names
+  test("profileOf: a search that names Markdown is counted by the files its result shows", () => {
+    const ux = `docs/ux-log.md:39:${"a".repeat(81)}`;
+    const readme = `README.md:2:${"b".repeat(41)}`;
+    const searched = (input, content) => [
+      ...step("m1", 1, 1000, [[input.command ? "Bash" : "Grep", input]]).map((row) => ({ ...row, cwd: "/w" })),
+      { type: "user", timestamp: at(2), message: { content: [{ type: "tool_result", tool_use_id: "m1-0", content }] } },
+      ...step("m2", 3, 2000),
+    ];
+    const chars = (input, content) => Object.fromEntries(Object.entries(steps.profileOf(searched(input, content), cost).docs).map(([name, doc]) => [name, doc.chars]));
+    // a folder with a glob: the log's rows, not `docs/ux*.md`
+    assert.deepEqual(chars({ pattern: "failed", path: "docs", glob: "ux*.md", output_mode: "content" }, `${ux}\n${ux}`), { "docs/ux-log.md": 199 });
+    // a folder and a file: each file its own lines
+    assert.deepEqual(chars({ command: "rg -n failed docs README.md" }, `${ux}\n${readme}`), { "docs/ux-log.md": 100, "README.md": 53 });
+    // two files, one matched: the other brought none
+    assert.deepEqual(chars({ command: "rg -n failed docs/ux-log.md docs/testing-log.md" }, ux), { "docs/ux-log.md": 99 });
+    // one file: no path in its lines, so the file it names
+    assert.deepEqual(chars({ pattern: "failed", path: "docs/ux-log.md", output_mode: "content" }, "39:failed"), { "docs/ux-log.md": 9 });
   });
 
   // plan review F4: a builder's plan review was told apart by the word

@@ -29,7 +29,15 @@
 //   build) and PR (`gh pr create`).
 // - A single read is a step whose one call reads (`reads`): the change
 //   skill asks for a step's reads in one turn.
+// - Docs: the Markdown its calls read (`docsOf`, or for a search, its
+//   result's lines, `docsFound`), each file's reads, the
+//   characters its results brought into the context, those characters
+//   again at every later step they stay in up to a compaction (reread),
+//   and the cost of rereading them (held, as above). A result's tokens are
+//   its characters over CHARS_PER_TOKEN, at most the context's growth.
 import { readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { resolve } from "node:path";
 import { jsonLines } from "./lib.mjs";
 import { reviewFiles } from "./lib.mjs";
 
@@ -99,6 +107,91 @@ export const single = (step) => step.calls.length === 1 && reads(step.calls[0]);
 // Code's own `<synthetic>` replies cost nothing)
 export const counted = (row) => row.type === "assistant" && Boolean(row.message?.usage) && row.message.model !== "<synthetic>";
 
+// a file an agent keeps for its own work, not the work's: one in a git dir
+// (a survey, a review) or under /tmp (its scratch)
+export const own = (path) => /\/\.git\/|^\/tmp\//.test(String(path));
+
+// Markdown Read results ran 2.66 characters a token (the context's growth
+// after a step whose one call read it, median of 184 results of 10,000
+// characters or more, p10 2.27, p90 2.90; every transcript, 2026-11-25)
+export const CHARS_PER_TOKEN = 2.7;
+
+// where a call's relative paths start: `cwd`, or a Bash command's leading `cd`
+const baseOf = (call, cwd) => {
+  const cd = call.name === "Bash" && /^cd\s+(?:"([^"]+)"|'([^']+)'|([^\s;&]+))/.exec(String(call.input?.command ?? ""));
+  return cd ? resolve(cwd, cd[1] ?? cd[2] ?? cd[3]) : cwd;
+};
+
+// absolute paths of the Markdown named, an agent's own files left out (`own`)
+const markdown = (named, base) => {
+  const paths = named.filter((path) => typeof path === "string" && path.endsWith(".md")).map((path) => resolve(base, path.replace(/^~(?=\/)/, homedir())));
+  return [...new Set(paths)].filter((path) => !own(path));
+};
+
+// the Markdown a call that reads names, each file as an absolute path
+// (from `cwd`, or a leading `cd`): Read's file, Grep's path, a Bash
+// command's arguments (`git show ref:path` by its path). A search is
+// counted by its result's lines instead (`docsFound`), so a Grep's glob
+// names nothing: its result shows the files it matched.
+export const docsOf = (call, cwd = "/") => {
+  if (!reads(call)) return [];
+  const input = call.input ?? {};
+  let named = [];
+  if (call.name === "Read") named = [input.file_path];
+  else if (call.name === "Grep") named = [input.path];
+  else if (call.name === "Bash") named = [...String(input.command ?? "").matchAll(/(?<=^|[\s'"=(])[\w.\/~@+:-]+\.md(?=$|[\s'"|;&)>,])/g)].map(([token]) => token.replace(/^.*:/, ""));
+  return markdown(named, baseOf(call, cwd));
+};
+
+// a search: Grep, or a shell rg, grep or git grep
+const searches = (call) => call.name === "Grep" || (call.name === "Bash" && /(?:^|[;&|(]\s*)(?:rg|grep|git\s+grep)\b/.test(String(call.input?.command ?? "")));
+
+// the path a search's result line starts with: `path:N:` or `path:` (a
+// search over several files), `path-N-` (a context line) or a path alone
+// (a list of files). A path has a `/` or an extension, so a file's own
+// lines (`39:…`, `2026-11-25 …`) start with none.
+const pathOf = (line) => {
+  const path = /^([^\s:]+?\.\w+)-\d+-/.exec(line)?.[1] ?? /^([^\s:]+)(?=:|$)/.exec(line)?.[1];
+  return path && (path.includes("/") || /\.[A-Za-z]\w*$/.test(path)) ? path : undefined;
+};
+
+// the Markdown a search brought in, by each line of its result: a line
+// that starts with a Markdown path is that file's, one that starts with
+// another path (`src/a.ts:12:`) is no doc's, and one with no path (a
+// one-file search's `39:…`, or a `sed` of a named file beside the search
+// in one command) is shared evenly by the files the call names. A search
+// of a folder (Grep on `docs`, `rg` over the repo) names no file but
+// brings in the log rows it matches.
+export const docsFound = (call, text, cwd = "/") => {
+  if (!reads(call) || !searches(call)) return {};
+  const base = baseOf(call, cwd);
+  const found = {};
+  let loose = 0;
+  const lines = text.split("\n");
+  lines.forEach((line, i) => {
+    const chars = line.length + (i < lines.length - 1 ? 1 : 0);
+    const path = pathOf(line);
+    if (!path) loose += chars;
+    else for (const absolute of path.endsWith(".md") ? markdown([path], base) : []) found[absolute] = (found[absolute] ?? 0) + chars;
+  });
+  const named = docsOf(call, cwd);
+  if (loose) for (const absolute of named) found[absolute] = (found[absolute] ?? 0) + loose / named.length;
+  return found;
+};
+
+// a doc's name: from `cwd` when under it, else from the top of its
+// checkout under ~/github/<owner>/ (an agent in a repo's main checkout
+// reads its worktree's docs), else from ~
+const nameOf = (path, cwd) => {
+  const home = homedir();
+  if (cwd && cwd !== "/" && path.startsWith(`${cwd}/`)) return path.slice(cwd.length + 1);
+  const checkout = path.startsWith(`${home}/github/`) && /^[^/]+\/[^/]+\/(.+)$/.exec(path.slice(home.length + 8));
+  return checkout ? checkout[1] : path.startsWith(`${home}/`) ? `~${path.slice(home.length)}` : path;
+};
+
+// what a tool result brought in, in characters: its text (an image's tokens aren't a doc's)
+const textOf = (content) => (typeof content === "string" ? content : Array.isArray(content) ? content.map((part) => part.text ?? "").join("") : "");
+
 export const STAGES = ["survey", "plan review", "build", "review", "PR"];
 const REVIEWERS = ["change-reviewer", "critical-reviewer"];
 
@@ -112,7 +205,7 @@ const stageAt = ({ name, input }, started) => {
   if (name === "Agent" && REVIEWERS.includes(input?.subagent_type) && reviewFiles(input?.prompt).some((one) => one.kind === "review")) return "review";
   if (started.has("review") && (TOOLS.edits.includes(name) || REVIEWERS.includes(input?.subagent_type))) return;
   if (name === "Agent" && REVIEWERS.includes(input?.subagent_type)) return started.has("build") ? "review" : "plan review";
-  if (TOOLS.edits.includes(name) && started.has("plan review") && !/\/\.git\/|^\/tmp\//.test(String(input?.file_path))) return "build";
+  if (TOOLS.edits.includes(name) && started.has("plan review") && !own(input?.file_path)) return "build";
   if (name === "Bash" && /\bgh\s+pr\s+create\b/.test(String(input?.command))) return "PR";
 };
 
@@ -151,6 +244,18 @@ export const profileOf = (rows, cost) => {
       for (const part of results) {
         const call = calls.get(part.tool_use_id);
         if (call && call.ms === undefined) call.ms = at - call.at;
+        if (!call) continue;
+        const text = textOf(part.content);
+        call.chars = text.length;
+        // a search is counted by its result's lines (`docsFound`), summed by name
+        if (!searches(call)) continue;
+        const shares = {};
+        for (const [path, chars] of Object.entries(docsFound(call, text, call.cwd))) {
+          const name = nameOf(path, call.cwd);
+          shares[name] = (shares[name] ?? 0) + chars;
+        }
+        call.docs = Object.keys(shares);
+        call.shares = shares;
       }
       if (!results.length && gap >= GAP) span.waitMs += gap;
       continue;
@@ -175,8 +280,9 @@ export const profileOf = (rows, cost) => {
     if (gap < GAP) step.modelMs += gap;
     for (const part of row.message.content ?? [])
       if (part.type === "tool_use") {
-        const call = { name: part.name, input: part.input, at };
+        const call = { name: part.name, input: part.input, at, cwd: row.cwd };
         call.kind = kindOf(call);
+        call.docs = docsOf(call, row.cwd).map((path) => nameOf(path, row.cwd));
         calls.set(part.id, call);
         step.calls.push(call);
       }
@@ -186,6 +292,9 @@ export const profileOf = (rows, cost) => {
   const started = new Map();
   const agents = {};
   let origin = {};
+  // the characters each doc's results put in the context, held as origin is
+  let held = {};
+  const docs = {};
   let singleReads = 0;
   const total = group();
   steps.forEach((step, i) => {
@@ -203,19 +312,37 @@ export const profileOf = (rows, cost) => {
     // agent's start stays through a compaction, and the rest after one is
     // its summary and what it re-attaches
     if (i === 0) origin = { start: step.context };
-    else if (step.afterCompaction) origin = { start: Math.min(steps[0].context, step.context), "compaction summaries": Math.max(0, step.context - steps[0].context) };
-    else {
+    else if (step.afterCompaction) {
+      origin = { start: Math.min(steps[0].context, step.context), "compaction summaries": Math.max(0, step.context - steps[0].context) };
+      held = {};
+    } else {
       const before = steps[i - 1];
       const added = step.context - before.context;
       if (added > 0) origin = { ...origin, [before.kind]: (origin[before.kind] ?? 0) + added };
       else if (added < 0) {
         // a context that shrank with no compaction (a cleared tool result): each part scaled down
-        const held = Object.values(origin).reduce((a, b) => a + b, 0) || 1;
-        origin = Object.fromEntries(Object.entries(origin).map(([kind, n]) => [kind, (n * step.context) / held]));
+        const all = Object.values(origin).reduce((a, b) => a + b, 0) || 1;
+        origin = Object.fromEntries(Object.entries(origin).map(([kind, n]) => [kind, (n * step.context) / all]));
+        held = Object.fromEntries(Object.entries(held).map(([name, n]) => [name, (n * step.context) / all]));
+      }
+      // the docs the step before read, a call's characters split among the
+      // files it named, together at most what the context grew by
+      const brought = before.calls.flatMap((call) => call.docs.map((name) => [name, call.shares?.[name] ?? (call.chars ?? 0) / call.docs.length]));
+      const chars = brought.reduce((sum, [, n]) => sum + n, 0);
+      const scale = chars ? Math.min(1, (Math.max(0, added) * CHARS_PER_TOKEN) / chars) : 0;
+      for (const [name, n] of brought) {
+        const doc = (docs[name] ??= { reads: 0, chars: 0, reread: 0, held: 0 });
+        doc.reads++;
+        doc.chars += n * scale;
+        held[name] = (held[name] ?? 0) + n * scale;
       }
     }
     const context = Object.values(origin).reduce((a, b) => a + b, 0) || 1;
     for (const [kind, n] of Object.entries(origin)) bump(kinds, kind).held += (step.reread * n) / context;
+    for (const [name, n] of Object.entries(held)) {
+      docs[name].reread += n;
+      docs[name].held += (step.reread * n) / CHARS_PER_TOKEN / context;
+    }
     bump(kinds, step.kind).held += step.output;
     const toolMs = Math.max(0, ...step.calls.map((call) => call.ms ?? 0));
     const stage = [...started].filter(([, at]) => at <= step.at).at(-1)?.[0] ?? "survey";
@@ -244,6 +371,7 @@ export const profileOf = (rows, cost) => {
     stages: whole(stages),
     starts: Object.fromEntries(started),
     agents,
+    docs: whole(docs),
   };
 };
 
