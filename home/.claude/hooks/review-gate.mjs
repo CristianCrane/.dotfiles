@@ -252,9 +252,11 @@ const unclosed = (cwd, section, id, review, transcript) => {
     if (word === RULED && userRuled(line, transcript)) return null;
     if (word === RULED && !words.includes(word))
       return "`ruled by the user:` closes it with the user's own words in quotes (`ruled by the user: \"<their words>\"`, 8 characters or more), as they typed them in this session, and the review's own word on it doesn't say it either";
-    if (word && (words.includes(word) || (FIXED_WORDS.includes(word) && !owesRecheck(review, id)))) return null;
+    if (word && words.includes(word)) return null;
+    if (word === "fixed elsewhere" && !/^fixed elsewhere:\s*\S/.test(line)) return "`fixed elsewhere` says where, after its colon (`fixed elsewhere: <where>`)";
+    if (FIXED_WORDS.includes(word) && !owesRecheck(review, id)) return null;
     if (FIXED_WORDS.includes(word))
-      return `it says \`${word}\`, but it owes a recheck (\`[recheck]\`, or any critical finding but \`[polish]\`), so only the review's own word on it closes it: its next pass reads the fix, or the user rules on it (\`ruled by the user:\`)`;
+      return `it says \`${word}\`, but it owes a recheck (\`[recheck]\`, or any critical finding but \`[polish]\`), so only the review's own word on it closes it. A fix outside a commit gets no pass of its own (agent-gate runs one only on commits since its last read): a pass a later commit brings can give that word, or else the user rules on it (\`ruled by the user:\`)`;
     if (word) return `it says \`${word}\`, but the review's own word on it doesn't: the reviewer has the last word, so put your case in its next pass`;
     const sha = line.match(/fixed in ([0-9a-f]{7,40})\b/)?.[1];
     if (sha) return onBranch(cwd, sha) ? null : `\`fixed in ${sha}\` is no commit on this branch: after a rebase or an amend, give the new sha; a fix that landed elsewhere (main, another PR) is \`fixed elsewhere: <where>\`, as the review says`;
@@ -282,11 +284,24 @@ const otherReview = (cwd, work, kind, title, letter, pass) => {
   if (!onBranch(cwd, sha)) return { path, reason: `it read ${sha}, no commit on this branch` };
   return { path, ok: true, text, ids: idsOf(text, letter), toRecheck };
 };
+// whether the survey's `Stakes:` names money, sign-in or security (the
+// `change` skill, Survey); a survey with no such line (a dictated one)
+// isn't at stakes
+const atStakes = (cwd, work) => {
+  const path = stateFile(cwd, "survey", work.key);
+  const stakes = existsSync(path) ? readFileSync(path, "utf8").match(/^Stakes:\s*(.*)$/m)?.[1] : undefined;
+  return stakes !== undefined && !/^none\b/.test(stakes);
+};
 // the branch's UX review, which a PR body with Before / after needs, and
-// the critical review, when the change is at stakes (it went unread here
-// until 2026-11-25)
+// the critical review, which a survey at stakes needs. It went unread here
+// until 2026-11-25, and was needed only once its file existed until
+// 2026-11-26, when a survey's Stakes, fixed from `none`, could close
+// `fixed in the survey` on the body's word with no critical pass run
+// (dotfiles review F9)
 const uxReview = (cwd, work) => otherReview(cwd, work, "ux-review", "UX review", "U", "<first pass | pass <n>>") ?? { path: stateFile(cwd, "ux-review", work.key), reason: "missing" };
-const criticalReview = (cwd, work) => otherReview(cwd, work, "critical-review", "Critical review", "C", "<plan | diff | recheck <n>>");
+const criticalReview = (cwd, work) =>
+  otherReview(cwd, work, "critical-review", "Critical review", "C", "<plan | diff | recheck <n>>") ??
+  (atStakes(cwd, work) ? { path: stateFile(cwd, "critical-review", work.key), reason: "missing, and the survey's Stakes isn't `none`" } : null);
 
 // a review not ready, in words for a turn-down
 const otherNotReady = (other, branch) =>

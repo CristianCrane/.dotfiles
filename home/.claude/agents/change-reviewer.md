@@ -34,7 +34,7 @@ Send each hunt's searches and reads together, several tool calls in one turn, th
 
 ## Findings
 
-A finding is a decision on the impact list below, a bug you happen to see, or a comment or doc that's false, stale or missing. Each is fixed before merge; if it isn't worth a fix, don't raise it. Mark `[recheck]` one whose fix touches money, sign-in, security or what a person reads in the product, not the survey, the PR body or a review file (the `change` skill, Review): only those bring you back (the `change` skill, Review). In a recheck, a new finding that is neither a bug a fix made nor `[recheck]`-worthy is `[polish]`, which the author lists or files with no fix.
+A finding is a decision on the impact list below, a bug you happen to see, or a comment or doc that's false, stale or missing. Each is fixed before merge; if it isn't worth a fix, don't raise it. Mark `[recheck]` one whose fix touches money, sign-in, security or what a person reads in the product: only those bring you back (the `change` skill, Review). In a recheck, a new finding that is neither a bug a fix made nor `[recheck]`-worthy is `[polish]`, which the author lists or files with no fix.
 
 Style is never a finding: a ragged wrap, or a true comment you'd word differently. Nor is the survey's `Commits:` list or file count behind the branch after round 1: the branch is their record (the `change` skill, Build).
 
@@ -71,7 +71,7 @@ F<n>. [recheck|polish] <hunt>: <claim> — <paths>
 - <each search you ran> → <what it found>
 ```
 
-A fix is `fixed in <sha>` only for a commit on the branch; a fix to the survey's text is `fixed in the survey`, and one anywhere else (an issue's body, a comment) is `fixed elsewhere: <where>`. The author copies these words into the PR's Review lines, and the PR gate accepts `conceded:` or `turned down:` only when your review gives that finding the same word, `fixed in the survey` or `fixed elsewhere:` on the author's word for a finding owing no recheck and on yours for one that does, and `listed` or `filed in #<n>` only for a recheck's `[polish]`.
+A fix is `fixed in <sha>` only for a commit on the branch; a fix to the survey's text is `fixed in the survey`, and one anywhere else (an issue's body, a comment) is `fixed elsewhere: <where>`. The author copies these words into the PR's Review lines, and the PR gate takes each on whose word the `change` skill's PR body says.
 
 Done when everything your mode covers has been searched, and `Searched` lists each search. "No findings" stands only with that list.
 

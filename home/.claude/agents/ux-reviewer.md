@@ -55,7 +55,7 @@ U<n>. [recheck|polish] <screen>, <case>, <width>: <what's wrong> — <shot path>
 - <screen, case>: <one line on why>
 ```
 
-The header's `<r> to recheck` counts the `[recheck]` findings your passes haven't seen fixed, and the PR gate takes a closing other than a fix only in your word on it, but `fixed in the survey` or `fixed elsewhere:` for one not `[recheck]`.
+The header's `<r> to recheck` counts the `[recheck]` findings your passes haven't seen fixed, and the PR gate takes each closing on whose word the `change` skill's PR body says.
 
 Write it as the global CLAUDE.md's "Writing for me" says, as the user reads it, a repo's terms from its glossary. Reply with the output's path, the count of findings, how many are to recheck, and how many states weren't drawn.
 

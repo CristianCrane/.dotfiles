@@ -295,16 +295,16 @@ const STATES = {
   // isn't the review's, F6's `answered:` closed one until 2026-11-23, F7's
   // word is in its finding's text but not the review's word on it, and F8
   // owes a recheck but is fixed in the survey by the body alone (the old
-  // gate took F7 and F8)
+  // gate took F7 and F8), and F9's `fixed elsewhere` says nowhere
   unanswered: [
     "review-gate",
     () =>
       scratchRepo({
-        review: "## Previous findings\n- F5 e → held: it's real\n- F7 the gate takes `conceded:` anywhere → open: still wrong\n## Findings\nF1. [recheck] a\nF2. b\nF3. [recheck] c\nF4. [recheck] d\nF6. f\nF8. [recheck] h\n",
+        review: "## Previous findings\n- F5 e → held: it's real\n- F7 the gate takes `conceded:` anywhere → open: still wrong\n## Findings\nF1. [recheck] a\nF2. b\nF3. [recheck] c\nF4. [recheck] d\nF6. f\nF8. [recheck] h\nF9. i\n",
         body: (head) =>
           prBody(
             head,
-            "- Review: F1 a → fixed in deadbee0\n- Review: F2 b → fixed: #313's body revised\n- Review: F3 c → answered on #266\n- Review: F5 e → turned down: rare\n- Review: F6 f → answered: a rare state\n- Review: F7 the gate takes `conceded:` anywhere → conceded: x\n- Review: F8 h → fixed in the survey\n",
+            "- Review: F1 a → fixed in deadbee0\n- Review: F2 b → fixed: #313's body revised\n- Review: F3 c → answered on #266\n- Review: F5 e → turned down: rare\n- Review: F6 f → answered: a rare state\n- Review: F7 the gate takes `conceded:` anywhere → conceded: x\n- Review: F8 h → fixed in the survey\n- Review: F9 i → fixed elsewhere\n",
           ),
       }),
   ],
@@ -319,6 +319,22 @@ const STATES = {
         body: (head) => prBody(head, "- Review: F1 a → fixed in the survey\n- Review: F2 b → fixed elsewhere: #313's body\n"),
       }),
   ],
+  // a survey at stakes needs its critical review before any file of it
+  // exists (red on the old gate, which needed one only once it existed),
+  // and one at none needs none
+  ...Object.fromEntries(
+    Object.entries({ stakesMoney: "money: a charge", stakesNone: "none: the gates only" }).map(([name, stakes]) => [
+      name,
+      [
+        "review-gate",
+        () => {
+          const state = scratchRepo({ review: true, lessons: ROUTED, body: (head) => prBody(head) });
+          write(state.repo, "survey", `Change: c.\nStakes: ${stakes}\n`);
+          return state;
+        },
+      ],
+    ]),
+  ),
   // a PR body with Before / after, and the UX review it then needs
   ...Object.fromEntries(
     Object.entries({
@@ -665,7 +681,11 @@ const CASES = [
   ["unanswered", "gh pr create --draft --body-file <body>", /F5: it says `turned down`, but the review's own word on it doesn't/],
   ["unanswered", "gh pr create --draft --body-file <body>", /F7: it says `conceded`, but the review's own word on it doesn't/],
   ["unanswered", "gh pr create --draft --body-file <body>", /F8: it says `fixed in the survey`, but it owes a recheck/],
+  ["unanswered", "gh pr create --draft --body-file <body>", /F9: `fixed elsewhere` says where, after its colon/],
   ["bodyFixed", "gh pr create --draft --body-file <body>", THROUGH],
+  ["stakesMoney", "gh pr create --draft --body-file <body>", /critical review \(.*critical-review-feature\.md\) isn't ready \(missing, and the survey's Stakes isn't `none`\)/],
+  ["stakesNone", "gh pr create --draft --body-file <body>", THROUGH],
+  ["stakesNone", "gh pr create --draft --body-file <body> --head other", /--head other runs from feature's checkout/],
   ["bodyFixed", "gh pr create --draft --body-file <body> --head other", /--head other runs from feature's checkout/],
   ["unanswered", "gh pr create --draft --body-file <body>", /F6: `answered` closes nothing/],
   // a body with Before / after needs a UX review, its findings closed as
