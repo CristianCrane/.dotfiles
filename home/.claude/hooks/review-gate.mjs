@@ -212,6 +212,15 @@ const laterPass = (path) => {
   return Boolean(pass?.recheck || pass?.pass);
 };
 const closingOf = (line) => line.split("→").at(-1).trim();
+// finding `id`'s first line in `review` (its path and text), and whether
+// its fix owes a recheck: in a critical review every finding but a
+// `[polish]` one (critical-reviewer.md, Output), in any other one marked
+// `[recheck]`
+const findingLine = (review, id) => lines(review.text).find((line) => new RegExp(`^(?:- )?${id}\\b`).test(line)) ?? "";
+const owesRecheck = (review, id) => {
+  const line = findingLine(review, id);
+  return review.path.includes("/critical-review-") ? !line.includes("[polish]") : line.includes("[recheck]");
+};
 const wordOf = (line) => REVIEWERS_WORDS.find((word) => closingOf(line).startsWith(word));
 
 // why no line of the Change section closes finding `id` of `review` (its
@@ -310,10 +319,9 @@ const unclosedAll = (cwd, work, found, body, section, seen, transcript) => {
 // after its last →, or one that says it still stands (`open`, `held`,
 // `reopened`)
 const owedOf = (one, section, transcript) => {
-  const every = one.path.includes("/critical-review-");
   const ruled = one.ids.filter((id) => {
-    const line = lines(one.text).find((line) => new RegExp(`^(?:- )?${id}\\b`).test(line)) ?? "";
-    const open = (every ? !line.includes("[polish]") : line.includes("[recheck]")) && (!line.includes("→") || /^(?:open|held|reopened)\b/.test(closingOf(line)));
+    const line = findingLine(one, id);
+    const open = owesRecheck(one, id) && (!line.includes("→") || /^(?:open|held|reopened)\b/.test(closingOf(line)));
     return open && (section ?? []).some((named) => new RegExp(`\\b${id}\\b`).test(named) && userRuled(closingOf(named), transcript));
   });
   return Math.max(0, one.toRecheck - ruled.length);
