@@ -714,17 +714,17 @@ export const stillHead = (cwd, sha) => {
   return on ? own.every((one) => commentOnly(cwd, one.parent, one.sha)) : commentOnly(cwd, sha, "HEAD");
 };
 
-// the commits a change review of `sha` hasn't read: each of the branch's
-// own since it (ownSince) that names no finding it fixes (`F<n>`, `C<n>`,
-// `U<n>`) nor `CI`, or every one of them once a rebase moves `sha` off
-// it. Review-gate holds the PR in draft on them, and agent-gate lets the
-// change-reviewer read them: new work, a first look's, not a recheck
-// (round 1 F29)
-export const unreadSince = (cwd, sha) => {
+// the commits a review of `sha` hasn't read: each of the branch's own
+// since it (ownSince) whose message names none of `fixes`, by default any
+// finding (`F<n>`, `C<n>`, `U<n>`) or `CI`, or every one of them once a
+// rebase moves `sha` off it. Review-gate holds the PR in draft on them,
+// and agent-gate lets the change-reviewer read them: new work, a first
+// look's, not a recheck (round 1 F29)
+export const unreadSince = (cwd, sha, fixes = /\b(?:[FCU]\d+|CI)\b/) => {
   const { on, own } = ownSince(cwd, sha);
   return own
     .map((one) => one.sha)
-    .filter((one) => !on || !/\b(?:[FCU]\d+|CI)\b/.test(git(cwd, "log", "-1", "--format=%B", one)));
+    .filter((one) => !on || !fixes.test(git(cwd, "log", "-1", "--format=%B", one)));
 };
 
 // the reviewer's read of the diff: a valid header ("… @ <sha>, round 1 |
