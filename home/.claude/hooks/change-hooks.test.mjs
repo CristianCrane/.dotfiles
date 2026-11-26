@@ -163,8 +163,9 @@ const write = (repo, kind, text) => {
 // given: `review` writes one of HEAD (a string: its findings, after the
 // header; `header` replaces the header's words after the sha), `ux` a UX
 // review (it may take HEAD's short sha), `lessons` and `body` their text
-// (`body` may take HEAD's full sha)
-const scratchRepo = ({ review = false, header = "round 1, 0 open change findings", ux, lessons, body } = {}) => {
+// (`body` may take HEAD's full sha); `said`, a message the user typed, in
+// the session's transcript
+const scratchRepo = ({ review = false, header = "round 1, 0 to recheck", ux, lessons, body, said } = {}) => {
   const repo = scratchDir();
   git(repo, "init", "-qb", "main");
   commit(repo, "a.txt", "a\n");
@@ -176,17 +177,24 @@ const scratchRepo = ({ review = false, header = "round 1, 0 open change findings
   if (ux !== undefined) write(repo, "ux-review", typeof ux === "function" ? ux(head) : ux);
   if (lessons !== undefined) write(repo, "lessons", lessons);
   if (typeof body === "function") body = body(git(repo, "rev-parse", "HEAD"));
-  return { repo, body: body === undefined ? undefined : write(repo, "pr-body", body) };
+  let transcript;
+  if (said !== undefined) {
+    transcript = join(scratchDir(), "t.jsonl");
+    writeFileSync(transcript, `${JSON.stringify({ type: "user", origin: { kind: "human" }, message: { role: "user", content: said } })}\n`);
+  }
+  return { repo, transcript, body: body === undefined ? undefined : write(repo, "pr-body", body) };
 };
 
 const ROUTED = "Signals for feature:\n- A cost → inbox 1a2b3c4d\n";
 const BEFORE = "**Before / after:**\n| Before | After |\n| --- | --- |\n| a | b |\n";
 // a UX review of HEAD with no findings, for a body with Before / after
-const CLEAN_UX = (head) => `# UX review: ${BRANCH} @ ${head}, first pass, 0 open findings (0 high)\n`;
-// a UX review of HEAD whose last pass leaves nothing open, U1 fixed and U2
-// turned down
+const CLEAN_UX = (head) => `# UX review: ${BRANCH} @ ${head}, first pass, 0 to recheck\n`;
+// a UX review of HEAD, its second pass, with two findings: it saw U1's fix,
+// and turned U2 down on the author's case
 const CLOSED_UX = (head) =>
-  `# UX review: ${BRANCH} @ ${head}, pass 2, 0 open findings (0 high)\n## Previous findings\n- U1 [high] a → fixed (a.png)\n- U2 [low] b → turned down: the owner's call\n`;
+  `# UX review: ${BRANCH} @ ${head}, pass 2, 0 to recheck\n## Previous findings\n- U1 [recheck] a → fixed (b.png)\n- U2 [polish] b → turned down: the owner's call\n`;
+// a UX review of HEAD, its first pass, with one finding to recheck
+const OPEN_UX = (head) => `# UX review: ${BRANCH} @ ${head}, first pass, 1 to recheck\n## Findings\nU1. [recheck] a\n`;
 // a PR body in the change skill's shape, its permalinks at `head`, with
 // `change` as its Change section's lines; `parts` replaces a part's text,
 // or leaves it out (null)
@@ -216,12 +224,23 @@ const STATES = {
   lessonsNoneEmpty: ["review-gate", () => scratchRepo({ review: true, lessons: "None:\n" })],
   // a lesson with no → before None: (None: once let the whole file through)
   lessonUnroutedNone: ["review-gate", () => scratchRepo({ review: true, lessons: "- A lesson\nNone: the rest\n" })],
-  // a commit after the review, with no recheck of it
+  // a commit after the review's last pass: one that names no finding it
+  // fixes (its message is its file's name), and one that names F1
   staleReview: [
     "review-gate",
     () => {
       const state = scratchRepo({ review: true, lessons: ROUTED });
       commit(state.repo, "lessons.md", "a lesson\n");
+      return state;
+    },
+  ],
+  fixNamed: [
+    "review-gate",
+    () => {
+      const state = scratchRepo({ review: true, lessons: ROUTED });
+      writeFileSync(join(state.repo, "c.txt"), "c\n");
+      git(state.repo, "add", ".");
+      git(state.repo, "commit", "-qm", "Change: the stale line, F1");
       return state;
     },
   ],
@@ -235,7 +254,7 @@ const STATES = {
     () =>
       scratchRepo({
         review:
-          "## Previous findings\n- F2 [change] b → fixed in the survey\n- F3 [change] c → ruled by the user: keep it\n- F4 [text] d → fixed elsewhere: #313's body\n- F5 [change] e → conceded: a misread\n- F6 [text] f → turned down: the owner's call\n## Findings\nF1. [change] a\n",
+          "## Previous findings\n- F2 [recheck] b → fixed in the survey\n- F3 [recheck] c → ruled by the user: keep it\n- F4 d → fixed elsewhere: #313's body\n- F5 [recheck] e → conceded: a misread\n- F6 f → turned down: the owner's call\n## Findings\nF1. [recheck] a\n",
         body: (head) =>
           prBody(
             head,
@@ -251,7 +270,7 @@ const STATES = {
     "review-gate",
     () =>
       scratchRepo({
-        review: "## Previous findings\n- F5 [text] e → held: it's real\n- F7 [text] the gate takes `conceded:` anywhere → open: still wrong\n## Findings\nF1. [change] a\nF2. [text] b\nF3. [change] c\nF4. [change] d\nF6. [text] f\nF8. [text] h\n",
+        review: "## Previous findings\n- F5 e → held: it's real\n- F7 the gate takes `conceded:` anywhere → open: still wrong\n## Findings\nF1. [recheck] a\nF2. b\nF3. [recheck] c\nF4. [recheck] d\nF6. f\nF8. h\n",
         body: (head) =>
           prBody(
             head,
@@ -264,12 +283,34 @@ const STATES = {
     Object.entries({
       uxClosed: [CLOSED_UX, (head) => `- UX review: U1 a → fixed in ${head.slice(0, 7)}\n- UX review: U2 b → turned down: the owner's call\n`],
       uxUnclosed: [CLOSED_UX, () => "- UX review: U1 a → answered: rare\n"],
-      uxOpen: [(head) => `# UX review: ${BRANCH} @ ${head}, first pass, 1 open findings (1 high)\n## Findings\nU1. [high] a\n`, () => ""],
-      uxElsewhere: [() => `# UX review: ${BRANCH} @ 0000000, first pass, 0 open findings (0 high)\n`, () => ""],
+      uxOpen: [OPEN_UX, () => ""],
+      uxFixed: [OPEN_UX, (head) => `- UX review: U1 a → fixed in ${head.slice(0, 7)}\n`],
+      // the change review's word on a U<n> closes nothing: each review's
+      // word closes only its own findings (the old gate took it)
+      uxChangeWord: [OPEN_UX, () => "- UX review: U1 a → turned down: the owner's call\n", "## Previous findings\n- U1 a → turned down: the owner's call\n"],
+      uxElsewhere: [() => `# UX review: ${BRANCH} @ 0000000, first pass, 0 to recheck\n`, () => ""],
       uxMissing: [undefined, () => ""],
-    }).map(([name, [ux, change]]) => [
+    }).map(([name, [ux, change, review = true]]) => [
       name,
-      ["review-gate", () => scratchRepo({ review: true, ux, lessons: ROUTED, body: (head) => prBody(head, `- New: nothing\n${change(head)}`, { before: BEFORE }) })],
+      ["review-gate", () => scratchRepo({ review, ux, lessons: ROUTED, body: (head) => prBody(head, `- New: nothing\n${change(head)}`, { before: BEFORE }) })],
+    ]),
+  ),
+  // a change at stakes: the critical review's findings close in the body
+  // too (red on the old gate, which read no critical review)
+  ...Object.fromEntries(
+    Object.entries({
+      criticalClosed: (head) => `- Critical review: C1 a → fixed in ${head.slice(0, 7)}\n`,
+      criticalUnclosed: () => "",
+    }).map(([name, change]) => [
+      name,
+      [
+        "review-gate",
+        () => {
+          const state = scratchRepo({ review: true, lessons: ROUTED, body: (head) => prBody(head, `- New: nothing\n${change(head)}`) });
+          write(state.repo, "critical-review", `# Critical review: feature @ ${git(state.repo, "rev-parse", "--short", "HEAD")}, diff, 1 to recheck\n## Findings\nC1. shown, sure: a\n`);
+          return state;
+        },
+      ],
     ]),
   ),
   // a survey that names its file by a short name only, and one that
@@ -307,16 +348,39 @@ const STATES = {
       return state;
     },
   ],
-  // review headers the gate must read (dotfiles#12), and one it can't;
-  // headerLateOpen: an open finding holds the PR in any round (dotfiles#45)
+  // a recheck's header, and one with no count (the form before 2026-11-26)
   ...Object.fromEntries(
     Object.entries({
-      headerAside: "round 2 (with a recheck of 037bf37), 0 open change findings",
-      headerAsideOpen: "round 2 (with a recheck of 037bf37), 1 open change findings",
-      headerLateOpen: "round 6, 1 open change findings",
-      headerRecheck: "recheck of round 2, 0 open change findings",
-      headerNoRound: "plan, 0 open change findings",
+      headerRecheck: "recheck 2, 0 to recheck",
+      headerNoCount: "round 2, 0 open change findings",
     }).map(([name, header]) => [name, ["review-gate", () => scratchRepo({ review: true, header, body: BODY })]]),
+  ),
+  // a [recheck] finding's fix, committed: the PR waits for the reviewer to
+  // read it, or for the user's ruling against the finding, which no fix
+  // ends (the body's closing takes F1 off the count), quoted from a message
+  // they typed (round 1 F30)
+  ...Object.fromEntries(
+    Object.entries({
+      owesRecheck: [(head) => `fixed in ${head.slice(0, 7)}`],
+      owesRuled: [() => 'ruled by the user: "keep it as it stands"', "fine, keep it as it stands"],
+      owesRuledUnsaid: [() => 'ruled by the user: "keep it as it stands"', "ship it"],
+      owesRuledUnquoted: [() => "ruled by the user: keep it as it stands", "fine, keep it as it stands"],
+    }).map(([name, [closing, said]]) => [
+      name,
+      ["review-gate", () => scratchRepo({ review: "## Findings\nF1. [recheck] a\n", header: "round 1, 1 to recheck", lessons: ROUTED, said, body: (head) => prBody(head, `- New: nothing\n- Review: F1 a → ${closing(head)}\n`) })],
+    ]),
+  ),
+  // `filed in #<n>` closes a later pass's `[polish]` finding, and no other:
+  // not a `[recheck]`, nor the first look's polish (round 1 F31)
+  ...Object.fromEntries(
+    Object.entries({
+      filedPolish: ["polish", "recheck 1"],
+      filedRecheck: ["recheck", "recheck 1"],
+      filedFirstLook: ["polish", "round 1"],
+    }).map(([name, [mark, pass]]) => [
+      name,
+      ["review-gate", () => scratchRepo({ review: `F1. [${mark}] a\n`, header: `${pass}, 0 to recheck`, body: (head) => prBody(head, "- New: nothing\n- Review: F1 a → filed in #12\n") })],
+    ]),
   ),
   // PR bodies out of the change skill's shape, each a part replaced (bodyMore
   // has every part, and headings in fenced code)
@@ -363,6 +427,83 @@ const STATES = {
   ],
   // agent-gate reads only the tool call
   agent: ["agent-gate", () => ({ repo: scratchDir() })],
+  // a reviewer's passes, read from the review files at the output path its
+  // prompt names (`<out>`, the folder beside the survey)
+  ...Object.fromEntries(
+    Object.entries({
+      passNone: {},
+      passPlan: { survey: "Change: a.\nExpected files: 4\n", "plan-review": "# Change review: feature @ abc1234, plan, 1 to recheck, 4 expected files\n" },
+      passPlanRedone: { survey: "Change: a.\nExpected files: 7\n", "plan-review": "# Change review: feature @ abc1234, plan, 1 to recheck, 4 expected files\n" },
+      // a later pass: a fix to recheck, and HEAD moved past the pass (abc1234
+      // is no commit here), or not; or nothing to recheck
+      passOwed: { review: "# Change review: feature @ abc1234, round 1, 2 to recheck\n" },
+      passOwedAtHead: { review: (head) => `# Change review: feature @ ${head}, round 1, 1 to recheck\n` },
+      passNothingOwed: { review: (head) => `# Change review: feature @ ${head}, recheck 1, 0 to recheck\n` },
+      // round 1 F29: a commit since the change review's last pass that names
+      // no finding, or a rebase past it (abc1234), is new work no review has
+      // read, the change-reviewer's and no other's; one naming a finding is
+      // a fix, read only while one is owed
+      passUnread: {
+        review: (head) => `# Change review: feature @ ${head}, round 1, 0 to recheck\n`,
+        "ux-review": "# UX review: feature @ abc1234, first pass, 0 to recheck\n",
+        commit: "Cleanup: a stale line",
+      },
+      passFixNamed: { review: (head) => `# Change review: feature @ ${head}, round 1, 0 to recheck\n`, commit: "Change: the stale line, F1" },
+      passRebased: {
+        review: "# Change review: feature @ abc1234, round 1, 0 to recheck\n",
+        "ux-review": "# UX review: feature @ abc1234, first pass, 0 to recheck\n",
+      },
+      // a fix the change review marks [recheck] opens the critical review's
+      // later pass too, as one at stakes is its to read
+      passCriticalOwed: {
+        review: "# Change review: feature @ abc1234, round 1, 1 to recheck\n",
+        "critical-review": "# Critical review: feature @ abc1234, diff, 0 to recheck\n",
+      },
+      passUx: { "ux-review": "# UX review: feature @ abc1234, first pass, 0 to recheck\n" },
+      // round 1 F32: one review's count opens its own reviewer and the
+      // critical-reviewer, not the other reviewers
+      passChangeOwes: {
+        review: "# Change review: feature @ abc1234, round 1, 1 to recheck\n",
+        "ux-review": "# UX review: feature @ abc1234, first pass, 0 to recheck\n",
+      },
+      passUxOwes: {
+        review: (head) => `# Change review: feature @ ${head}, round 1, 0 to recheck\n`,
+        "ux-review": "# UX review: feature @ abc1234, first pass, 1 to recheck\n",
+      },
+      // a design is fixed in place, with no commit: its own count opens its pass
+      passDesign: { "ux-review-design": "# UX review: feature @ abc1234, first pass, 1 to recheck\n" },
+      passDesignDone: { "ux-review-design": "# UX review: feature @ abc1234, pass 2, 0 to recheck\n" },
+      passCriticalPlan: { "critical-review": "# Critical review: feature @ abc1234, plan, 1 to recheck\n" },
+    }).map(([name, files]) => [
+      name,
+      [
+        "agent-gate",
+        () => {
+          const state = scratchRepo();
+          const head = git(state.repo, "rev-parse", "--short", "HEAD");
+          const { commit: message, ...kinds } = files;
+          for (const [kind, text] of Object.entries(kinds)) write(state.repo, kind, typeof text === "function" ? text(head) : text);
+          if (message) {
+            writeFileSync(join(state.repo, "c.txt"), "c\n");
+            git(state.repo, "add", ".");
+            git(state.repo, "commit", "-qm", message);
+          }
+          return { ...state, out: dirname(stateFile(state.repo, "review", BRANCH)) };
+        },
+      ],
+    ]),
+  ),
+  // the build's size cap: 1.5x the plan review's count, 1 here, is 2 files
+  capped: [
+    "survey-gate",
+    () => {
+      const state = scratchRepo();
+      commit(state.repo, "c.txt", "c\n");
+      write(state.repo, "survey", "Change: b.\nFiles: b.txt\nExpected files: 1\n");
+      write(state.repo, "plan-review", "# Change review: feature @ abc1234, plan, 0 to recheck, 1 expected files\n");
+      return { ...state, out: dirname(stateFile(state.repo, "review", BRANCH)) };
+    },
+  ],
   // process-gate reads only the command
   process: ["process-gate", () => ({ repo: scratchDir() })],
   // scratch-gate: a subagent's call, the repo standing for the session's
@@ -432,7 +573,10 @@ const CASES = [
   ["lessonUnroutedNone", "gh pr ready", /1 cost\(s\) that don't say where they went/],
   ["lessonsNone", "gh pr ready 12", NAMED],
   ["noLessons", "gh pr ready --undo", THROUGH],
-  ["staleReview", "gh pr ready", /it reviewed [0-9a-f]+, and the commits since change more than comment lines/],
+  // after the review's last pass, each commit names the finding it fixes
+  ["staleReview", "gh pr ready", /^[0-9a-f]{7} came after the change review's last pass \([0-9a-f]+\) and names no finding it fixes \(`F<n>`, `C<n>`, `U<n>`\) nor `CI`: .* run the change-reviewer on HEAD/],
+  ["fixNamed", "gh pr ready", THROUGH],
+  ["fixNamed", "gh pr ready 12", NAMED],
 
   // naming another PR: turned down
   ...NAMING.map((args) => ["ready", `gh pr ready ${args}`, NAMED]),
@@ -468,18 +612,24 @@ const CASES = [
   ["unanswered", "gh pr create --draft --body-file <body>", /F7: it says `conceded`, but the review's own word on it doesn't/],
   ["unanswered", "gh pr create --draft --body-file <body>", /F8: it says `fixed in the survey`, but the review's own word on it doesn't/],
   ["unanswered", "gh pr create --draft --body-file <body>", /F6: `answered` closes nothing/],
-  // a body with Before / after needs a UX review that leaves none open,
-  // its findings closed as the change review's (red on the old gate,
-  // which read no UX review)
+  // a body with Before / after needs a UX review, its findings closed as
+  // the change review's (red on the old gate, which read no UX review)
   ["uxClosed", "gh pr create --draft --body-file <body>", THROUGH],
   ["uxClosed", "gh pr ready", THROUGH],
   ["uxClosed", "gh pr create --draft --body-file <body> --head other", /--head other runs from feature's checkout/],
   ["uxUnclosed", "gh pr create --draft --body-file <body>", /U1: `answered` closes nothing: .*; U2: no line names it/],
-  ["uxOpen", "gh pr create --draft --body-file <body>", /needs a UX review .*isn't ready \(its last pass leaves 1 finding\(s\) open/],
-  ["uxOpen", "gh pr ready", /needs a UX review .*isn't ready \(its last pass leaves 1 finding\(s\) open/],
-  ["uxElsewhere", "gh pr create --draft --body-file <body>", /its shots are of 0000000, no commit on this branch/],
-  ["uxMissing", "gh pr create --draft --body-file <body>", /needs a UX review .*isn't ready \(missing\)/],
-  ["uxMissing", "gh pr ready", /needs a UX review .*isn't ready \(missing\)/],
+  ["uxOpen", "gh pr create --draft --body-file <body>", /U1: no line names it/],
+  ["uxOpen", "gh pr ready", /U1: no line names it\. .*Then `gh pr edit --body-file /],
+  // a [recheck] finding's fix opens a draft, and waits for its recheck to leave draft
+  ["uxFixed", "gh pr create --draft --body-file <body>", THROUGH],
+  ["uxFixed", "gh pr ready", /ux-review-feature\.md has 1 to recheck: a reviewer still owes those fixes a read/],
+  ["uxChangeWord", "gh pr create --draft --body-file <body>", /U1: it says `turned down`, but the review's own word on it doesn't/],
+  ["uxElsewhere", "gh pr create --draft --body-file <body>", /it read 0000000, no commit on this branch/],
+  ["uxMissing", "gh pr create --draft --body-file <body>", /needs its UX review, and it isn't ready \(missing\)/],
+  ["uxMissing", "gh pr ready", /needs its UX review, and it isn't ready \(missing\)/],
+  ["criticalClosed", "gh pr create --draft --body-file <body>", THROUGH],
+  ["criticalClosed", "gh pr create --draft --body-file <body> --head other", /--head other runs from feature's checkout/],
+  ["criticalUnclosed", "gh pr create --draft --body-file <body>", /C1: no line names it/],
 
   // what runs before gh: a prefix or wrapper is gated, a mention isn't
   ...[`FOO="a b"`, `FOO='a b'`, "env", "command", "time", "nohup", "exec"].map((prefix) => [
@@ -532,17 +682,62 @@ const CASES = [
   ["detached", "gh pr ready 5", NAMED],
   ["detached", "gh pr ready", THROUGH],
 
-  ["headerAside", "gh pr create --draft --body-file <body>", THROUGH],
-  ["headerAside", "gh pr create --body-file <body>", NO_LESSONS],
-  ["headerAsideOpen", "gh pr create --draft --body-file <body>", /round 2 left 1 change finding\(s\) open/],
-  ["headerLateOpen", "gh pr create --draft --body-file <body>", /round 6 left 1 change finding\(s\) open: fix them and run round 7/],
   ["headerRecheck", "gh pr create --draft --body-file <body>", THROUGH],
   ["headerRecheck", "gh pr create --body-file <body>", NO_LESSONS],
-  ["headerNoRound", "gh pr create --draft --body-file <body>", /its first line reads `# Change review: <branch> @ <short sha>, round <n>, <k> open change findings`/],
+  ["headerNoCount", "gh pr create --draft --body-file <body>", /its first line reads `# Change review: <branch> @ <short sha>, <round 1 \| recheck <n>>, <r> to recheck`/],
+  // a draft opens with a fix owed its recheck; ready waits for it, or for
+  // the user's ruling
+  ["owesRecheck", "gh pr create --draft --body-file <body>", THROUGH],
+  ["owesRecheck", "gh pr ready", /review-feature\.md has 1 to recheck: a reviewer still owes those fixes a read/],
+  ["owesRuled", "gh pr ready", THROUGH],
+  ["owesRuled", "gh pr ready 12", NAMED],
+  // the author's word alone, or the user's unquoted, isn't their ruling
+  ["owesRuledUnsaid", "gh pr ready", /F1: `ruled by the user:` closes it with the user's own words in quotes/],
+  ["owesRuledUnquoted", "gh pr ready", /F1: `ruled by the user:` closes it with the user's own words in quotes/],
+  ["filedPolish", "gh pr create --draft --body-file <body>", THROUGH],
+  ["filedPolish", "gh pr create --body-file <body>", NO_LESSONS],
+  ["filedRecheck", "gh pr create --draft --body-file <body>", /F1: `listed` and `filed in #<n>` close only a finding the review marks `\[polish\]`/],
+  ["filedFirstLook", "gh pr create --draft --body-file <body>", /F1: `listed` and `filed in #<n>` close only a later pass's `\[polish\]`/],
 
   // agent-gate: the command is the Agent call's isolation, if any
   ["agent", "worktree", /Spawn it without `isolation`/],
   ["agent", "", THROUGH],
+  // agent-gate: a reviewer's prompt (`<type>: <prompt>`); its first look
+  // runs, and a later pass only to read fixes some review marks [recheck]
+  ["passNone", "change-reviewer: round 1 of feature", /prompt names no output path/],
+  ["passNone", "change-reviewer: round 1, output <out>/review-feature.md, plan review <out>/plan-review-feature.md", THROUGH],
+  ["passNone", "ux-reviewer: shots, output <out>/ux-review-feature.md", THROUGH],
+  ["passPlan", "change-reviewer: plan, survey <out>/survey-feature.md, output <out>/plan-review-feature.md", /plan-review-feature\.md is written, and the plan review runs once/],
+  ["passPlan", "change-reviewer: round 1, output <out>/review-feature.md, plan review <out>/plan-review-feature.md", THROUGH],
+  ["passPlanRedone", "change-reviewer: plan, survey <out>/survey-feature.md, output <out>/plan-review-feature.md", THROUGH],
+  ["passOwed", "change-reviewer: recheck, output <out>/review-feature.md", THROUGH],
+  ["passOwedAtHead", "change-reviewer: recheck, output <out>/review-feature.md", /review-feature\.md already reads HEAD \([0-9a-f]+, or only comment lines since\), .*: commit the fixes first/],
+  ["passNothingOwed", "change-reviewer: recheck, output <out>/review-feature.md", /^No fix the change-reviewer reads is owed a recheck \([^,]*\/review-feature\.md: each header reads 0 to recheck/],
+  ["passUnread", "change-reviewer: recheck, output <out>/review-feature.md", THROUGH],
+  ["passUnread", "ux-reviewer: shots, output <out>/ux-review-feature.md", /^No fix the ux-reviewer reads is owed a recheck/],
+  ["passFixNamed", "change-reviewer: recheck, output <out>/review-feature.md", /^No fix the change-reviewer reads is owed a recheck/],
+  ["passChangeOwes", "change-reviewer: recheck, output <out>/review-feature.md", THROUGH],
+  ["passChangeOwes", "ux-reviewer: shots, output <out>/ux-review-feature.md", /^No fix the ux-reviewer reads is owed a recheck/],
+  ["passUxOwes", "ux-reviewer: shots, output <out>/ux-review-feature.md", THROUGH],
+  ["passUxOwes", "change-reviewer: recheck, output <out>/review-feature.md", /^No fix the change-reviewer reads is owed a recheck/],
+  ["passRebased", "change-reviewer: recheck, output <out>/review-feature.md", THROUGH],
+  ["passRebased", "ux-reviewer: shots, output <out>/ux-review-feature.md", /^No fix the ux-reviewer reads is owed a recheck/],
+  ["passCriticalOwed", "critical-reviewer: recheck, output <out>/critical-review-feature.md", THROUGH],
+  ["passUx", "ux-reviewer: shots, output <out>/ux-review-feature.md", /^No fix the ux-reviewer reads is owed a recheck/],
+  ["passUx", "ux-reviewer: design, output <out>/ux-review-design-feature.md", THROUGH],
+  ["passDesign", "ux-reviewer: design, output <out>/ux-review-design-feature.md", THROUGH],
+  ["passDesignDone", "ux-reviewer: design, output <out>/ux-review-design-feature.md", /ux-review-design-feature\.md leaves nothing to recheck/],
+  ["passCriticalPlan", "critical-reviewer: mode: diff, output <out>/critical-review-feature.md", THROUGH],
+  ["passCriticalPlan", "critical-reviewer: plan mode, output <out>/critical-review-feature.md", /critical-review-feature\.md holds the plan pass, which runs once/],
+  // whatever the files, a reviewer's prompt names its output
+  ["passPlanRedone", "critical-reviewer: diff of feature", /prompt names no output path/],
+  ["passOwed", "critical-reviewer: diff of feature", /prompt names no output path/],
+  ["passCriticalOwed", "critical-reviewer: diff of feature", /prompt names no output path/],
+  ["passDesign", "critical-reviewer: diff of feature", /prompt names no output path/],
+  // survey-gate: the build's size cap, and a reviewer's file kept to it
+  ["capped", "<repo>/b.txt", THROUGH],
+  ["capped", "<repo>/d.txt", /feature is past 1\.5x the 1 files its plan review counted \(3 with this edit, against 2;/],
+  ["capped", "<out>/review-feature.md", /is a reviewer's file/],
 
   // process-gate: a full-command-line pgrep/pkill matches its own shell (dotfiles#15)
   ...[
@@ -727,7 +922,10 @@ const CASES = [
 const TOOL_INPUT = {
   "review-gate": (command) => ({ command }),
   "survey-gate": (file_path) => ({ file_path, content: "x\n" }),
-  "agent-gate": (isolation) => ({ prompt: "x", ...(isolation && { isolation }) }),
+  "agent-gate": (call) => {
+    const [, subagent_type, prompt] = /^(\S+-reviewer): (.*)$/.exec(call) ?? [];
+    return subagent_type ? { subagent_type, prompt } : { prompt: "x", ...(call && { isolation: call }) };
+  },
   "process-gate": (command) => ({ command }),
   "scratch-gate": (call) => (call.startsWith("/") ? { file_path: call, content: "x\n" } : { command: call }),
   "reviewer-gate": (call) => (call.startsWith("/") ? { file_path: call, content: "x\n" } : { command: call }),
@@ -737,11 +935,12 @@ const TOOL_INPUT = {
 const MORE_INPUT = {
   "scratch-gate": (state) => ({ agent_id: AGENT, scratchpad_dir: state.repo }),
   "reviewer-gate": () => ({ agent_id: AGENT, agent_type: "change-reviewer" }),
+  "review-gate": (state) => (state.transcript ? { transcript_path: state.transcript } : {}),
 };
 
 // the hook's answer to the case's tool call: the deny reason, or null
 const answer = (hookName, state, command) => {
-  const filled = command.replace(/<(body|repo|outside|own)>/g, (_, name) => state[name]);
+  const filled = command.replace(/<(body|repo|outside|own|out)>/g, (_, name) => state[name]);
   const toolInput = TOOL_INPUT[hookName](filled);
   const cwd = filled.startsWith(state.outside ?? "\0") ? state.outside : state.repo;
   const ran = runHook(hookName, { tool_input: toolInput, cwd, session_id: "s", ...MORE_INPUT[hookName]?.(state) });
@@ -1068,7 +1267,7 @@ test("review-gate: a process batch merges by the agent once its log approves eve
   const BATCH = "process-batch-2026-11-19-history";
   const transcript = join(scratchDir(), "t.jsonl");
   writeFileSync(transcript, "");
-  const batch = ({ log = "- L1 yes · rule line → global CLAUDE.md · global · recommended yes\n- L2 no · hook → dotfiles · global · recommended yes\n", changes = ["Change: the vendor-guide line, L1"], header = "round 1, 0 open change findings" } = {}) => {
+  const batch = ({ log = "- L1 yes · rule line → global CLAUDE.md · global · recommended yes\n- L2 no · hook → dotfiles · global · recommended yes\n", changes = ["Change: the vendor-guide line, L1"], header = "round 1, 0 to recheck" } = {}) => {
     const repo = scratchDir();
     git(repo, "init", "-qb", "main");
     git(repo, "remote", "add", "origin", "git@github.com:CristianCrane/.dotfiles.git");
@@ -1098,7 +1297,11 @@ test("review-gate: a process batch merges by the agent once its log approves eve
   assert.match(merge(batch({ changes: ["Change: something else"] })) ?? "", NOT_APPROVED(String.raw`commit [0-9a-f]{7} names no log entry \(L<n>\)`));
   // the log commit alone: a repo's batch, whose changes are in the repo
   assert.equal(merge(batch({ changes: [] })), null);
-  assert.match(merge(batch({ header: "round 1, 2 open change findings" })) ?? "", NOT_APPROVED("its review isn't ready"));
+  assert.match(merge(batch({ header: "round 1, 2 to recheck" })) ?? "", NOT_APPROVED("its review has 2 to recheck"));
+  // a commit after the review: no reviewer has read what would merge
+  const later = batch();
+  commit(later, "d.txt", "Change: more, L1");
+  assert.match(merge(later) ?? "", NOT_APPROVED("its review is of [0-9a-f]+, and commits since change more than comment lines"));
   // a first commit that does more than add the log's entries
   const mixed = batch();
   git(mixed, "reset", "-q", "--soft", "HEAD~2");
@@ -1106,7 +1309,7 @@ test("review-gate: a process batch merges by the agent once its log approves eve
   git(mixed, "add", ".");
   git(mixed, "commit", "-qm", "log and a change, L1");
   commit(mixed, "y.txt", "Change: L1");
-  writeFileSync(stateFile(mixed, "review", BATCH), `# Change review: ${BATCH} @ ${git(mixed, "rev-parse", "--short", "HEAD")}, round 1, 0 open change findings\n`);
+  writeFileSync(stateFile(mixed, "review", BATCH), `# Change review: ${BATCH} @ ${git(mixed, "rev-parse", "--short", "HEAD")}, round 1, 0 to recheck\n`);
   assert.match(merge(mixed) ?? "", NOT_APPROVED("its first commit .* must add the run's entries to docs/process-log.md and nothing else"));
   // a first commit that rewrites a past verdict, no to yes: only adds count
   const rewrite = batch();
@@ -1117,7 +1320,7 @@ test("review-gate: a process batch merges by the agent once its log approves eve
   git(rewrite, "switch", "-qc", BATCH);
   commit(rewrite, "docs/process-log.md", "- L3 yes · hook → dotfiles · global · recommended yes\n");
   commit(rewrite, "c.txt", "Change: the hook, L3");
-  writeFileSync(stateFile(rewrite, "review", BATCH), `# Change review: ${BATCH} @ ${git(rewrite, "rev-parse", "--short", "HEAD")}, round 1, 0 open change findings\n`);
+  writeFileSync(stateFile(rewrite, "review", BATCH), `# Change review: ${BATCH} @ ${git(rewrite, "rev-parse", "--short", "HEAD")}, round 1, 0 to recheck\n`);
   assert.match(merge(rewrite) ?? "", NOT_APPROVED("its first commit .* must add the run's entries to docs/process-log.md and nothing else"));
   // named any other way, it's the user's merge as before
   for (const command of ["gh pr merge 12", "gh pr merge -R CristianCrane/.dotfiles", `gh pr merge ${BATCH}`])
@@ -2564,6 +2767,35 @@ describe("steps", () => {
     // m1 and m2 each read one thing; m10 reads two in one step
     assert.equal(profile.singleReads, 2);
   });
+
+  test("profileOf: a phase's fresh agent stages from the plan review it reads and the review it runs", () => {
+    const build = steps.profileOf(
+      [
+        ...step("m1", 1, 100, [["Read", { file_path: "/repo/.git/claude/plan-review-x.md" }]]),
+        ...step("m2", 2, 100, [["Edit", { file_path: "/repo/x.ts" }]]),
+      ],
+      cost,
+    );
+    assert.deepEqual(Object.keys(build.starts), ["plan review", "build"]);
+    const review = steps.profileOf(
+      [...step("m1", 1, 100, [["Agent", { subagent_type: "change-reviewer", prompt: "round 1, output /repo/.git/claude/review-x.md" }]])],
+      cost,
+    );
+    assert.deepEqual(Object.keys(review.starts), ["review"]);
+    // the review phase's own fixes and its critical diff pass stay review,
+    // though it read the plan review first (round-1 review F1)
+    const fixes = steps.profileOf(
+      [
+        ...step("m1", 1, 100, [["Read", { file_path: "/repo/.git/claude/plan-review-x.md" }]]),
+        ...step("m2", 2, 100, [["Agent", { subagent_type: "change-reviewer", prompt: "round 1, output /repo/.git/claude/review-x.md" }]]),
+        ...step("m3", 3, 100, [["Edit", { file_path: "/repo/x.ts" }]]),
+        ...step("m4", 4, 100, [["Agent", { subagent_type: "critical-reviewer", prompt: "mode: diff, output /repo/.git/claude/critical-review-x.md" }]]),
+      ],
+      cost,
+    );
+    assert.deepEqual(Object.keys(fixes.starts), ["plan review", "review"]);
+    assert.equal(fixes.stages.review.steps, 3);
+  });
 });
 
 // reads.mjs, the nudge when an agent's reads go one per turn, fed a
@@ -3015,9 +3247,9 @@ const leavesNoTemp = (body) => {
 };
 
 // settings-format.mjs, against the real `claude` on PATH (about 1 s a
-// format), in throwaway dirs
+// format) but for one stub, in throwaway dirs
 describe("settings-format", () => {
-  const format = (text, options) => leavesNoTemp(() => formatSettings(text, options));
+  const format = (text) => leavesNoTemp(() => formatSettings(text));
 
   test("the committed settings.json is in Claude Code's form already: formatting it changes no byte", () => {
     assert.equal(format(committed), committed);
@@ -3038,16 +3270,12 @@ describe("settings-format", () => {
     assert.equal(format(reorder(settings)), expected);
   });
 
-  test("it refuses, and throws, on invalid JSON, no entry to flip, or changed values", () => {
+  test("it refuses, and throws, on invalid JSON or no entry to flip", () => {
     assert.throws(() => format(committed.slice(0, -10)), /^Error: not valid JSON/);
     assert.throws(() => format('{"model": "opus"}'), /^Error: no enabledPlugins entry to flip/);
     assert.throws(() => format('{"enabledPlugins": {"a@b": "yes"}}'), /^Error: no enabledPlugins entry to flip/);
-    // with no migration recorded, Claude Code rewrites "opus" to
-    // "opus[1m]" on load; the same text with the migration recorded passes
-    const opus = '{"model": "opus", "enabledPlugins": {"a@b": true}}';
-    assert.throws(() => format(opus, { claudeJson: {} }), /^Error: Claude Code changed values, not only the form/);
-    assert.equal(JSON.parse(format(opus)).model, "opus");
   });
+
 
   test("the CLI formats a file in place, and leaves a file it refuses as it was", () => {
     const dir = scratchDir();
@@ -3063,6 +3291,37 @@ describe("settings-format", () => {
     assert.match(refused.stderr, /^settings-format: .*settings\.json: not valid JSON/);
     assert.equal(readFileSync(file, "utf8"), broken);
     assert.match(runHook("settings-format", undefined, { args: [] }).stderr, /Usage: node ~\/\.claude\/hooks\/settings-format\.mjs <file>/);
+  });
+
+  // a `claude` first on PATH with a migration, as 2.1.308 had: a flip in a
+  // config dir with no migrations marked as run rewrites "opus" to
+  // "opus[1m]", and `plugin list` (`migrated`) marks them; runs the CLI on
+  // a file holding "opus", the result and the file after
+  const withMigration = (migrated) => {
+    const { bin } = fakeCommand(
+      "claude",
+      `[ "$2" = list ] && { ${migrated} > "$CLAUDE_CONFIG_DIR/.claude.json"; exit 0; }
+grep -qs migrated "$CLAUDE_CONFIG_DIR/.claude.json" || sed -i 's/"opus"/"opus[1m]"/' "$CLAUDE_CONFIG_DIR/settings.json"`,
+    );
+    const file = join(scratchDir(), "settings.json");
+    writeFileSync(file, '{"model": "opus", "enabledPlugins": {"a@b": true}}');
+    const ran = leavesNoTemp((temp) =>
+      runHook("settings-format", undefined, { args: [file], env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, TMPDIR: temp } }),
+    );
+    return { ran, after: readFileSync(file, "utf8") };
+  };
+
+  test("Claude Code's migrations are marked as run before the file goes in, so a value they'd rewrite stays", () => {
+    const { ran, after } = withMigration("echo '{\"migrated\": true}'");
+    assert.equal(ran.status, 0, ran.stderr);
+    assert.equal(JSON.parse(after).model, "opus");
+  });
+
+  test("the CLI refuses a file whose values Claude Code changes anyway, and leaves it as it was", () => {
+    const { ran, after } = withMigration("echo '{}'");
+    assert.equal(ran.status, 1);
+    assert.match(ran.stderr, /^settings-format: .*settings\.json: Claude Code changed values, not only the form/);
+    assert.equal(after, '{"model": "opus", "enabledPlugins": {"a@b": true}}');
   });
 });
 

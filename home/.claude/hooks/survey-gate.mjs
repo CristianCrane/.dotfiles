@@ -6,9 +6,11 @@
 // git doesn't ignore is turned down: a change there reaches main by PR, so
 // it starts on a branch (lib's beforeEdit). Edits outside a checkout, inside the git dir (where
 // those files live) and on a detached HEAD or a prototype branch (lib's
-// prototypeBranch) go through.
+// prototypeBranch) go through, but for a review file, which only its
+// reviewer writes: its header holds the passes agent-gate counts and the
+// file count the build's size cap reads (lib's passOf).
 import { existsSync, readFileSync } from "node:fs";
-import { beforeEdit, cwdFor, deny, hook, inGitDir, workOf } from "./lib.mjs";
+import { beforeEdit, cwdFor, deny, hook, inGitDir, reviewFiles, workOf } from "./lib.mjs";
 
 // the file's text once this edit is made: Write's content, or Edit's and
 // MultiEdit's replacements applied to the file as it is
@@ -24,7 +26,11 @@ hook((input) => {
   const path = input.tool_input?.file_path ?? input.tool_input?.notebook_path;
   if (!path) return;
   const cwd = cwdFor(input);
-  if (inGitDir(cwd, path)) return;
+  if (inGitDir(cwd, path)) {
+    if (reviewFiles(path).length && !/-reviewer$/.test(input.agent_type ?? ""))
+      return deny(`${path} is a reviewer's file: only its reviewer writes it. Give your case against a finding in the prompt of that reviewer's next pass, or, with none owed, to the user, whose ruling closes it, as the \`change\` skill's Review says.`);
+    return;
+  }
   const work = workOf(cwd, input);
   if (!work) return;
 

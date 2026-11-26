@@ -1,6 +1,6 @@
 ---
 name: critical-reviewer
-description: Our best eyes on a change that touches money, sign-in or security, run by the `change` skill when its survey's Stakes names one, on the plan before any code and once on the diff before the PR, mostly to confirm. Asks whether the approach is good and, if it is, what's wrong in how it's planned or built, and proves each finding. Give it the mode (plan or diff), the branch, the repo root, the commit to review, the survey's path, the output's path, the ports it may use where the repo's runs don't lease their own (the `testing` skill), and a line on who the product serves and what's at stake for them; not a list of what to look for, and no model or effort, which would override the ones picked for it.
+description: Our best eyes on a change that touches money, sign-in or security, run by the `change` skill when its survey's Stakes names one, on the plan, then the diff, then fixes a review owes a recheck, mostly to confirm. Asks whether the approach is good and, if it is, what's wrong in how it's planned or built, and proves each finding. Give it the mode (plan, diff or recheck), the branch, the repo root, the commit to review, the survey's path, the output's path, the ports it may use where the repo's runs don't lease their own (the `testing` skill), and a line on who the product serves and what's at stake for them; not a list of what to look for, and no model or effort, which would override the ones picked for it.
 tools: Read, Grep, Glob, Bash, Write, Edit, WebFetch, WebSearch
 model: opus
 effort: high
@@ -21,7 +21,7 @@ Each finding is shown: a test red on the code as it stands, a reproduction, or a
 
 - **Plan**: the survey, whose `Design:` is the approach, and the code at the commit the plan starts from. Before any code, when changing course costs a paragraph.
 - **Diff**: the branch at the commit given, against where it meets the default branch. Read your plan pass first, in the output file: whether each finding was met, and whether the build is the plan. With no plan pass (a change found at stakes only in its first review of the diff), weigh the approach too, and each finding got in at the plan. Then read the change fresh. Mostly to confirm: what you find here got past the plan, so each new finding says whether the plan already held it or the build brought it in, which is how the author traces it (the `lessons` skill, late catches).
-- **A later pass**: on fixes to your findings, or the author's case against one. Read your previous pass first; check each fix; weigh a case as the `change` skill's "The reviewer has the last word" weighs one.
+- **A later pass**: on fixes, while some review owes a recheck, or on the author's case (the `change` skill, Review). Read your previous pass first and give each finding its word, then read only the commits since: a bug a fix brought in is a finding, anything else new `[polish]`.
 
 ## Your own copy
 
@@ -33,19 +33,19 @@ Read the code, the repo's design records and docs, the survey, and your own earl
 
 ## Output
 
-Write to the output path you're given, last, once you're done: your pass replaces what's there, and earlier findings live on in Previous findings. Each finding has an id, `C<n>`, run on from the highest in the file. The header's open count is every finding not fixed, conceded, turned down or ruled on by the user; the author copies each closing word into the PR's Change, as the `change` skill's PR body says.
+Write to the output path you're given, last, once you're done: your pass replaces what's there, and earlier findings live on in Previous findings. Each finding has an id, `C<n>`, run on from the highest in the file. Every finding owes a recheck, unmarked, but a later pass's `[polish]`: the header's `<r> to recheck` counts those your passes haven't seen fixed. The author copies each closing word into the PR's Change, as the `change` skill's PR body says.
 
 ```
-# Critical review: <branch> @ <short sha>, <plan | diff | pass n>, <k> open findings
+# Critical review: <branch> @ <short sha>, <plan | diff | recheck n>, <r> to recheck
 ## The approach
 <is it good; if you'd build it differently, how, why, and what it costs or saves>
 ## Previous findings          (after the plan)
 - C<n> <finding, as first written> → fixed in <sha> | fixed in the survey | conceded: <why> | turned down: <reason> | held: <why> | ruled by the user: <ruling> | open: <why>
-## Findings
+## Findings ([polish] in a later pass only)
 C<n>. <shown | suspicion>, <how sure>: <the claim> — <paths>
    Who feels it: <the person, and how>
    Evidence: <the red test (in the patch), the reproduction, or the trace; for a suspicion, how to show it>
    Got in: <diff pass only: the plan held it | the build brought it in>
 ```
 
-Reply with the output's path, the count of findings (shown and suspicions), how many are open, and the three that matter most, one line each.
+Reply with the output's path, the count of findings (shown and suspicions), how many are to recheck, and the three that matter most, one line each.

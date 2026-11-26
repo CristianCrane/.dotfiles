@@ -1,17 +1,19 @@
 // `gh pr create` waits for the branch's change review (the `change` skill):
 // it is turned down until the review exists (a dictated change that holds
-// has none: lib's dictatedHolds), is of the last commit (or
-// of one before it with only comment lines changed since) and leaves no
-// change finding open, and until the PR body, read
-// from its file, is in the skill's shape (its parts, Check these's
-// permalinks, Change collapsed, nothing else) and closes every finding of
-// that review in its Change section, as fixed or in the review's own word
-// on it. A body with Before / after also needs the branch's UX review, its
-// last pass of a commit on the branch leaving no finding open, and closes
-// its findings the same way. A PR leaves draft (`gh pr ready`, or `gh pr
-// create` without `--draft`) once the branch's lessons file (the `lessons`
-// skill) says where every cost went, the review is still of the last
-// commit, and a UX review its body needs still leaves none open.
+// has none: lib's dictatedHolds) with a valid header, of a commit on the
+// branch, and until the PR body, read from its file, is in the skill's
+// shape (its parts, Check these's permalinks, Change collapsed, nothing
+// else) and closes in its Change section every finding of that review, of
+// the UX review (which a body with Before / after needs) and of the
+// critical review: as fixed, as `listed` or `filed in #<n>` for one marked
+// `[polish]`, as the user ruled in words they typed, or in the review's
+// own word on it, each review's for its own findings. A PR leaves draft (`gh pr ready`, or
+// `gh pr create` without `--draft`) once, besides that (notReady), no
+// review owes a fix its recheck (a header's `<r> to recheck` above 0, less
+// what the user ruled on), the change review has read every commit since
+// its last pass that names no finding it fixes nor CI (lib's unreadSince),
+// and the branch's lessons file (the `lessons` skill) says where every
+// cost went.
 // The closing check is the backstop for the reviewer's last word (the
 // change skill, Review), not a rule of its own: in words alone, the
 // principle failed three times in two days, builders answering UX
@@ -25,11 +27,13 @@
 // this session asks to merge that number. The one exception is a process
 // batch (lib's processBatch; the dotfiles' docs/process.md, Landing),
 // whose approval is the user's verdicts in its log: run bare from its own
-// checkout, it merges once its review leaves no change finding open, its
-// first commit only adds log entries, and every later commit names one of
-// them (`L<n>`) with a yes or edit verdict (batchUnapproved). Another
-// repo's merges go through. What it can't hold: a message that negates the ask ("don't
-// merge #12"), and a merge by any other route (`gh api`, the web).
+// checkout, it merges once its review reads HEAD and owes no recheck (so a
+// reviewer has read every fix the agent would merge), its first commit
+// only adds log entries, and every later commit names one of them (`L<n>`)
+// with a yes or edit verdict (batchUnapproved). Another repo's merges go
+// through. What it can't hold:
+// a message that negates the ask ("don't merge #12"), and a merge by any
+// other route (`gh api`, the web).
 //
 // It reads Bash and Monitor commands alike (settings.json registers it on
 // `Bash|Monitor`): a Monitor runs its command in a shell too, so a
@@ -48,6 +52,7 @@ import {
   lines,
   masked,
   onBranch,
+  passOf,
   positional,
   processBatch,
   prArgs,
@@ -55,8 +60,11 @@ import {
   prStep,
   review,
   stateFile,
+  stillHead,
   unquote,
+  unreadSince,
   userMessages,
+  userTyped,
   WORD,
   workOf,
 } from "./lib.mjs";
@@ -178,23 +186,58 @@ const shapeOf = (text, cwd) => {
 // are read after their last →, as a finding's text before it can quote
 // one of the words (dotfiles review F13, 2026-11-23)
 const REVIEWERS_WORDS = ["fixed in the survey", "fixed elsewhere", "conceded", "turned down", "ruled by the user"];
+// the user outranks the reviewer: a case put to them, when no pass of the
+// reviewer runs to weigh it, closes by their ruling in the body alone,
+// quoted (`ruled by the user: "<their words>"`) from a message they typed
+// in this session (lib's userTyped, as a dictated survey's quote is): the
+// author's word alone ended a `[recheck]` finding with no fix and no
+// reader (round 1 F30)
+const RULED = "ruled by the user";
+const userRuled = (line, transcript) => {
+  const words = line.match(/^ruled by the user:\s*"([^"]{8,})"/)?.[1];
+  try {
+    return Boolean(words && transcript && userTyped(transcript, words));
+  } catch {
+    return false;
+  }
+};
+// a later pass's polish, marked `[polish]` in the review, needs no fix: it
+// closes on the body's list (`listed`) or in an issue (the `change` skill's
+// Review, 2026-11-26). Only a later pass's (its header's `recheck <n>` or
+// `pass <n>`): the first look's file is most changes' last, and its polish
+// is fixed (round 1 F31)
+const POLISH = /^(?:listed|filed in #\d+)\b/;
+const laterPass = (path) => {
+  const pass = passOf(path);
+  return Boolean(pass?.recheck || pass?.pass);
+};
 const closingOf = (line) => line.split("→").at(-1).trim();
 const wordOf = (line) => REVIEWERS_WORDS.find((word) => closingOf(line).startsWith(word));
 
-// why no line of the Change section closes finding `id` of the review
-// `text`, or null when one does: `fixed in <sha>` (a commit on this
-// branch), or the review's own word on it (`fixed in the survey` among
-// them). `answered:` closed one until 2026-11-23, when
-// builders answered real findings away (empire-cleaning #527, #536, #538)
-const unclosed = (cwd, section, id, text) => {
+// why no line of the Change section closes finding `id` of `review` (its
+// path and text), or null when one does: `fixed in <sha>` (a commit on
+// this branch), `listed` or `filed in #<n>` for a later pass's `[polish]`
+// finding, the user's ruling in their words (userRuled), or the review's
+// own word on it (`fixed in the survey` among them). `answered:` closed
+// one until 2026-11-23, when builders answered real findings away
+// (empire-cleaning #527, #536, #538)
+const unclosed = (cwd, section, id, review, transcript) => {
   const named = section.filter((line) => new RegExp(`\\b${id}\\b`).test(line));
   if (!named.length) return "no line names it";
-  const words = lines(text)
+  const words = lines(review.text)
     .filter((line) => line.includes("→") && new RegExp(`^(?:- )?${id}\\b`).test(line))
     .map(wordOf);
   const whys = named.map((named) => {
     const line = closingOf(named);
+    if (POLISH.test(line)) {
+      if (!lines(review.text).some((line) => new RegExp(`^(?:- )?${id}\\b.*\\[polish\\]`).test(line)))
+        return "`listed` and `filed in #<n>` close only a finding the review marks `[polish]`: fix this one";
+      return laterPass(review.path) ? null : "`listed` and `filed in #<n>` close only a later pass's `[polish]` (its header's `recheck <n>` or `pass <n>`), and the first look's are fixed: fix this one";
+    }
     const word = wordOf(line);
+    if (word === RULED && userRuled(line, transcript)) return null;
+    if (word === RULED && !words.includes(word))
+      return "`ruled by the user:` closes it with the user's own words in quotes (`ruled by the user: \"<their words>\"`, 8 characters or more), as they typed them in this session, and the review's own word on it doesn't say it either";
     if (word)
       return words.includes(word)
         ? null
@@ -205,38 +248,100 @@ const unclosed = (cwd, section, id, text) => {
       return "it says fixed, but in no commit on this branch: a fix to the survey's text is `fixed in the survey`, one anywhere else (an issue, a comment) is `fixed elsewhere: <where>`, as the review says";
     if (/\banswered\b/.test(line))
       return "`answered` closes nothing: a finding is `fixed in <sha>`, or takes the review's own word on it (`fixed in the survey`, `fixed elsewhere:`, `conceded:`, `turned down:`, `ruled by the user:`)";
-    return "its line says neither `fixed in` nor the review's own word on it";
+    return "its line says neither `fixed in`, `listed` or `filed in #<n>` for a `[polish]` finding, `ruled by the user:`, nor the review's own word on it";
   });
   return whys.includes(null) ? null : whys[0];
 };
 
-// the branch's UX review (the `change` skill, Review), which a PR body
-// with Before / after needs: its last pass of a commit on the branch, and
-// leaving no finding open. Not of HEAD: a pass per commit that changes no
-// screen (a test, a type) would re-read the ui skill and the repo's UX docs
-const uxReview = (cwd, work) => {
-  const path = stateFile(cwd, "ux-review", work.key);
-  if (!existsSync(path)) return { path, reason: "missing" };
+// a finding's ids in a review's text, by its letter
+const idsOf = (text, letter) => [...new Set([...text.matchAll(new RegExp(`^(?:- )?(${letter}\\d+)\\b`, "gm"))].map((id) => id[1]))];
+
+// the UX or critical review beside the change review: a valid header, of a
+// commit on the branch, or why not; null with no file
+const otherReview = (cwd, work, kind, title, letter, pass) => {
+  const path = stateFile(cwd, kind, work.key);
+  if (!existsSync(path)) return null;
   const text = readFileSync(path, "utf8");
-  const header = text.match(/^# UX review:.* @ ([0-9a-f]{7,40}),.*?\b(\d+) open finding/m);
-  if (!header)
-    return {
-      path,
-      reason: "its header has no commit and open count: its first line reads `# UX review: <branch> @ <the shots' commit>, <first pass | pass n>, <k> open findings (<h> high)`",
-    };
-  if (!onBranch(cwd, header[1])) return { path, reason: `its shots are of ${header[1]}, no commit on this branch` };
-  if (Number(header[2]))
-    return { path, reason: `its last pass leaves ${header[2]} finding(s) open: fix them, take new shots and run a later pass` };
-  return { path, ok: true, text, ids: [...new Set([...text.matchAll(/^(?:- )?(U\d+)\b/gm)].map((id) => id[1]))] };
+  const { head, sha, toRecheck } = passOf(path);
+  if (!new RegExp(`^# ${title}:`).test(head) || !sha || toRecheck === null)
+    return { path, reason: `its header has no commit and count: its first line reads \`# ${title}: <branch> @ <short sha>, ${pass}, <r> to recheck\`` };
+  if (!onBranch(cwd, sha)) return { path, reason: `it read ${sha}, no commit on this branch` };
+  return { path, ok: true, text, ids: idsOf(text, letter), toRecheck };
+};
+// the branch's UX review, which a PR body with Before / after needs, and
+// the critical review, when the change is at stakes (it went unread here
+// until 2026-11-25)
+const uxReview = (cwd, work) => otherReview(cwd, work, "ux-review", "UX review", "U", "<first pass | pass <n>>") ?? { path: stateFile(cwd, "ux-review", work.key), reason: "missing" };
+const criticalReview = (cwd, work) => otherReview(cwd, work, "critical-review", "Critical review", "C", "<plan | diff | recheck <n>>");
+
+// a review not ready, in words for a turn-down
+const otherNotReady = (other, branch) =>
+  other.path.includes("/ux-review-")
+    ? `The PR body has **Before / after:**, so ${branch} needs its UX review, and it isn't ready (${other.reason}), with output ${other.path}: run the \`ux-reviewer\` agent as the \`change\` skill's Review step says.`
+    : `${branch}'s critical review (${other.path}) isn't ready (${other.reason}): finish it as the \`change\` skill's Review step says.`;
+
+// the reviews whose findings the body closes: the change review's, the
+// critical review's, and with Before / after (or once it exists) the UX
+// review's; or why one isn't ready
+const reviewsOf = (cwd, work, found, seen) => {
+  const ux = seen || existsSync(stateFile(cwd, "ux-review", work.key)) ? uxReview(cwd, work) : null;
+  const others = [ux, criticalReview(cwd, work)].filter(Boolean);
+  const bad = others.find((other) => !other.ok);
+  return bad ? { why: otherNotReady(bad, work.branch) } : { reviews: [found, ...others] };
 };
 
-// a UX review not ready, in words for a turn-down
-const uxNotReady = (ux, branch) =>
-  `The PR body has **Before / after:**, so ${branch} needs a UX review whose last pass leaves no finding open, and it isn't ready (${ux.reason}), with output ${ux.path}: run the \`ux-reviewer\` agent as the \`change\` skill's Review step says.`;
+// why the body's Change section doesn't close every finding, if it
+// doesn't. Each review's word closes only its own findings: a reviewer
+// weighs the cases against what it found (the `change` skill's Review)
+const unclosedAll = (cwd, work, found, body, section, seen, transcript) => {
+  const { why, reviews } = reviewsOf(cwd, work, found, seen);
+  if (why) return why;
+  const open = reviews
+    .flatMap((one) => one.ids.map((id) => [id, unclosed(cwd, section, id, one, transcript)]))
+    .flatMap(([id, why]) => (why ? [`${id}: ${why}`] : []));
+  if (open.length)
+    return `The PR body's Change section (${body}) doesn't close every finding of ${reviews.map((one) => one.path).join(" and ")}: ${open.join("; ")}. Each finding gets its own line ending \`fixed in <sha>\` (a commit on this branch), \`listed\` or \`filed in #<n>\` for a \`[polish]\` finding, \`ruled by the user: "<their words>"\`, or the review's own word on it, after its line's last → (\`fixed in the survey\`, \`fixed elsewhere:\`, \`conceded:\`, \`turned down:\`).`;
+};
+
+// the fixes a review still owes a recheck: its header's `<r> to recheck`,
+// less each one the body closes by the user's ruling in their words (a
+// case with no pass left to weigh it), as its fix needs no read. Open is a
+// `[recheck]` finding (every critical one but a `[polish]`) with no word
+// after its last →, or one that says it still stands (`open`, `held`,
+// `reopened`)
+const owedOf = (one, section, transcript) => {
+  const every = one.path.includes("/critical-review-");
+  const ruled = one.ids.filter((id) => {
+    const line = lines(one.text).find((line) => new RegExp(`^(?:- )?${id}\\b`).test(line)) ?? "";
+    const open = (every ? !line.includes("[polish]") : line.includes("[recheck]")) && (!line.includes("→") || /^(?:open|held|reopened)\b/.test(closingOf(line)));
+    return open && (section ?? []).some((named) => new RegExp(`\\b${id}\\b`).test(named) && userRuled(closingOf(named), transcript));
+  });
+  return Math.max(0, one.toRecheck - ruled.length);
+};
+
+// why the PR can't leave draft (`gh pr ready`, or a create without
+// `--draft`), beside its body's closings (unclosedAll), if it can't: a
+// review owes a fix its recheck, a commit since the change review's last
+// pass names no finding it fixes (nor CI, which rests on trust), or the
+// lessons are missing. A commit that fixes nothing is new work, which the
+// change-reviewer reads (agent-gate lets it through)
+const notReady = (cwd, work, found, section, seen, transcript) => {
+  const { why, reviews } = reviewsOf(cwd, work, found, seen);
+  if (why) return why;
+  const owing = reviews.filter((one) => owedOf(one, section, transcript) > 0);
+  if (owing.length)
+    return `${owing.map((one) => `${one.path} has ${owedOf(one, section, transcript)} to recheck`).join("; ")}: a reviewer still owes those fixes a read. Commit each fix, naming the finding, and run that reviewer's next pass (the \`change\` skill's Review); a case against one goes to the user, and the body closes it \`ruled by the user: "<their words>"\`, as they typed them.`;
+  if (found.sha) {
+    const unnamed = unreadSince(cwd, found.sha);
+    if (unnamed.length)
+      return `${unnamed.map((sha) => sha.slice(0, 7)).join(", ")} came after the change review's last pass (${found.sha}) and name${unnamed.length === 1 ? "s" : ""} no finding it fixes (\`F<n>\`, \`C<n>\`, \`U<n>\`) nor \`CI\`: name the finding a fix fixes in its message (\`git commit --amend\` or a reword); a commit that fixes none is new work no review has read, so run the change-reviewer on HEAD (the \`change\` skill's Review).`;
+  }
+  return lessonsMissing(cwd, work);
+};
 
 // gh pr create: the PR's branch (not a prototype, and the one checked
-// out), then the review, the body's shape and its Change section, and its
-// lessons unless it opens as a draft. The branch is settled before a
+// out), then the review, the body's shape and its Change section, and
+// notReady unless it opens as a draft. The branch is settled before a
 // checkout with no work to gate (a detached HEAD, a prototype) stands
 // aside, so neither opens another branch's PR unchecked
 const createGate = (command, hidden, match, input) => {
@@ -255,6 +360,7 @@ const createGate = (command, hidden, match, input) => {
   const work = workOf(cwd, input);
   if (!work) return;
 
+  const draft = /(?:^|\s)(?:--draft|-d)(?=\s|=|$)/.test(argsOf(hidden, end));
   const found = review(cwd, work, input);
   if (!found.ok)
     return turnDownCreate(
@@ -273,27 +379,17 @@ const createGate = (command, hidden, match, input) => {
     return turnDownCreate(
       `The PR body (${body}) isn't in the shape the \`change\` skill's PR body step gives: ${problems.join("; ")}.`,
     );
-  // each finding closed: the change review's, and with Before / after the
-  // UX review's, which must leave none open
-  const ux = seen ? uxReview(cwd, work) : null;
-  if (ux && !ux.ok) return turnDownCreate(uxNotReady(ux, work.branch));
-  const open = [
-    ...found.ids.map((id) => [id, unclosed(cwd, section, id, found.text)]),
-    ...(ux?.ids ?? []).map((id) => [id, unclosed(cwd, section, id, ux.text)]),
-  ].flatMap(([id, why]) => (why ? [`${id}: ${why}`] : []));
-  if (open.length)
-    return turnDownCreate(
-      `The PR body's Change section (${body}) doesn't close every finding of the last change review (${found.path})${ux ? ` and UX review (${ux.path})` : ""}: ${open.join("; ")}. Each finding gets its own line ending \`fixed in <sha>\` (a commit on this branch) or the review's own word on it, after its line's last → (\`fixed in the survey\`, \`fixed elsewhere:\`, \`conceded:\`, \`turned down:\`, \`ruled by the user:\`).`,
-    );
+  const why = unclosedAll(cwd, work, found, body, section, seen, input.transcript_path);
+  if (why) return turnDownCreate(why);
 
-  if (/(?:^|\s)(?:--draft|-d)(?=\s|=|$)/.test(argsOf(hidden, end))) return;
-  const missing = lessonsMissing(cwd, work);
-  if (missing) return turnDownCreate(`${missing} Or open it as a draft (\`--draft\`) and mark it ready once they're written.`);
+  if (draft) return;
+  const unready = notReady(cwd, work, found, section, seen, input.transcript_path);
+  if (unready) return turnDownCreate(`${unready} Or open it as a draft (\`--draft\`) and mark it ready once that's done.`);
 };
 
-// gh pr ready, run bare from the PR's own checkout: its review still of the
-// last commit, and its lessons. --undo puts a PR back in draft, which waits
-// for nothing
+// gh pr ready, run bare from the PR's own checkout: the review, the body's
+// closings as edited onto the PR, and notReady. --undo puts a PR back in
+// draft, which waits for nothing
 // a `gh pr <step>` and where it runs: its own arguments, whether it names
 // the repo elsewhere, its checkout, and whether it's bare. A bare one acts
 // on the PR of the branch checked out where it runs, so a gate can read
@@ -323,24 +419,22 @@ const readyGate = (command, hidden, match, input) => {
   const work = workOf(cwd, input);
   if (!work) return;
 
-  // the review still holds: of the last commit, so a commit since it got
-  // its recheck
   const found = review(cwd, work, input);
   if (!found.ok)
     return turnDown(
-      `The change review for ${work.branch} isn't ready (${found.reason}), with output ${found.path}: finish it as the \`change\` skill's Review step says (after a commit since the review, that's its recheck), then mark the PR ready.`,
+      `The change review for ${work.branch} isn't ready (${found.reason}), with output ${found.path}: finish it as the \`change\` skill's Review step says, then mark the PR ready.`,
       "ready",
     );
 
-  // a later UX pass may have found more since the PR opened
+  // a later pass may have found more since the PR opened: the body, as
+  // edited onto the PR (`gh pr edit --body-file`), closes it too
   const body = stateFile(cwd, "pr-body", work.key);
-  if (existsSync(body) && shapeOf(readFileSync(body, "utf8"), cwd).seen) {
-    const ux = uxReview(cwd, work);
-    if (!ux.ok) return turnDown(uxNotReady(ux, work.branch), "ready");
-  }
+  const { section, seen } = existsSync(body) ? shapeOf(readFileSync(body, "utf8"), cwd) : {};
+  const why = section && unclosedAll(cwd, work, found, body, section, seen, input.transcript_path);
+  if (why) return turnDown(`${why} Then \`gh pr edit --body-file ${body}\`, as its own command.`, "ready");
 
-  const missing = lessonsMissing(cwd, work);
-  if (missing) return turnDown(missing, "ready");
+  const unready = notReady(cwd, work, found, section, seen, input.transcript_path);
+  if (unready) return turnDown(unready, "ready");
 };
 
 // gh pr merge's flags that take a value, so the value is no PR
@@ -393,7 +487,9 @@ const mergeGate = (command, hidden, match, input) => {
 const PROCESS_LOG = "docs/process-log.md";
 
 // why a process batch's PR can't merge without the user, if it can't: its
-// review isn't clean, or its commits aren't the verdicts its log adds (the
+// review doesn't read HEAD (or only comment lines since) or owes a fix its
+// recheck, so no reviewer has read what would merge, or its commits aren't
+// the verdicts its log adds (the
 // first commit adds them and nothing else; every later one names one, and
 // only ones the user said yes to or edited). The log commit alone merges:
 // a repo's batch has its entries here and its changes there, and a branch
@@ -405,6 +501,8 @@ const batchUnapproved = (cwd, input) => {
   if (!found.ok) return `its review isn't ready (${found.reason})`;
   // a dictated change passes review() with no review file
   if (!existsSync(found.path)) return "it has no review of its own";
+  if (!stillHead(cwd, found.sha)) return `its review is of ${found.sha}, and commits since change more than comment lines: run the change-reviewer's recheck on HEAD`;
+  if (found.toRecheck) return `its review has ${found.toRecheck} to recheck: fix them, and run the change-reviewer's recheck`;
   const commits = lines(git(cwd, "rev-list", "--reverse", "--no-merges", `${base(cwd)}..HEAD`));
   if (!commits.length) return "it has no commits";
   const [first, ...changes] = commits;
