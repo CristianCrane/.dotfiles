@@ -542,6 +542,9 @@ const STATES = {
         Object.entries({
           uxScreen: ["Change: Home's alert, F2", "Home.tsx", "export const a = 2;\n"],
           uxWords: ["Change: the alert's words", "messages/home.ts", "export const a = 'b';\n"],
+          // round 1 F5: a words file by its name, and a screens folder above its parent
+          uxEmails: ["Change: the bill's email", "features/bills/emails.ts", "export const a = 'b';\n"],
+          uxDeepScreen: ["Change: the card's words", "screens/portal/whats-next.ts", "export const a = 'b';\n"],
           uxLogic: ["Change: the price rule", "price.ts", "export const a = 1;\n"],
           uxFixNamed: ["Change: Home's alert, U1", "Home.tsx", "export const a = 2;\n"],
           uxComment: ["Cleanup: why the alert waits", "Home.tsx", "// why\nexport const a = 1;\n"],
@@ -827,6 +830,8 @@ const CASES = [
   ["passUx", "ux-reviewer: shots, output <out>/ux-review-feature.md", /^No fix the ux-reviewer reads is owed a recheck/],
   ["uxScreen", "ux-reviewer: shots, output <out>/ux-review-feature.md", THROUGH],
   ["uxWords", "ux-reviewer: shots, output <out>/ux-review-feature.md", THROUGH],
+  ["uxEmails", "ux-reviewer: shots, output <out>/ux-review-feature.md", THROUGH],
+  ["uxDeepScreen", "ux-reviewer: shots, output <out>/ux-review-feature.md", THROUGH],
   ["uxOldHeader", "ux-reviewer: shots, output <out>/ux-review-feature.md", THROUGH],
   ["uxRebased", "ux-reviewer: shots, output <out>/ux-review-feature.md", THROUGH],
   ...["uxLogic", "uxFixNamed", "uxComment", "uxTest"].map((state) => [state, "ux-reviewer: shots, output <out>/ux-review-feature.md", /^No fix the ux-reviewer reads is owed a recheck .*, and no commit since its shots changes what a person sees/]),
@@ -840,7 +845,7 @@ const CASES = [
   ["passOwed", "critical-reviewer: diff of feature", /prompt names no output path/],
   ["passCriticalOwed", "critical-reviewer: diff of feature", /prompt names no output path/],
   ["passDesign", "critical-reviewer: diff of feature", /prompt names no output path/],
-  ...["uxScreen", "uxWords", "uxOldHeader", "uxRebased"].map((state) => [state, "ux-reviewer: shots of feature", /prompt names no output path/]),
+  ...["uxScreen", "uxWords", "uxEmails", "uxDeepScreen", "uxOldHeader", "uxRebased"].map((state) => [state, "ux-reviewer: shots of feature", /prompt names no output path/]),
   // survey-gate: the build's size cap, and a reviewer's file kept to it
   ["capped", "<repo>/b.txt", THROUGH],
   ["capped", "<repo>/d.txt", /feature is past 1\.5x the 1 files its plan review counted \(3 with this edit, against 2;/],

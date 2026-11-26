@@ -727,14 +727,18 @@ export const unreadSince = (cwd, sha, fixes = /\b(?:[FCU]\d+|CI)\b/) => {
     .filter((one) => !on || !fixes.test(git(cwd, "log", "-1", "--format=%B", one)));
 };
 
-// a file that changes what a person sees: one a page is drawn from (its
-// markup, styles), or source whose path names screens or their words, as
-// a server message or an email's text lives in .ts (empire-cleaning's
-// whats-next.ts, messages/quotes.ts, emails.ts: 48 of 508 such commits
-// since 2026-11-10 touched only those). Not a test, story or shot spec.
-// Logic alone draws nothing: those commits were 620 more
-const SEEN = /\.(tsx|jsx|vue|svelte|astro|html|css|scss|sass|less|mdx)$|(^|\/)(screens?|pages?|components?|views?|layouts?|messages?|emails?|copy|i18n|locales?)(\/|\.)[^/]*\.[cm]?[jt]s$/;
+// whether a file changes what a person sees: one a page is drawn from
+// (its markup, styles), or source with a folder or a name for screens or
+// their words, as a server message or an email's text lives in .ts
+// (empire-cleaning's screens/portal/whats-next.ts, messages/quotes.ts,
+// features/bills/emails.ts). Not a test, story or shot spec. Of
+// empire-cleaning's commits since 2026-11-10 beyond tests and docs, 459
+// change a drawn file, 48 more only such words, and 623 only logic, which
+// opens no pass (round 1 F5)
+const DRAWN = /\.(tsx|jsx|vue|svelte|astro|html|css|scss|sass|less|mdx)$/;
+const WORDS = /(^|\/)(screens?|pages?|components?|views?|layouts?|messages?|emails?|words|labels|copy|i18n|locales?)(\/|\.[cm]?[jt]s$)/;
 const UNSEEN = /(^|\/)(e2e|tests?|__tests__)\/|\.(test|spec|stories|shots)\.[^/]+$/;
+export const seen = (file) => !UNSEEN.test(file) && (DRAWN.test(file) || (/\.[cm]?[jt]s$/.test(file) && WORDS.test(file)));
 
 // the commits a UX review of the shots at `sha` hasn't seen: those of
 // unreadSince's that name no `U<n>` (a UX fix is a recheck, read only
@@ -745,7 +749,7 @@ export const unseenScreens = (cwd, sha) =>
   unreadSince(cwd, sha, /\bU\d+\b/).filter(
     (one) =>
       !commentOnly(cwd, `${one}^`, one) &&
-      lines(git(cwd, "diff-tree", "-r", "--cc", "--name-only", "--no-commit-id", one)).some((file) => SEEN.test(file) && !UNSEEN.test(file)),
+      lines(git(cwd, "diff-tree", "-r", "--cc", "--name-only", "--no-commit-id", one)).some(seen),
   );
 
 // the reviewer's read of the diff: a valid header ("… @ <sha>, round 1 |
