@@ -3031,13 +3031,14 @@ describe("steps", () => {
       ["Bash", { command: "git show origin/main:docs/ux.md | head" }, ["/r/docs/ux.md"]],
       ["Bash", { command: "rg -n x --glob '*.md' docs" }, []],
       // review F14: a path a variable or a substitution builds names nothing; a
-      // search's pattern is no path; an interpreter's program is read
+      // search's pattern is no path; the program of an interpreter a reader
+      // pipes into is read (a call led by one: steps' reads)
       ["Bash", { command: "cat $D/survey-x.md ${D}/b.md" }, []],
       ["Bash", { command: 'cat "$(git rev-parse --git-dir)/docs/ux.md" `pwd`/a.md' }, []],
       ["Bash", { command: "rg 'see docs/ux.md' docs/testing.md" }, ["/r/docs/testing.md"]],
       ["Bash", { command: "rg -e 'x' docs/ux.md" }, ["/r/docs/ux.md"]],
-      ["Bash", { command: "node - <<'EOF'\nrequire('fs').readFileSync('docs/ux.md')\nEOF" }, ["/r/docs/ux.md"]],
-      ["Bash", { command: `node --permission -e "require('fs').readFileSync('docs/testing.md')"` }, ["/r/docs/testing.md"]],
+      ["Bash", { command: "git log -1 --format=%s | node --permission - <<'EOF'\nrequire('fs').readFileSync('docs/ux.md')\nEOF" }, ["/r/docs/ux.md"]],
+      ["Bash", { command: `head -1 docs/ux.md | node --permission -e "require('fs').readFileSync('docs/testing.md')"` }, ["/r/docs/ux.md", "/r/docs/testing.md"]],
       ["Read", { file_path: "/r/.git/worktrees/w/claude/survey-x.md" }, []],
       ["Read", { file_path: "/tmp/claude-1000/x/notes.md" }, []],
       ["Edit", { file_path: "/r/docs/ux.md" }, []],
