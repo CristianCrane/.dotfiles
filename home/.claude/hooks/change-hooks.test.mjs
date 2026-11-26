@@ -969,6 +969,9 @@ const CASES = [
   ["docs", "bash -c 'sed -i s/a/b/ docs/ux.md'", docHeld("docs/ux.md", "`bash`.*")],
   ["docs", `node -e "require('fs').writeFileSync('docs/ux.md', 'x')"`, docHeld("docs/ux.md", "`node`'s program names it")],
   ["docs", "python3 - <<'EOF'\nopen('docs/ux.md', 'w').write('x')\nEOF", docHeld("docs/ux.md", "`python3`'s program names it")],
+  // review F15: a program's turn-down says how a script that only reads goes through
+  ["docs", "node - <<'EOF'\nconsole.log(require('fs').readFileSync('docs/ux.md', 'utf8'))\nEOF", /A script that only reads the doc runs as `node --permission --allow-fs-read='\*'`, which goes through; one that writes it: Leave a note/],
+  ["docs", "node --permission --allow-fs-read='*' - <<'EOF'\nconsole.log(require('fs').readFileSync('docs/ux.md', 'utf8'))\nEOF", THROUGH],
   ["docs", "<repo>/docs/ux.md", docHeld("docs/ux.md", "an edit of it")],
   ["docs", "<repo>/docs/adr/0002-new.md", docHeld("docs/adr/0002-new.md", "an edit of it")],
   ["docs", "<repo>/docs/map.md", docHeld("docs/map.md", "an edit of it")],
@@ -1846,6 +1849,19 @@ describe("docs", () => {
     const missing = docs(repo, "check", "--base", "deadbeef");
     assert.equal(missing.status, 1);
     assert.match(missing.stderr, /the base deadbeef isn't a commit here \(fetch the history: actions\/checkout's fetch-depth: 0\)/);
+  });
+
+  test("check: lints the docs the branch changed; a finding elsewhere waits for the sweep (review F16)", () => {
+    const repo = docsRepo(BRANCH, { "docs/ux.md": `- ${words(101)}\n` }); // past its budget on main already
+    change(repo, { "pkg/a.ts": "b\n" });
+    const elsewhere = docs(repo, "check", "--base", "main");
+    assert.equal(elsewhere.status, 0, elsewhere.stdout);
+    assert.equal(docs(repo, "lint").status, 1); // the sweep's lint still finds it
+    change(repo, { "docs/adr/0001-a.md": `# A\n${words(601)}\n` }, { trailer: "per-PR" });
+    const changed = docs(repo, "check", "--base", "main");
+    assert.equal(changed.status, 1, changed.stdout);
+    assert.match(changed.stdout, /^docs\/adr\/0001-a\.md:1: a decision of 602 words, past its 600$/m);
+    assert.doesNotMatch(changed.stdout, /docs\/ux\.md/);
   });
 
   test("lint: each kind's budget in words, a file's, and screen names against the screen map; a doc with no kind is skipped", () => {
@@ -3014,6 +3030,14 @@ describe("steps", () => {
       ["Bash", { command: "cd /s && sed -n '1,40p' README.md" }, ["/s/README.md"]],
       ["Bash", { command: "git show origin/main:docs/ux.md | head" }, ["/r/docs/ux.md"]],
       ["Bash", { command: "rg -n x --glob '*.md' docs" }, []],
+      // review F14: a path a variable or a substitution builds names nothing; a
+      // search's pattern is no path; an interpreter's program is read
+      ["Bash", { command: "cat $D/survey-x.md ${D}/b.md" }, []],
+      ["Bash", { command: 'cat "$(git rev-parse --git-dir)/docs/ux.md" `pwd`/a.md' }, []],
+      ["Bash", { command: "rg 'see docs/ux.md' docs/testing.md" }, ["/r/docs/testing.md"]],
+      ["Bash", { command: "rg -e 'x' docs/ux.md" }, ["/r/docs/ux.md"]],
+      ["Bash", { command: "node - <<'EOF'\nrequire('fs').readFileSync('docs/ux.md')\nEOF" }, ["/r/docs/ux.md"]],
+      ["Bash", { command: `node --permission -e "require('fs').readFileSync('docs/testing.md')"` }, ["/r/docs/testing.md"]],
       ["Read", { file_path: "/r/.git/worktrees/w/claude/survey-x.md" }, []],
       ["Read", { file_path: "/tmp/claude-1000/x/notes.md" }, []],
       ["Edit", { file_path: "/r/docs/ux.md" }, []],

@@ -232,7 +232,7 @@ export const walk = (command) => {
   const chars = command.replace(/\\\n/g, "  ").split("");
   const subs = [];
   for (const { start, end, inner } of substitutions(chars.join(""))) {
-    subs.push({ inner, arithmetic: /^\(.*\)$/s.test(inner), start });
+    subs.push({ inner, arithmetic: /^\(.*\)$/s.test(inner), start, end });
     chars.fill("_", start, end);
   }
   const text = chars.join("");
@@ -302,41 +302,61 @@ export const notReading = (command) => {
   return null;
 };
 
+// commands that run the program in their words or the heredoc they read
+export const INTERPRETERS = /^(?:node|deno|bun|python\d*(?:\.\d+)?|perl|ruby|php|sh|bash|zsh|dash|ksh|fish|eval|awk|gawk|mawk|nawk|sed|gsed|ex|vi|vim|nvim|ed)$/;
+
 // a word as the path it names: a NAME= or --flag= word by its value, a
-// `ref:path` (git show's) by its path, `~` as home; null for an empty one
-const pathIn = (word, dir) => {
+// `ref:path` (git show's) by its path, `~` as home; null for an empty
+// one, or one a variable or a substitution builds (`$`, or the walk's
+// `_` mask, `unseen`), whose path can't be read
+const pathIn = (word, dir, unseen) => {
   const value = word
     .replace(/^(?:\w+|--?[\w-]+)=/, "")
     .replace(/^.*:(?!\/\/)/, "")
     .replace(/^~(?=\/|$)/, homedir());
-  return value ? { path: resolve(dir, value), glob: /[*?[]/.test(value) } : null;
+  if (!value || value.includes("$") || (unseen && value.includes(unseen))) return null;
+  return { path: resolve(dir, value), glob: /[*?[]/.test(value) };
 };
+
+// path-like tokens in an interpreter's program (its words and heredoc
+// bodies): a run of path characters holding a `/` or a `.`, as paths
+// from `dir`
+const programPaths = (program, dir) =>
+  [...new Set(program.match(/[\w.~/@+-]*[/.][\w.~/@+-]*/g) ?? [])]
+    .filter((token) => /\w/.test(token))
+    .slice(0, 200)
+    .map((token) => ({ path: resolve(dir, token.replace(/^~(?=\/|$)/, homedir())), glob: false }));
 
 // The paths each simple command names, a substitution's commands first:
 // each command as the walk gives it, with the folder it runs in (`dir`,
 // lib's dirOf: the last `cd` before it), every word but its name as a
 // path from there (`paths`, each { path, glob }), and the redirects
-// (each with its `path`) and heredoc bodies within it. Every word counts,
-// as which are paths is the caller's to say (a doc, a Markdown file). What
-// it can't read: a path in a variable or built by an expansion, or one
-// inside an interpreter's program (a heredoc's body is there to search).
+// (each with its `path`) and heredoc bodies within it, and for an
+// interpreter (`program`) each path-like token of its program. Every word
+// counts, as which are paths is the caller's to say (a doc, a Markdown
+// file). What it can't read: a path in a variable or built by an
+// expansion, and one an interpreter's program builds.
 export const pathsOf = (command, cwd) => {
   const { text, subs, redirects, heredocs, commands } = walk(command);
   const hidden = masked(text);
   const within = ({ start, end }) => (one) => one.at >= start && one.at < end;
+  // a word holding the shortest substitution's mask was built by one
+  const unseen = subs.length ? "_".repeat(Math.min(...subs.map(({ start, end }) => end - start))) : null;
   return [
     ...subs.flatMap(({ inner, start }) => pathsOf(inner, dirOf(text, hidden, start, cwd))),
     ...commands.map((one) => {
       const dir = dirOf(text, hidden, one.start, cwd);
       const words = unwrapped(one.words);
       const name = words.findIndex((word) => !/^\w+=/.test(word));
+      const bodies = heredocs.filter(within(one)).map(({ body }) => body);
       return {
         ...one,
         words,
         dir,
-        paths: words.flatMap((word, at) => (at === name ? [] : (pathIn(word, dir) ?? []))),
+        paths: words.flatMap((word, at) => (at === name ? [] : (pathIn(word, dir, unseen) ?? []))),
         redirects: redirects.filter(within(one)).map((redirect) => ({ ...redirect, path: redirect.target ? resolve(dir, redirect.target.replace(/^~(?=\/|$)/, homedir())) : null })),
-        heredocs: heredocs.filter(within(one)).map(({ body }) => body),
+        heredocs: bodies,
+        program: INTERPRETERS.test(words[name] ?? "") ? programPaths([...words.slice(name + 1), ...bodies].join("\n"), dir) : [],
       };
     }),
   ];

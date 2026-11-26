@@ -21,6 +21,7 @@ export const git = (cwd, ...args) =>
     cwd,
     encoding: "utf8",
     stdio: ["ignore", "pipe", "ignore"],
+    maxBuffer: 64 << 20,
   }).trim();
 
 // the project a signal is filed under: the checkout's folder, a

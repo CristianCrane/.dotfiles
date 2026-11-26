@@ -38,7 +38,7 @@
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
-import { dirOf, jsonLines, masked } from "./lib.mjs";
+import { dirOf, has, jsonLines, masked, positional } from "./lib.mjs";
 import { pathsOf } from "./readers.mjs";
 import { reviewFiles } from "./lib.mjs";
 
@@ -133,7 +133,8 @@ const markdown = (named, base) => {
 // the Markdown a call that reads names, each file as an absolute path
 // (from `cwd`, or the folder a `cd` leaves): Read's file, Grep's path, a
 // Bash command's words and `<` inputs (readers.mjs's pathsOf: `git show
-// ref:path` by its path), a glob aside. A search is
+// ref:path` by its path), a glob, a search's pattern and a word a variable
+// builds aside, and the paths an interpreter's program names. A search is
 // counted by its result's lines instead (`docsFound`), so a Grep's glob
 // names nothing: its result shows the files it matched.
 export const docsOf = (call, cwd = "/") => {
@@ -143,11 +144,20 @@ export const docsOf = (call, cwd = "/") => {
   if (call.name === "Read") named = [input.file_path];
   else if (call.name === "Grep") named = [input.path];
   else if (call.name === "Bash")
-    named = pathsOf(String(input.command ?? ""), cwd).flatMap(({ paths, redirects }) => [
-      ...paths.filter(({ glob }) => !glob).map(({ path }) => path),
+    named = pathsOf(String(input.command ?? ""), cwd).flatMap(({ words, dir, paths, redirects, program }) => [
+      ...[...paths, ...program].filter(({ glob, path }) => !glob && path !== patternOf(words, dir)).map(({ path }) => path),
       ...redirects.filter(({ op, path }) => op === "<" && path).map(({ path }) => path),
     ]);
   return markdown(named, cwd);
+};
+
+// a shell search's pattern as a path from `dir` (its first word that's no
+// flag, when no -e or -f gives it), so it isn't read as a file it names
+const patternOf = (words, dir) => {
+  const args = words[0] === "git" && words[1] === "grep" ? words.slice(2) : /^(?:rg|[ef]?grep)$/.test(words[0] ?? "") ? words.slice(1) : null;
+  if (!args || has(args, "-e", "-f", "--regexp=", "--file=")) return null;
+  const pattern = positional(args)[0];
+  return pattern === undefined ? null : resolve(dir, pattern);
 };
 
 // a search: Grep, or a shell rg, grep or git grep

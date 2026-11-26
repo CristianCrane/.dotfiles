@@ -12,23 +12,23 @@
 // call) and the curator's lint:
 //
 //   node docs.mjs check [--base <ref>]   commits since base that touch a doc
-//                                        without the curator's trailer, and lint
-//   node docs.mjs lint                   the budgets, in words
+//                                        without the curator's trailer, and the
+//                                        lint of the docs they change
+//   node docs.mjs lint                   the budgets, in words, of every doc
 //
 // The trailer is a plain commit-message line, `Doc-curator: per-PR` or
 // `Doc-curator: sweep` (`git commit --trailer`), so CI holds the user's
 // own edits too (#61 Q12).
-import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+// lib imports this module too; neither uses the other while it loads
+import { git, topOf } from "./lib.mjs";
 
 export const MAP = "docs/map.md";
 export const KINDS = ["rule", "decision", "screen", "term", "how-to"];
 export const TRAILER = "Doc-curator";
 const MODES = ["per-PR", "sweep"];
-
-const git = (cwd, ...args) => execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], maxBuffer: 64 << 20 }).trim();
 
 // a glob as a regex on a path from the checkout's top: `*` within a
 // folder, `**/` any folders, `?` one character
@@ -59,13 +59,14 @@ export const mapAt = (top) => {
   return maps.get(top);
 };
 
-// the checkout's top for a folder, through symlinks; null outside one
+// the checkout's top for a folder (lib's topOf), read once a process;
+// null outside one
 const tops = new Map();
 export const topAt = (dir) => {
   if (!tops.has(dir)) {
     let top = null;
     try {
-      top = git(dir, "rev-parse", "--show-toplevel");
+      top = topOf(dir);
     } catch {}
     tops.set(dir, top);
   }
@@ -186,8 +187,9 @@ const unitsOf = (kind, text) => {
 // map's `##` headings
 const SCREEN_NAME = /\bthe ((?:[A-Z][\w'’-]*\s){1,4})(?:screen|page)\b/g;
 
-// what the lint finds in a checkout's docs: [{ file, at, why }]
-export const lint = (top) => {
+// what the lint finds in a checkout's docs, or in `only` of them (paths
+// from the top), the screen map read whole either way: [{ file, at, why }]
+export const lint = (top, only) => {
   const entries = mapAt(top);
   if (!entries) return null;
   const files = docsIn(top).map((rel) => ({ rel, kind: entryOf(entries, rel).kind, text: readFileSync(join(top, rel), "utf8") }));
@@ -196,7 +198,7 @@ export const lint = (top) => {
   );
   const found = [];
   for (const { rel, kind, text } of files) {
-    if (!kind) continue;
+    if (!kind || (only && !only.includes(rel))) continue;
     const words = wordsOf(text);
     if (words > FILE_BUDGET) found.push({ file: rel, at: 1, why: `${words} words, past the file's ${FILE_BUDGET}` });
     if (PER[kind])
@@ -249,7 +251,9 @@ const main = (args) => {
       console.log(`${one.sha.slice(0, 8)} ${one.subject}\n  changes ${one.docs.join(", ")} with no \`${TRAILER}:\` trailer`);
     if (missing.length)
       console.log(`docs: ${missing.length} commit(s) change a doc without the doc curator. Only the doc-curator agent writes docs: leave a note (the change skill's Build) and run it, which commits with \`--trailer "${TRAILER}: per-PR"\`.`);
-    const found = mapAt(top) ? lint(top) : [];
+    // the docs this branch changed: a finding elsewhere waits for the sweep,
+    // which lints them all
+    const found = mapAt(top) ? lint(top, git(top, "diff", "--name-only", `${base}...HEAD`).split("\n").filter(Boolean)) : [];
     report(found);
     if (found.length) console.log(`docs: ${found.length} past a budget.`);
     if (!missing.length && !found.length) console.log("docs: every doc change is the curator's, and the lint is clean.");
