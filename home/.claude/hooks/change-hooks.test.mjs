@@ -3056,9 +3056,9 @@ const leavesNoTemp = (body) => {
 };
 
 // settings-format.mjs, against the real `claude` on PATH (about 1 s a
-// format), in throwaway dirs
+// format) but for one stub, in throwaway dirs
 describe("settings-format", () => {
-  const format = (text, options) => leavesNoTemp(() => formatSettings(text, options));
+  const format = (text) => leavesNoTemp(() => formatSettings(text));
 
   test("the committed settings.json is in Claude Code's form already: formatting it changes no byte", () => {
     assert.equal(format(committed), committed);
@@ -3079,16 +3079,12 @@ describe("settings-format", () => {
     assert.equal(format(reorder(settings)), expected);
   });
 
-  test("it refuses, and throws, on invalid JSON, no entry to flip, or changed values", () => {
+  test("it refuses, and throws, on invalid JSON or no entry to flip", () => {
     assert.throws(() => format(committed.slice(0, -10)), /^Error: not valid JSON/);
     assert.throws(() => format('{"model": "opus"}'), /^Error: no enabledPlugins entry to flip/);
     assert.throws(() => format('{"enabledPlugins": {"a@b": "yes"}}'), /^Error: no enabledPlugins entry to flip/);
-    // with no migration recorded, Claude Code rewrites "opus" to
-    // "opus[1m]" on load; the same text with the migration recorded passes
-    const opus = '{"model": "opus", "enabledPlugins": {"a@b": true}}';
-    assert.throws(() => format(opus, { claudeJson: {} }), /^Error: Claude Code changed values, not only the form/);
-    assert.equal(JSON.parse(format(opus)).model, "opus");
   });
+
 
   test("the CLI formats a file in place, and leaves a file it refuses as it was", () => {
     const dir = scratchDir();
@@ -3104,6 +3100,37 @@ describe("settings-format", () => {
     assert.match(refused.stderr, /^settings-format: .*settings\.json: not valid JSON/);
     assert.equal(readFileSync(file, "utf8"), broken);
     assert.match(runHook("settings-format", undefined, { args: [] }).stderr, /Usage: node ~\/\.claude\/hooks\/settings-format\.mjs <file>/);
+  });
+
+  // a `claude` first on PATH with a migration, as 2.1.308 had: a flip in a
+  // config dir with no migrations marked as run rewrites "opus" to
+  // "opus[1m]", and `plugin list` (`migrated`) marks them; runs the CLI on
+  // a file holding "opus", the result and the file after
+  const withMigration = (migrated) => {
+    const { bin } = fakeCommand(
+      "claude",
+      `[ "$2" = list ] && { ${migrated} > "$CLAUDE_CONFIG_DIR/.claude.json"; exit 0; }
+grep -qs migrated "$CLAUDE_CONFIG_DIR/.claude.json" || sed -i 's/"opus"/"opus[1m]"/' "$CLAUDE_CONFIG_DIR/settings.json"`,
+    );
+    const file = join(scratchDir(), "settings.json");
+    writeFileSync(file, '{"model": "opus", "enabledPlugins": {"a@b": true}}');
+    const ran = leavesNoTemp((temp) =>
+      runHook("settings-format", undefined, { args: [file], env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, TMPDIR: temp } }),
+    );
+    return { ran, after: readFileSync(file, "utf8") };
+  };
+
+  test("Claude Code's migrations are marked as run before the file goes in, so a value they'd rewrite stays", () => {
+    const { ran, after } = withMigration("echo '{\"migrated\": true}'");
+    assert.equal(ran.status, 0, ran.stderr);
+    assert.equal(JSON.parse(after).model, "opus");
+  });
+
+  test("the CLI refuses a file whose values Claude Code changes anyway, and leaves it as it was", () => {
+    const { ran, after } = withMigration("echo '{}'");
+    assert.equal(ran.status, 1);
+    assert.match(ran.stderr, /^settings-format: .*settings\.json: Claude Code changed values, not only the form/);
+    assert.equal(after, '{"model": "opus", "enabledPlugins": {"a@b": true}}');
   });
 });
 
