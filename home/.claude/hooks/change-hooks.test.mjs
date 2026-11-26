@@ -163,8 +163,9 @@ const write = (repo, kind, text) => {
 // given: `review` writes one of HEAD (a string: its findings, after the
 // header; `header` replaces the header's words after the sha), `ux` a UX
 // review (it may take HEAD's short sha), `lessons` and `body` their text
-// (`body` may take HEAD's full sha)
-const scratchRepo = ({ review = false, header = "round 1, 0 to recheck", ux, lessons, body } = {}) => {
+// (`body` may take HEAD's full sha); `said`, a message the user typed, in
+// the session's transcript
+const scratchRepo = ({ review = false, header = "round 1, 0 to recheck", ux, lessons, body, said } = {}) => {
   const repo = scratchDir();
   git(repo, "init", "-qb", "main");
   commit(repo, "a.txt", "a\n");
@@ -176,7 +177,12 @@ const scratchRepo = ({ review = false, header = "round 1, 0 to recheck", ux, les
   if (ux !== undefined) write(repo, "ux-review", typeof ux === "function" ? ux(head) : ux);
   if (lessons !== undefined) write(repo, "lessons", lessons);
   if (typeof body === "function") body = body(git(repo, "rev-parse", "HEAD"));
-  return { repo, body: body === undefined ? undefined : write(repo, "pr-body", body) };
+  let transcript;
+  if (said !== undefined) {
+    transcript = join(scratchDir(), "t.jsonl");
+    writeFileSync(transcript, `${JSON.stringify({ type: "user", origin: { kind: "human" }, message: { role: "user", content: said } })}\n`);
+  }
+  return { repo, transcript, body: body === undefined ? undefined : write(repo, "pr-body", body) };
 };
 
 const ROUTED = "Signals for feature:\n- A cost → inbox 1a2b3c4d\n";
@@ -351,14 +357,17 @@ const STATES = {
   ),
   // a [recheck] finding's fix, committed: the PR waits for the reviewer to
   // read it, or for the user's ruling against the finding, which no fix
-  // ends (the body's closing takes F1 off the count)
+  // ends (the body's closing takes F1 off the count), quoted from a message
+  // they typed (round 1 F30)
   ...Object.fromEntries(
     Object.entries({
-      owesRecheck: (head) => `fixed in ${head.slice(0, 7)}`,
-      owesRuled: () => "ruled by the user: keep it",
-    }).map(([name, closing]) => [
+      owesRecheck: [(head) => `fixed in ${head.slice(0, 7)}`],
+      owesRuled: [() => 'ruled by the user: "keep it as it stands"', "fine, keep it as it stands"],
+      owesRuledUnsaid: [() => 'ruled by the user: "keep it as it stands"', "ship it"],
+      owesRuledUnquoted: [() => "ruled by the user: keep it as it stands", "fine, keep it as it stands"],
+    }).map(([name, [closing, said]]) => [
       name,
-      ["review-gate", () => scratchRepo({ review: "## Findings\nF1. [recheck] a\n", header: "round 1, 1 to recheck", lessons: ROUTED, body: (head) => prBody(head, `- New: nothing\n- Review: F1 a → ${closing(head)}\n`) })],
+      ["review-gate", () => scratchRepo({ review: "## Findings\nF1. [recheck] a\n", header: "round 1, 1 to recheck", lessons: ROUTED, said, body: (head) => prBody(head, `- New: nothing\n- Review: F1 a → ${closing(head)}\n`) })],
     ]),
   ),
   // `filed in #<n>` closes a later pass's `[polish]` finding, and no other
@@ -669,6 +678,9 @@ const CASES = [
   ["owesRecheck", "gh pr ready", /review-feature\.md has 1 to recheck: a reviewer still owes those fixes a read/],
   ["owesRuled", "gh pr ready", THROUGH],
   ["owesRuled", "gh pr ready 12", NAMED],
+  // the author's word alone, or the user's unquoted, isn't their ruling
+  ["owesRuledUnsaid", "gh pr ready", /F1: `ruled by the user:` closes it with the user's own words in quotes/],
+  ["owesRuledUnquoted", "gh pr ready", /F1: `ruled by the user:` closes it with the user's own words in quotes/],
   ["filedPolish", "gh pr create --draft --body-file <body>", THROUGH],
   ["filedPolish", "gh pr create --body-file <body>", NO_LESSONS],
   ["filedRecheck", "gh pr create --draft --body-file <body>", /F1: `listed` and `filed in #<n>` close only a finding the review marks `\[polish\]`/],
@@ -907,6 +919,7 @@ const TOOL_INPUT = {
 const MORE_INPUT = {
   "scratch-gate": (state) => ({ agent_id: AGENT, scratchpad_dir: state.repo }),
   "reviewer-gate": () => ({ agent_id: AGENT, agent_type: "change-reviewer" }),
+  "review-gate": (state) => (state.transcript ? { transcript_path: state.transcript } : {}),
 };
 
 // the hook's answer to the case's tool call: the deny reason, or null

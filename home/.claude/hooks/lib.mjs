@@ -533,7 +533,7 @@ export const userMessages = (transcript) =>
   });
 
 // whether the user typed `quote` in this session
-const userTyped = (transcript, quote) => userMessages(transcript).some((text) => text.includes(flat(quote)));
+export const userTyped = (transcript, quote) => userMessages(transcript).some((text) => text.includes(flat(quote)));
 
 // null when the survey isn't dictated; else { holds: true }, or { why }:
 // the first limit the change is past. `pending` is the edit about to be

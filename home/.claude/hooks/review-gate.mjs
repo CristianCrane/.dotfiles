@@ -6,8 +6,8 @@
 // else) and closes in its Change section every finding of that review, of
 // the UX review (which a body with Before / after needs) and of the
 // critical review: as fixed, as `listed` or `filed in #<n>` for one marked
-// `[polish]`, as the user ruled, or in the review's own word on it, each
-// review's for its own findings. A PR leaves draft (`gh pr ready`, or
+// `[polish]`, as the user ruled in words they typed, or in the review's
+// own word on it, each review's for its own findings. A PR leaves draft (`gh pr ready`, or
 // `gh pr create` without `--draft`) once, besides that (notReady), no
 // review owes a fix its recheck (a header's `<r> to recheck` above 0, less
 // what the user ruled on), the change review has read every commit since
@@ -64,6 +64,7 @@ import {
   unquote,
   unreadSince,
   userMessages,
+  userTyped,
   WORD,
   workOf,
 } from "./lib.mjs";
@@ -186,8 +187,20 @@ const shapeOf = (text, cwd) => {
 // one of the words (dotfiles review F13, 2026-11-23)
 const REVIEWERS_WORDS = ["fixed in the survey", "fixed elsewhere", "conceded", "turned down", "ruled by the user"];
 // the user outranks the reviewer: a case put to them, when no pass of the
-// reviewer runs to weigh it, closes by their ruling in the body alone
+// reviewer runs to weigh it, closes by their ruling in the body alone,
+// quoted (`ruled by the user: "<their words>"`) from a message they typed
+// in this session (lib's userTyped, as a dictated survey's quote is): the
+// author's word alone ended a `[recheck]` finding with no fix and no
+// reader (round 1 F30)
 const RULED = "ruled by the user";
+const userRuled = (line, transcript) => {
+  const words = line.match(/^ruled by the user:\s*"([^"]{8,})"/)?.[1];
+  try {
+    return Boolean(words && transcript && userTyped(transcript, words));
+  } catch {
+    return false;
+  }
+};
 // a later pass's polish, marked `[polish]` in the review, needs no fix: it
 // closes on the body's list (`listed`) or in an issue (the `change` skill's
 // Review, 2026-11-26)
@@ -198,10 +211,11 @@ const wordOf = (line) => REVIEWERS_WORDS.find((word) => closingOf(line).startsWi
 // why no line of the Change section closes finding `id` of the review
 // `text`, or null when one does: `fixed in <sha>` (a commit on this
 // branch), `listed` or `filed in #<n>` for a `[polish]` finding, the user's
-// ruling, or the review's own word on it (`fixed in the survey` among
-// them). `answered:` closed one until 2026-11-23, when builders answered
-// real findings away (empire-cleaning #527, #536, #538)
-const unclosed = (cwd, section, id, text) => {
+// ruling in their words (userRuled), or the review's own word on it
+// (`fixed in the survey` among them). `answered:` closed one until
+// 2026-11-23, when builders answered real findings away (empire-cleaning
+// #527, #536, #538)
+const unclosed = (cwd, section, id, text, transcript) => {
   const named = section.filter((line) => new RegExp(`\\b${id}\\b`).test(line));
   if (!named.length) return "no line names it";
   const words = lines(text)
@@ -214,7 +228,9 @@ const unclosed = (cwd, section, id, text) => {
         ? null
         : "`listed` and `filed in #<n>` close only a finding the review marks `[polish]`: fix this one";
     const word = wordOf(line);
-    if (word === RULED) return null;
+    if (word === RULED && userRuled(line, transcript)) return null;
+    if (word === RULED && !words.includes(word))
+      return "`ruled by the user:` closes it with the user's own words in quotes (`ruled by the user: \"<their words>\"`, 8 characters or more), as they typed them in this session, and the review's own word on it doesn't say it either";
     if (word)
       return words.includes(word)
         ? null
@@ -270,27 +286,28 @@ const reviewsOf = (cwd, work, found, seen) => {
 // why the body's Change section doesn't close every finding, if it
 // doesn't. Each review's word closes only its own findings: a reviewer
 // weighs the cases against what it found (the `change` skill's Review)
-const unclosedAll = (cwd, work, found, body, section, seen) => {
+const unclosedAll = (cwd, work, found, body, section, seen, transcript) => {
   const { why, reviews } = reviewsOf(cwd, work, found, seen);
   if (why) return why;
   const open = reviews
-    .flatMap((one) => one.ids.map((id) => [id, unclosed(cwd, section, id, one.text)]))
+    .flatMap((one) => one.ids.map((id) => [id, unclosed(cwd, section, id, one.text, transcript)]))
     .flatMap(([id, why]) => (why ? [`${id}: ${why}`] : []));
   if (open.length)
-    return `The PR body's Change section (${body}) doesn't close every finding of ${reviews.map((one) => one.path).join(" and ")}: ${open.join("; ")}. Each finding gets its own line ending \`fixed in <sha>\` (a commit on this branch), \`listed\` or \`filed in #<n>\` for a \`[polish]\` finding, \`ruled by the user: <their words>\`, or the review's own word on it, after its line's last → (\`fixed in the survey\`, \`fixed elsewhere:\`, \`conceded:\`, \`turned down:\`).`;
+    return `The PR body's Change section (${body}) doesn't close every finding of ${reviews.map((one) => one.path).join(" and ")}: ${open.join("; ")}. Each finding gets its own line ending \`fixed in <sha>\` (a commit on this branch), \`listed\` or \`filed in #<n>\` for a \`[polish]\` finding, \`ruled by the user: "<their words>"\`, or the review's own word on it, after its line's last → (\`fixed in the survey\`, \`fixed elsewhere:\`, \`conceded:\`, \`turned down:\`).`;
 };
 
 // the fixes a review still owes a recheck: its header's `<r> to recheck`,
-// less each one the body closes by the user's ruling (a case with no pass
-// left to weigh it), as its fix needs no read. Open is a `[recheck]`
-// finding (every critical one but a `[polish]`) with no word after its last →, or one that
-// says it still stands (`open`, `held`, `reopened`)
-const owedOf = (one, section) => {
+// less each one the body closes by the user's ruling in their words (a
+// case with no pass left to weigh it), as its fix needs no read. Open is a
+// `[recheck]` finding (every critical one but a `[polish]`) with no word
+// after its last →, or one that says it still stands (`open`, `held`,
+// `reopened`)
+const owedOf = (one, section, transcript) => {
   const every = one.path.includes("/critical-review-");
   const ruled = one.ids.filter((id) => {
     const line = lines(one.text).find((line) => new RegExp(`^(?:- )?${id}\\b`).test(line)) ?? "";
     const open = (every ? !line.includes("[polish]") : line.includes("[recheck]")) && (!line.includes("→") || /^(?:open|held|reopened)\b/.test(closingOf(line)));
-    return open && (section ?? []).some((named) => new RegExp(`\\b${id}\\b`).test(named) && wordOf(closingOf(named)) === RULED);
+    return open && (section ?? []).some((named) => new RegExp(`\\b${id}\\b`).test(named) && userRuled(closingOf(named), transcript));
   });
   return Math.max(0, one.toRecheck - ruled.length);
 };
@@ -301,12 +318,12 @@ const owedOf = (one, section) => {
 // pass names no finding it fixes (nor CI, which rests on trust), or the
 // lessons are missing. A commit that fixes nothing is new work, which the
 // change-reviewer reads (agent-gate lets it through)
-const notReady = (cwd, work, found, section, seen) => {
+const notReady = (cwd, work, found, section, seen, transcript) => {
   const { why, reviews } = reviewsOf(cwd, work, found, seen);
   if (why) return why;
-  const owing = reviews.filter((one) => owedOf(one, section) > 0);
+  const owing = reviews.filter((one) => owedOf(one, section, transcript) > 0);
   if (owing.length)
-    return `${owing.map((one) => `${one.path} has ${owedOf(one, section)} to recheck`).join("; ")}: a reviewer still owes those fixes a read. Commit each fix, naming the finding, and run that reviewer's next pass (the \`change\` skill's Review); a case against one goes to the user, and the body closes it \`ruled by the user: <their words>\`.`;
+    return `${owing.map((one) => `${one.path} has ${owedOf(one, section, transcript)} to recheck`).join("; ")}: a reviewer still owes those fixes a read. Commit each fix, naming the finding, and run that reviewer's next pass (the \`change\` skill's Review); a case against one goes to the user, and the body closes it \`ruled by the user: "<their words>"\`, as they typed them.`;
   if (found.sha) {
     const unnamed = unreadSince(cwd, found.sha);
     if (unnamed.length)
@@ -355,11 +372,11 @@ const createGate = (command, hidden, match, input) => {
     return turnDownCreate(
       `The PR body (${body}) isn't in the shape the \`change\` skill's PR body step gives: ${problems.join("; ")}.`,
     );
-  const why = unclosedAll(cwd, work, found, body, section, seen);
+  const why = unclosedAll(cwd, work, found, body, section, seen, input.transcript_path);
   if (why) return turnDownCreate(why);
 
   if (draft) return;
-  const unready = notReady(cwd, work, found, section, seen);
+  const unready = notReady(cwd, work, found, section, seen, input.transcript_path);
   if (unready) return turnDownCreate(`${unready} Or open it as a draft (\`--draft\`) and mark it ready once that's done.`);
 };
 
@@ -406,10 +423,10 @@ const readyGate = (command, hidden, match, input) => {
   // edited onto the PR (`gh pr edit --body-file`), closes it too
   const body = stateFile(cwd, "pr-body", work.key);
   const { section, seen } = existsSync(body) ? shapeOf(readFileSync(body, "utf8"), cwd) : {};
-  const why = section && unclosedAll(cwd, work, found, body, section, seen);
+  const why = section && unclosedAll(cwd, work, found, body, section, seen, input.transcript_path);
   if (why) return turnDown(`${why} Then \`gh pr edit --body-file ${body}\`, as its own command.`, "ready");
 
-  const unready = notReady(cwd, work, found, section, seen);
+  const unready = notReady(cwd, work, found, section, seen, input.transcript_path);
   if (unready) return turnDown(unready, "ready");
 };
 
