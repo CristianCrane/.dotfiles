@@ -714,18 +714,43 @@ export const stillHead = (cwd, sha) => {
   return on ? own.every((one) => commentOnly(cwd, one.parent, one.sha)) : commentOnly(cwd, sha, "HEAD");
 };
 
-// the commits a change review of `sha` hasn't read: each of the branch's
-// own since it (ownSince) that names no finding it fixes (`F<n>`, `C<n>`,
-// `U<n>`) nor `CI`, or every one of them once a rebase moves `sha` off
-// it. Review-gate holds the PR in draft on them, and agent-gate lets the
-// change-reviewer read them: new work, a first look's, not a recheck
-// (round 1 F29)
-export const unreadSince = (cwd, sha) => {
+// the commits a review of `sha` hasn't read: each of the branch's own
+// since it (ownSince) whose message names none of `fixes`, by default any
+// finding (`F<n>`, `C<n>`, `U<n>`) or `CI`, or every one of them once a
+// rebase moves `sha` off it. Review-gate holds the PR in draft on them,
+// and agent-gate lets the change-reviewer read them: new work, a first
+// look's, not a recheck (round 1 F29)
+export const unreadSince = (cwd, sha, fixes = /\b(?:[FCU]\d+|CI)\b/) => {
   const { on, own } = ownSince(cwd, sha);
   return own
     .map((one) => one.sha)
-    .filter((one) => !on || !/\b(?:[FCU]\d+|CI)\b/.test(git(cwd, "log", "-1", "--format=%B", one)));
+    .filter((one) => !on || !fixes.test(git(cwd, "log", "-1", "--format=%B", one)));
 };
+
+// whether a file changes what a person sees: one a page is drawn from
+// (its markup, styles), or source with a folder or a name for screens or
+// their words, as a server message or an email's text lives in .ts
+// (empire-cleaning's screens/portal/whats-next.ts, messages/quotes.ts,
+// features/bills/emails.ts). Not a test, story or shot spec. Of
+// empire-cleaning's commits since 2026-11-10 beyond tests and docs, 459
+// change a drawn file, 48 more only such words, and 623 only logic, which
+// opens no pass (round 1 F5)
+const DRAWN = /\.(tsx|jsx|vue|svelte|astro|html|css|scss|sass|less|mdx)$/;
+const WORDS = /(^|\/)(screens?|pages?|components?|views?|layouts?|messages?|emails?|words|labels|copy|i18n|locales?)(\/|\.[cm]?[jt]s$)/;
+const UNSEEN = /(^|\/)(e2e|tests?|__tests__)\/|\.(test|spec|stories|shots)\.[^/]+$/;
+export const seen = (file) => !UNSEEN.test(file) && (DRAWN.test(file) || (/\.[cm]?[jt]s$/.test(file) && WORDS.test(file)));
+
+// the commits a UX review of the shots at `sha` hasn't seen: those of
+// unreadSince's that name no `U<n>` (a UX fix is a recheck, read only
+// while one is owed) and change more than comments in a file a person
+// sees. Each is a new screen state, a first look's (signal 656c8229:
+// empire-cleaning #561 and #508 changed screens after a pass owing none)
+export const unseenScreens = (cwd, sha) =>
+  unreadSince(cwd, sha, /\bU\d+\b/).filter(
+    (one) =>
+      !commentOnly(cwd, `${one}^`, one) &&
+      lines(git(cwd, "diff-tree", "-r", "--cc", "--name-only", "--no-commit-id", one)).some(seen),
+  );
 
 // the reviewer's read of the diff: a valid header ("… @ <sha>, round 1 |
 // recheck <n>, <r> to recheck"), of a commit on the branch. What else a PR

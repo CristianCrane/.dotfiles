@@ -533,8 +533,29 @@ const STATES = {
         review: (head) => `# Change review: feature @ ${head}, round 1, 0 to recheck\n`,
         "ux-review": "# UX review: feature @ abc1234, first pass, 1 to recheck\n",
       },
+      // signal 656c8229 (empire-cleaning #561, #508): a commit since the UX
+      // review's shots that changes what a person sees, a screen's file or
+      // its words, and names no `U<n>`, is a new screen state, a first
+      // look's; a UX fix, logic, a test or a comment isn't. A rebase past
+      // the shots counts every screen commit
+      ...Object.fromEntries(
+        Object.entries({
+          uxScreen: ["Change: Home's alert, F2", "Home.tsx", "export const a = 2;\n"],
+          uxWords: ["Change: the alert's words", "messages/home.ts", "export const a = 'b';\n"],
+          // round 1 F5: a words file by its name, and a screens folder above its parent
+          uxEmails: ["Change: the bill's email", "features/bills/emails.ts", "export const a = 'b';\n"],
+          uxDeepScreen: ["Change: the card's words", "screens/portal/whats-next.ts", "export const a = 'b';\n"],
+          uxLogic: ["Change: the price rule", "price.ts", "export const a = 1;\n"],
+          uxFixNamed: ["Change: Home's alert, U1", "Home.tsx", "export const a = 2;\n"],
+          uxComment: ["Cleanup: why the alert waits", "Home.tsx", "// why\nexport const a = 1;\n"],
+          uxTest: ["Change: a test of Home", "Home.test.tsx", "test();\n"],
+        }).map(([name, commit]) => [name, { pre: ["Home.tsx", "export const a = 1;\n"], "ux-review": (head) => `# UX review: feature @ ${head}, first pass, 0 to recheck\n`, commit }]),
+      ),
+      // #508's header, from before `<r> to recheck`
+      uxOldHeader: { "ux-review": (head) => `# UX review: feature @ ${head}, pass 3, 1 open finding (0 high)\n`, commit: ["Change: Home's alert", "Home.tsx", "x\n"] },
+      uxRebased: { "ux-review": "# UX review: feature @ abc1234, first pass, 0 to recheck\n", commit: ["Change: Home's alert, U1", "Home.tsx", "x\n"] },
       // a design is fixed in place, with no commit: its own count opens its pass
-      passDesign: { "ux-review-design": "# UX review: feature @ abc1234, first pass, 1 to recheck\n" },
+      passDesign:{ "ux-review-design": "# UX review: feature @ abc1234, first pass, 1 to recheck\n" },
       passDesignDone: { "ux-review-design": "# UX review: feature @ abc1234, pass 2, 0 to recheck\n" },
       passCriticalPlan: { "critical-review": "# Critical review: feature @ abc1234, plan, 1 to recheck\n" },
     }).map(([name, files]) => [
@@ -543,11 +564,16 @@ const STATES = {
         "agent-gate",
         () => {
           const state = scratchRepo();
+          // `pre`, a file committed before the reviews' HEAD; `commit`, one
+          // after it: its message, or [message, file, text]
+          const { commit: later, pre, merged, ...kinds } = files;
+          if (pre) commit(state.repo, ...pre);
           const head = git(state.repo, "rev-parse", "--short", "HEAD");
-          const { commit: message, merged, ...kinds } = files;
           for (const [kind, text] of Object.entries(kinds)) write(state.repo, kind, typeof text === "function" ? text(head) : text);
-          if (message) {
-            writeFileSync(join(state.repo, "c.txt"), "c\n");
+          if (later) {
+            const [message, file = "c.txt", text = "c\n"] = [later].flat();
+            mkdirSync(dirname(join(state.repo, file)), { recursive: true });
+            writeFileSync(join(state.repo, file), text);
             git(state.repo, "add", ".");
             git(state.repo, "commit", "-qm", message);
           }
@@ -802,6 +828,13 @@ const CASES = [
   ["passRebased", "ux-reviewer: shots, output <out>/ux-review-feature.md", /^No fix the ux-reviewer reads is owed a recheck/],
   ["passCriticalOwed", "critical-reviewer: recheck, output <out>/critical-review-feature.md", THROUGH],
   ["passUx", "ux-reviewer: shots, output <out>/ux-review-feature.md", /^No fix the ux-reviewer reads is owed a recheck/],
+  ["uxScreen", "ux-reviewer: shots, output <out>/ux-review-feature.md", THROUGH],
+  ["uxWords", "ux-reviewer: shots, output <out>/ux-review-feature.md", THROUGH],
+  ["uxEmails", "ux-reviewer: shots, output <out>/ux-review-feature.md", THROUGH],
+  ["uxDeepScreen", "ux-reviewer: shots, output <out>/ux-review-feature.md", THROUGH],
+  ["uxOldHeader", "ux-reviewer: shots, output <out>/ux-review-feature.md", THROUGH],
+  ["uxRebased", "ux-reviewer: shots, output <out>/ux-review-feature.md", THROUGH],
+  ...["uxLogic", "uxFixNamed", "uxComment", "uxTest"].map((state) => [state, "ux-reviewer: shots, output <out>/ux-review-feature.md", /^No fix the ux-reviewer reads is owed a recheck .*, and no commit since its shots changes what a person sees/]),
   ["passUx", "ux-reviewer: design, output <out>/ux-review-design-feature.md", THROUGH],
   ["passDesign", "ux-reviewer: design, output <out>/ux-review-design-feature.md", THROUGH],
   ["passDesignDone", "ux-reviewer: design, output <out>/ux-review-design-feature.md", /ux-review-design-feature\.md leaves nothing to recheck/],
@@ -812,6 +845,7 @@ const CASES = [
   ["passOwed", "critical-reviewer: diff of feature", /prompt names no output path/],
   ["passCriticalOwed", "critical-reviewer: diff of feature", /prompt names no output path/],
   ["passDesign", "critical-reviewer: diff of feature", /prompt names no output path/],
+  ...["uxScreen", "uxWords", "uxEmails", "uxDeepScreen", "uxOldHeader", "uxRebased"].map((state) => [state, "ux-reviewer: shots of feature", /prompt names no output path/]),
   // survey-gate: the build's size cap, and a reviewer's file kept to it
   ["capped", "<repo>/b.txt", THROUGH],
   ["capped", "<repo>/d.txt", /feature is past 1\.5x the 1 files its plan review counted \(3 with this edit, against 2;/],

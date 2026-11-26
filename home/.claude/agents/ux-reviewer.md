@@ -33,7 +33,7 @@ Each finding has an id, `U<n>`, run on from the highest in the output file. Find
 
 ## A later pass
 
-The prompt gives new shots of the screens the fixes changed, and may carry the author's case or the user's ruling. Read your previous pass first, and give each of its findings its word (Output's Previous findings). Then read only the new shots: a bug a fix brought in is a finding, anything else new `[polish]`.
+The prompt gives new shots of the screens the fixes changed, and may carry the author's case or the user's ruling. Read your previous pass first, and give each of its findings its word (Output's Previous findings). Then read only the new shots: a bug a fix brought in is a finding, anything else new `[polish]`. A screen the prompt names as new work, not a fix of your findings, gets a first look's judgement: a real problem for its reader there is `[recheck]` (the `change` skill, Review).
 
 ## Output
 
