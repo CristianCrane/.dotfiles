@@ -33,7 +33,7 @@ Read the code, the repo's design records and docs, the survey, and your own earl
 
 ## Output
 
-Write to the output path you're given, last, once you're done: your pass replaces what's there, and earlier findings live on in Previous findings. Each finding has an id, `C<n>`, run on from the highest in the file. Every finding but a `[polish]` owes a recheck, unmarked: the header's `<r> to recheck` counts those your passes haven't seen fixed. The author copies each closing word into the PR's Change, as the `change` skill's PR body says.
+Write to the output path you're given, last, once you're done: your pass replaces what's there, and earlier findings live on in Previous findings. Each finding has an id, `C<n>`, run on from the highest in the file. Every finding owes a recheck, unmarked, but a later pass's `[polish]`: the header's `<r> to recheck` counts those your passes haven't seen fixed. The author copies each closing word into the PR's Change, as the `change` skill's PR body says.
 
 ```
 # Critical review: <branch> @ <short sha>, <plan | diff | recheck n>, <r> to recheck
@@ -41,7 +41,7 @@ Write to the output path you're given, last, once you're done: your pass replace
 <is it good; if you'd build it differently, how, why, and what it costs or saves>
 ## Previous findings          (after the plan)
 - C<n> <finding, as first written> → fixed in <sha> | fixed in the survey | conceded: <why> | turned down: <reason> | held: <why> | ruled by the user: <ruling> | open: <why>
-## Findings
+## Findings ([polish] in a later pass only)
 C<n>. <shown | suspicion>, <how sure>: <the claim> — <paths>
    Who feels it: <the person, and how>
    Evidence: <the red test (in the patch), the reproduction, or the trace; for a suspicion, how to show it>

@@ -64,14 +64,14 @@ The header's sha is HEAD as you start (`git rev-parse --short HEAD`, before you 
 # Change review: <branch> @ <short sha>, <plan | round 1 | recheck <n>>, <r> to recheck<, <n> expected files: plan only>
 ## Previous findings          (after the plan)
 - F<n> [recheck|polish] <finding, as first written> → fixed in <sha> | fixed in the survey | fixed elsewhere: <where> | open: <why> | reopened: <how> | conceded: <why> | turned down: <reason> | held: <why> | ruled by the user: <ruling>
-## Findings
+## Findings ([polish] in a recheck only)
 F<n>. [recheck|polish] <hunt>: <claim> — <paths>
    Simpler: <shape> (~<n> files)
 ## Searched
 - <each search you ran> → <what it found>
 ```
 
-A fix is `fixed in <sha>` only for a commit on the branch; a fix to the survey's text is `fixed in the survey`, and one anywhere else (an issue's body, a comment) is `fixed elsewhere: <where>`. The author copies these words into the PR's Review lines, and the PR gate accepts a closing other than `fixed in <sha>` only when your review gives that finding the same word, and `listed` or `filed in #<n>` only for a `[polish]`.
+A fix is `fixed in <sha>` only for a commit on the branch; a fix to the survey's text is `fixed in the survey`, and one anywhere else (an issue's body, a comment) is `fixed elsewhere: <where>`. The author copies these words into the PR's Review lines, and the PR gate accepts a closing other than `fixed in <sha>` only when your review gives that finding the same word, and `listed` or `filed in #<n>` only for a recheck's `[polish]`.
 
 Done when everything your mode covers has been searched, and `Searched` lists each search. "No findings" stands only with that list.
 

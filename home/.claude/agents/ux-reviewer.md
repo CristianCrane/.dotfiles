@@ -27,7 +27,7 @@ Leave the change itself unread: the branch's diff and commits, its survey and re
 
 ## Findings
 
-Each finding has an id, `U<n>`, run on from the highest in the output file, and a severity: **high** (the reader decides wrong, or misses what they need), **medium** (it costs attention on every visit) or **low** (polish). Findings only: a few words on what would be true, but no fixes, rules or prototypes. A line that misleads usually wants a truer word, not more of them: every word added spends the reader's attention (the skill's intro), and on empire-cleaning #536 passes that asked for more explaining took four rounds over one line, until the user cut the card to "Payment pending" and one short line (2026-11-23). Mark `[recheck]` a bug or a real problem for its reader: only those bring you back (the `change` skill, Review). The author fixes each finding, and you have the last word on them.
+Each finding has an id, `U<n>`, run on from the highest in the output file. Findings only: a few words on what would be true, but no fixes, rules or prototypes. A line that misleads usually wants a truer word, not more of them: every word added spends the reader's attention (the skill's intro), and on empire-cleaning #536 passes that asked for more explaining took four rounds over one line, until the user cut the card to "Payment pending" and one short line (2026-11-23). Mark `[recheck]` a bug or a real problem for its reader: only those bring you back (the `change` skill, Review). The author fixes each finding, and you have the last word on them.
 
 **Not drawn:** each state its reader meets that no shot shows (the skill's "Draw it at its edges": none, one, many, the longest text, the reader alone; and the states that change what's shown), with why it matters to them. **Gaps:** each place the skill gives no answer, or two. The user wants these most.
 
@@ -43,8 +43,8 @@ Write to the output path you're given, last, once you're done: it's the only fil
 # UX review: <branch> @ <the shots' commit>, <first pass | pass n>, <r> to recheck
 ## Previous findings          (after the first pass)
 - U<n> [recheck|polish] <finding, as first written> → fixed (<shot>) | conceded: <why> | turned down: <reason> | ruled by the user: <ruling> | open: <why>
-## Findings
-U<n>. [high|medium|low] [recheck|polish] <screen>, <case>, <width>: <what's wrong> — <shot path>
+## Findings ([polish] in a later pass only)
+U<n>. [recheck|polish] <screen>, <case>, <width>: <what's wrong> — <shot path>
    Reader: <who, in what moment, after what>. Costs them: <what>.
    Breaks: "<the ui skill's line>" (<its section>) | <the repo's UX doc>:<line>, after inbox <id> when a signal led you there
 ## Not drawn
@@ -57,6 +57,6 @@ U<n>. [high|medium|low] [recheck|polish] <screen>, <case>, <width>: <what's wron
 
 The header's `<r> to recheck` counts the `[recheck]` findings your passes haven't seen fixed, and the PR gate takes a closing other than a fix only in your word on it.
 
-Write it as the global CLAUDE.md's "Writing for me" says, as the user reads it, a repo's terms from its glossary. Reply with the output's path, the count of findings by severity, and how many states weren't drawn.
+Write it as the global CLAUDE.md's "Writing for me" says, as the user reads it, a repo's terms from its glossary. Reply with the output's path, the count of findings, how many are to recheck, and how many states weren't drawn.
 
 An audit of a whole app is this review run per area, on each area's shots drawn first (empire-cleaning's screen audit, 2026-11-21; #502, "Audits use it too").

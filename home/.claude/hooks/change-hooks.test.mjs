@@ -194,7 +194,7 @@ const CLEAN_UX = (head) => `# UX review: ${BRANCH} @ ${head}, first pass, 0 to r
 const CLOSED_UX = (head) =>
   `# UX review: ${BRANCH} @ ${head}, pass 2, 0 to recheck\n## Previous findings\n- U1 [recheck] a → fixed (b.png)\n- U2 [polish] b → turned down: the owner's call\n`;
 // a UX review of HEAD, its first pass, with one finding to recheck
-const OPEN_UX = (head) => `# UX review: ${BRANCH} @ ${head}, first pass, 1 to recheck\n## Findings\nU1. [high] [recheck] a\n`;
+const OPEN_UX = (head) => `# UX review: ${BRANCH} @ ${head}, first pass, 1 to recheck\n## Findings\nU1. [recheck] a\n`;
 // a PR body in the change skill's shape, its permalinks at `head`, with
 // `change` as its Change section's lines; `parts` replaces a part's text,
 // or leaves it out (null)
@@ -370,11 +370,16 @@ const STATES = {
       ["review-gate", () => scratchRepo({ review: "## Findings\nF1. [recheck] a\n", header: "round 1, 1 to recheck", lessons: ROUTED, said, body: (head) => prBody(head, `- New: nothing\n- Review: F1 a → ${closing(head)}\n`) })],
     ]),
   ),
-  // `filed in #<n>` closes a later pass's `[polish]` finding, and no other
+  // `filed in #<n>` closes a later pass's `[polish]` finding, and no other:
+  // not a `[recheck]`, nor the first look's polish (round 1 F31)
   ...Object.fromEntries(
-    ["polish", "recheck"].map((mark) => [
-      `filed${mark[0].toUpperCase()}${mark.slice(1)}`,
-      ["review-gate", () => scratchRepo({ review: `F1. [${mark}] a\n`, header: "recheck 1, 0 to recheck", body: (head) => prBody(head, "- New: nothing\n- Review: F1 a → filed in #12\n") })],
+    Object.entries({
+      filedPolish: ["polish", "recheck 1"],
+      filedRecheck: ["recheck", "recheck 1"],
+      filedFirstLook: ["polish", "round 1"],
+    }).map(([name, [mark, pass]]) => [
+      name,
+      ["review-gate", () => scratchRepo({ review: `F1. [${mark}] a\n`, header: `${pass}, 0 to recheck`, body: (head) => prBody(head, "- New: nothing\n- Review: F1 a → filed in #12\n") })],
     ]),
   ),
   // PR bodies out of the change skill's shape, each a part replaced (bodyMore
@@ -684,6 +689,7 @@ const CASES = [
   ["filedPolish", "gh pr create --draft --body-file <body>", THROUGH],
   ["filedPolish", "gh pr create --body-file <body>", NO_LESSONS],
   ["filedRecheck", "gh pr create --draft --body-file <body>", /F1: `listed` and `filed in #<n>` close only a finding the review marks `\[polish\]`/],
+  ["filedFirstLook", "gh pr create --draft --body-file <body>", /F1: `listed` and `filed in #<n>` close only a later pass's `\[polish\]`/],
 
   // agent-gate: the command is the Agent call's isolation, if any
   ["agent", "worktree", /Spawn it without `isolation`/],

@@ -203,30 +203,37 @@ const userRuled = (line, transcript) => {
 };
 // a later pass's polish, marked `[polish]` in the review, needs no fix: it
 // closes on the body's list (`listed`) or in an issue (the `change` skill's
-// Review, 2026-11-26)
+// Review, 2026-11-26). Only a later pass's (its header's `recheck <n>` or
+// `pass <n>`): the first look's file is most changes' last, and its polish
+// is fixed (round 1 F31)
 const POLISH = /^(?:listed|filed in #\d+)\b/;
+const laterPass = (path) => {
+  const pass = passOf(path);
+  return Boolean(pass?.recheck || pass?.pass);
+};
 const closingOf = (line) => line.split("→").at(-1).trim();
 const wordOf = (line) => REVIEWERS_WORDS.find((word) => closingOf(line).startsWith(word));
 
-// why no line of the Change section closes finding `id` of the review
-// `text`, or null when one does: `fixed in <sha>` (a commit on this
-// branch), `listed` or `filed in #<n>` for a `[polish]` finding, the user's
-// ruling in their words (userRuled), or the review's own word on it
-// (`fixed in the survey` among them). `answered:` closed one until
-// 2026-11-23, when builders answered real findings away (empire-cleaning
-// #527, #536, #538)
-const unclosed = (cwd, section, id, text, transcript) => {
+// why no line of the Change section closes finding `id` of `review` (its
+// path and text), or null when one does: `fixed in <sha>` (a commit on
+// this branch), `listed` or `filed in #<n>` for a later pass's `[polish]`
+// finding, the user's ruling in their words (userRuled), or the review's
+// own word on it (`fixed in the survey` among them). `answered:` closed
+// one until 2026-11-23, when builders answered real findings away
+// (empire-cleaning #527, #536, #538)
+const unclosed = (cwd, section, id, review, transcript) => {
   const named = section.filter((line) => new RegExp(`\\b${id}\\b`).test(line));
   if (!named.length) return "no line names it";
-  const words = lines(text)
+  const words = lines(review.text)
     .filter((line) => line.includes("→") && new RegExp(`^(?:- )?${id}\\b`).test(line))
     .map(wordOf);
   const whys = named.map((named) => {
     const line = closingOf(named);
-    if (POLISH.test(line))
-      return lines(text).some((line) => new RegExp(`^(?:- )?${id}\\b.*\\[polish\\]`).test(line))
-        ? null
-        : "`listed` and `filed in #<n>` close only a finding the review marks `[polish]`: fix this one";
+    if (POLISH.test(line)) {
+      if (!lines(review.text).some((line) => new RegExp(`^(?:- )?${id}\\b.*\\[polish\\]`).test(line)))
+        return "`listed` and `filed in #<n>` close only a finding the review marks `[polish]`: fix this one";
+      return laterPass(review.path) ? null : "`listed` and `filed in #<n>` close only a later pass's `[polish]` (its header's `recheck <n>` or `pass <n>`), and the first look's are fixed: fix this one";
+    }
     const word = wordOf(line);
     if (word === RULED && userRuled(line, transcript)) return null;
     if (word === RULED && !words.includes(word))
@@ -290,7 +297,7 @@ const unclosedAll = (cwd, work, found, body, section, seen, transcript) => {
   const { why, reviews } = reviewsOf(cwd, work, found, seen);
   if (why) return why;
   const open = reviews
-    .flatMap((one) => one.ids.map((id) => [id, unclosed(cwd, section, id, one.text, transcript)]))
+    .flatMap((one) => one.ids.map((id) => [id, unclosed(cwd, section, id, one, transcript)]))
     .flatMap(([id, why]) => (why ? [`${id}: ${why}`] : []));
   if (open.length)
     return `The PR body's Change section (${body}) doesn't close every finding of ${reviews.map((one) => one.path).join(" and ")}: ${open.join("; ")}. Each finding gets its own line ending \`fixed in <sha>\` (a commit on this branch), \`listed\` or \`filed in #<n>\` for a \`[polish]\` finding, \`ruled by the user: "<their words>"\`, or the review's own word on it, after its line's last → (\`fixed in the survey\`, \`fixed elsewhere:\`, \`conceded:\`, \`turned down:\`).`;
