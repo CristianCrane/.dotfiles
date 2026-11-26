@@ -692,6 +692,18 @@ const commentOnly = (cwd, sha) => {
 // since change only comment lines
 export const stillHead = (cwd, sha) => headSha(cwd).startsWith(sha) || commentOnly(cwd, sha);
 
+// the commits a change review of `sha` hasn't read: each since it that
+// names no finding it fixes (`F<n>`, `C<n>`, `U<n>`) nor `CI`, or every
+// commit of the branch once a rebase moves `sha` off it. Review-gate holds
+// the PR in draft on them, and agent-gate lets the change-reviewer read
+// them: new work, a first look's, not a recheck (round 1 F29)
+export const unreadSince = (cwd, sha) => {
+  const on = onBranch(cwd, sha);
+  return lines(git(cwd, "rev-list", "--no-merges", `${on ? sha : base(cwd)}..HEAD`)).filter(
+    (one) => !on || !/\b(?:[FCU]\d+|CI)\b/.test(git(cwd, "log", "-1", "--format=%B", one)),
+  );
+};
+
 // the reviewer's read of the diff: a valid header ("… @ <sha>, round 1 |
 // recheck <n>, <r> to recheck"), of a commit on the branch. What else a PR
 // needs before it leaves draft (no fix owed a recheck, every commit since

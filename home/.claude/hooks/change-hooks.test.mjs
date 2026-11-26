@@ -424,7 +424,13 @@ const STATES = {
       // is no commit here), or not; or nothing to recheck
       passOwed: { review: "# Change review: feature @ abc1234, round 1, 2 to recheck\n" },
       passOwedAtHead: { review: (head) => `# Change review: feature @ ${head}, round 1, 1 to recheck\n` },
-      passNothingOwed: { review: "# Change review: feature @ abc1234, recheck 1, 0 to recheck\n" },
+      passNothingOwed: { review: (head) => `# Change review: feature @ ${head}, recheck 1, 0 to recheck\n` },
+      // round 1 F29: a commit since the change review's last pass that names
+      // no finding, or a rebase past it (abc1234), is new work no review has
+      // read; one naming a finding is a fix, read only while one is owed
+      passUnread: { review: (head) => `# Change review: feature @ ${head}, round 1, 0 to recheck\n`, commit: "Cleanup: a stale line" },
+      passFixNamed: { review: (head) => `# Change review: feature @ ${head}, round 1, 0 to recheck\n`, commit: "Change: the stale line, F1" },
+      passRebased: { review: "# Change review: feature @ abc1234, round 1, 0 to recheck\n" },
       // a fix the change review marks [recheck] opens the critical review's
       // later pass too, as one at stakes is its to read
       passCriticalOwed: {
@@ -443,7 +449,13 @@ const STATES = {
         () => {
           const state = scratchRepo();
           const head = git(state.repo, "rev-parse", "--short", "HEAD");
-          for (const [kind, text] of Object.entries(files)) write(state.repo, kind, typeof text === "function" ? text(head) : text);
+          const { commit: message, ...kinds } = files;
+          for (const [kind, text] of Object.entries(kinds)) write(state.repo, kind, typeof text === "function" ? text(head) : text);
+          if (message) {
+            writeFileSync(join(state.repo, "c.txt"), "c\n");
+            git(state.repo, "add", ".");
+            git(state.repo, "commit", "-qm", message);
+          }
           return { ...state, out: dirname(stateFile(state.repo, "review", BRANCH)) };
         },
       ],
@@ -530,7 +542,7 @@ const CASES = [
   ["lessonsNone", "gh pr ready 12", NAMED],
   ["noLessons", "gh pr ready --undo", THROUGH],
   // after the review's last pass, each commit names the finding it fixes
-  ["staleReview", "gh pr ready", /^[0-9a-f]{7} came after the change review's last pass \([0-9a-f]+\) and names no finding it fixes \(`F<n>`, `C<n>`, `U<n>`\) nor `CI`/],
+  ["staleReview", "gh pr ready", /^[0-9a-f]{7} came after the change review's last pass \([0-9a-f]+\) and names no finding it fixes \(`F<n>`, `C<n>`, `U<n>`\) nor `CI`: .* run the change-reviewer on HEAD/],
   ["fixNamed", "gh pr ready", THROUGH],
   ["fixNamed", "gh pr ready 12", NAMED],
 
@@ -665,6 +677,9 @@ const CASES = [
   ["passOwed", "change-reviewer: recheck, output <out>/review-feature.md", THROUGH],
   ["passOwedAtHead", "change-reviewer: recheck, output <out>/review-feature.md", /review-feature\.md already reads HEAD \([0-9a-f]+, or only comment lines since\), .*: commit the fixes first/],
   ["passNothingOwed", "change-reviewer: recheck, output <out>/review-feature.md", /^No review of this change owes a recheck \(each header beside .*review-feature\.md reads 0 to recheck\)/],
+  ["passUnread", "change-reviewer: recheck, output <out>/review-feature.md", THROUGH],
+  ["passFixNamed", "change-reviewer: recheck, output <out>/review-feature.md", /^No review of this change owes a recheck/],
+  ["passRebased", "change-reviewer: recheck, output <out>/review-feature.md", THROUGH],
   ["passCriticalOwed", "critical-reviewer: recheck, output <out>/critical-review-feature.md", THROUGH],
   ["passUx", "ux-reviewer: shots, output <out>/ux-review-feature.md", /^No review of this change owes a recheck/],
   ["passUx", "ux-reviewer: design, output <out>/ux-review-design-feature.md", THROUGH],

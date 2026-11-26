@@ -14,16 +14,19 @@
 // After it, a reviewer's pass goes through only while some review of the
 // change owes a fix a recheck (a header's `<r> to recheck` above 0) and
 // HEAD has moved past what this reviewer last read, so there are fixes to
-// read. A process batch's change review rechecks any commit after it, as
-// its merge needs a review of HEAD (review-gate's batchUnapproved). A
-// design's UX review passes again while its own count is above 0: a design
-// is fixed in place, with no commit. The counts are the review files' own
+// read. The change-reviewer also reads a commit since its last pass that
+// names no finding it fixes, or the branch rebased past it (lib's
+// unreadSince): new work, a first look's (round 1 F29). A process batch's
+// change review rechecks any commit after it, as its merge needs a review
+// of HEAD (review-gate's batchUnapproved). A design's UX review passes
+// again while its own count is above 0: a design is fixed in place, with
+// no commit. The counts are the review files' own
 // headers (lib's passOf), beside the output path the prompt names, as an
 // Agent call's cwd is the spawning session's folder, not the change's
 // checkout.
 import { existsSync, readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
-import { branchOf, checkoutOf, deny, hook, passOf, processBatch, reviewFiles, stillHead } from "./lib.mjs";
+import { branchOf, checkoutOf, deny, hook, passOf, processBatch, reviewFiles, stillHead, unreadSince } from "./lib.mjs";
 
 const KINDS = {
   "change-reviewer": ["review", "plan-review"],
@@ -65,6 +68,7 @@ const pastCap = (type, prompt) => {
   let batch = false;
   try {
     batch = out.kind === "review" && processBatch(branchOf(checkout));
+    if (out.kind === "review" && pass.sha && unreadSince(checkout, pass.sha).length) return;
   } catch {}
   if (!owed && !batch)
     return `No review of this change owes a recheck (each header beside ${out.path} reads 0 to recheck), and ${RULE}. Fix what's left with no pass: each commit names the finding it fixes, and the PR body closes it; a case against one goes to the user, whose ruling closes it.`;

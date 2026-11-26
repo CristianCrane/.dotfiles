@@ -10,9 +10,10 @@
 // review's for its own findings. A PR leaves draft (`gh pr ready`, or
 // `gh pr create` without `--draft`) once, besides that (notReady), no
 // review owes a fix its recheck (a header's `<r> to recheck` above 0, less
-// what the user ruled on), every commit since the change review's last
-// pass names the finding it fixes or CI, and the branch's lessons file (the
-// `lessons` skill) says where every cost went.
+// what the user ruled on), the change review has read every commit since
+// its last pass that names no finding it fixes nor CI (lib's unreadSince),
+// and the branch's lessons file (the `lessons` skill) says where every
+// cost went.
 // The closing check is the backstop for the reviewer's last word (the
 // change skill, Review), not a rule of its own: in words alone, the
 // principle failed three times in two days, builders answering UX
@@ -61,6 +62,7 @@ import {
   stateFile,
   stillHead,
   unquote,
+  unreadSince,
   userMessages,
   WORD,
   workOf,
@@ -297,7 +299,8 @@ const owedOf = (one, section) => {
 // `--draft`), beside its body's closings (unclosedAll), if it can't: a
 // review owes a fix its recheck, a commit since the change review's last
 // pass names no finding it fixes (nor CI, which rests on trust), or the
-// lessons are missing. A commit that fixes nothing belongs before round 1
+// lessons are missing. A commit that fixes nothing is new work, which the
+// change-reviewer reads (agent-gate lets it through)
 const notReady = (cwd, work, found, section, seen) => {
   const { why, reviews } = reviewsOf(cwd, work, found, seen);
   if (why) return why;
@@ -305,11 +308,9 @@ const notReady = (cwd, work, found, section, seen) => {
   if (owing.length)
     return `${owing.map((one) => `${one.path} has ${owedOf(one, section)} to recheck`).join("; ")}: a reviewer still owes those fixes a read. Commit each fix, naming the finding, and run that reviewer's next pass (the \`change\` skill's Review); a case against one goes to the user, and the body closes it \`ruled by the user: <their words>\`.`;
   if (found.sha) {
-    const unnamed = lines(git(cwd, "rev-list", "--no-merges", `${found.sha}..HEAD`)).filter(
-      (sha) => !/\b(?:[FCU]\d+|CI)\b/.test(git(cwd, "log", "-1", "--format=%B", sha)),
-    );
+    const unnamed = unreadSince(cwd, found.sha);
     if (unnamed.length)
-      return `${unnamed.map((sha) => sha.slice(0, 7)).join(", ")} came after the change review's last pass (${found.sha}) and name${unnamed.length === 1 ? "s" : ""} no finding it fixes (\`F<n>\`, \`C<n>\`, \`U<n>\`) nor \`CI\`: after round 1 a commit fixes a finding, so name it in the message (\`git commit --amend\` or a reword), or, if it fixes none, run the reviewer on it (the \`change\` skill's Review).`;
+      return `${unnamed.map((sha) => sha.slice(0, 7)).join(", ")} came after the change review's last pass (${found.sha}) and name${unnamed.length === 1 ? "s" : ""} no finding it fixes (\`F<n>\`, \`C<n>\`, \`U<n>\`) nor \`CI\`: name the finding a fix fixes in its message (\`git commit --amend\` or a reword); a commit that fixes none is new work no review has read, so run the change-reviewer on HEAD (the \`change\` skill's Review).`;
   }
   return lessonsMissing(cwd, work);
 };
