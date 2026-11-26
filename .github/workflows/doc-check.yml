@@ -1,0 +1,35 @@
+# The docs check (.dotfiles#61 Q12): red on any commit that changes a doc
+# without the doc curator's trailer (`Doc-curator: per-PR` or `: sweep`),
+# the user's own included, and on a doc past its lint budget. A repo opts in
+# with a docs map (docs/map.md) and this job in its CI:
+#
+#   jobs:
+#     docs:
+#       uses: CristianCrane/.dotfiles/.github/workflows/doc-check.yml@main
+#
+# It runs on the caller's event: a PR's commits since its base, a push's
+# since its `before`. docs.mjs comes from this workflow's own commit
+# (job.workflow_sha), so a caller runs the check its @ref names.
+name: Docs
+on:
+  workflow_call:
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .doc-check
+          sparse-checkout: home/.claude/hooks
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: node .doc-check/home/.claude/hooks/docs.mjs check --base "$BASE"
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}

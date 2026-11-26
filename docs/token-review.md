@@ -6,7 +6,7 @@ A SessionStart hook (`home/.claude/hooks/usage.mjs`, `--hook`) says when a revie
 
 ## Running a review
 
-One agent runs it, started from the main session, and reports back in a few lines. A second agent, started beside it, runs the `test-sweep` skill; its numbered list goes to the user with the review's report.
+One agent runs it, started from the main session, and reports back in a few lines. A second agent, started beside it, runs the `test-sweep` skill; its numbered list goes to the user with the review's report. A third, a `builder`, runs the weekly doc sweep of each repo with a docs map (`docs/map.md`) whose doc inbox (`~/.claude/process/doc-inbox/<project>.md`) holds a note or whose docs changed since its last sweep, the rest skipped (process.md, principle 2): a worktree on `doc-sweep-<YYYY-MM-DD>` off the default branch, the `doc-curator` in sweep mode, one round-1 review, and a draft PR the user merges (.dotfiles#61 Q3, Q4).
 
 1. **Work in a `git worktree` of the dotfiles, under the `change` skill**, as the dotfiles' CLAUDE.md says. The entry lands by PR, which the user merges.
 2. **Run `node ~/.claude/hooks/usage.mjs --week`.** It prints the 7 days before today beside the 7 before those, measured the same way every week; its header says which numbers are estimates. A week whose readings or PRs need a closer look: `--week --since <day>` for another week, `--since <day>` for each workstream from a day, the transcripts under `~/.claude/projects` (kept 30 days).

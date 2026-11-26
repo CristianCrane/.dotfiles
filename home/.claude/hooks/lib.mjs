@@ -14,6 +14,7 @@ import { closeSync, existsSync, fstatSync, mkdirSync, openSync, readFileSync, re
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
+import { entryOf, mapAt, onlyDocs } from "./docs.mjs";
 
 export const git = (cwd, ...args) =>
   execFileSync("git", args, {
@@ -465,16 +466,31 @@ export const checkoutOf = (file) => {
 // review recorded them, so a change that outgrows one reviewable PR stops
 // while splitting it is cheap (2026-11-25: #508's tree, #561 at round 5).
 // The count is read from the reviewer's header, so raising the survey's
-// opens nothing: a redone survey gets a plan pass of its own (agent-gate)
+// opens nothing: a redone survey gets a plan pass of its own (agent-gate).
+// The docs a docs map lists aren't counted (docs.mjs): the doc curator's
+// commits ride the builder's PR, and no plan counted them
 const CAP = 1.5;
 const pastCap = (cwd, work, plan, found, pending) => {
   if (!plan.files) return null;
   const cap = Math.ceil(plan.files * CAP);
-  const files = changedFiles(cwd);
-  const adds = pending && !files.has(relative(topOf(cwd), pending.path)) ? 1 : 0;
+  const top = topOf(cwd);
+  const files = new Set([...changedFiles(cwd)].filter((rel) => !isDoc(top, rel)));
+  const rel = pending && relative(top, pending.path);
+  const adds = pending && !files.has(rel) && !isDoc(top, rel) ? 1 : 0;
   if (files.size + adds <= cap) return null;
   return `${work.branch} is past ${CAP}x the ${plan.files} files its plan review counted (${files.size + adds} with this edit, against ${cap}; ${plan.path}). Split it: commit what's built as its own PR, put the rest in an issue it links, and end with a report that says so; or redo the survey (${found.path}) with a new Expected files and run the change-reviewer on it in plan mode again, as the \`change\` skill's Build says`;
 };
+
+// A doc sweep (the dotfiles' docs/process.md; .dotfiles#61 Q3, Q4): the
+// doc curator's weekly pass over a repo's docs, on a `doc-sweep-<date>`
+// branch, takes a one-line survey and no plan review, as its PR gets one
+// round-1 review; it holds only while every file the branch changes is a
+// doc its docs map lists (docs.mjs), the pending edit's too
+const docSweep = (cwd, work, pending) =>
+  /^doc-sweep-/.test(work.branch) && onlyDocs(topOf(cwd), [...changedFiles(cwd)], pending?.path);
+
+// whether a path from the checkout's top is a doc its docs map lists
+const isDoc = (top, rel) => Boolean(mapAt(top) && entryOf(mapAt(top), rel));
 
 // A dictated change (the change skill's rule): a config change the user
 // dictated exactly skips the plan review and the review, held as tight as
@@ -607,6 +623,7 @@ export const beforeEdit = (cwd, work, input = {}, pending = null) => {
         : `there is no survey for ${work.branch}: load the \`change\` skill and write its survey to ${found.path}`,
     };
   const plan = planReview(cwd, work.key);
+  if (!plan.ok && docSweep(cwd, work, pending)) return { survey: found, missing: null };
   if (!plan.ok) {
     const dictated = dictatedHolds(cwd, work, input, pending);
     if (dictated?.holds) return { survey: found, missing: null };
