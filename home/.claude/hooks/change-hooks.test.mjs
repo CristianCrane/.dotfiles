@@ -1733,10 +1733,14 @@ test("substitutions: each the shell runs, outermost first", () => {
 });
 
 // the doc curator's locks (.dotfiles#61): doc-gate for who it is, and
-// docs.mjs, CI's trailer check and the curator's lint, run as CI and the
-// curator run it (`node docs.mjs check --base <ref>`, `lint`)
+// docs.mjs, CI's trailer check and the curator's lint (`node docs.mjs check
+// --base <ref>`, `lint`), run as agents run it: through a symlink to the
+// hooks folder, as ~/.claude/hooks is, where a guard on argv[1] once ran
+// nothing (.dotfiles#65). CI's run by the real path is hooks.yml's docs job.
 describe("docs", () => {
-  const docs = (repo, ...args) => spawnSync(process.execPath, [join(HOOKS, "docs.mjs"), ...args], { cwd: repo, encoding: "utf8" });
+  const linked = join(scratchDir(), "hooks");
+  symlinkSync(HOOKS, linked);
+  const docs = (repo, ...args) => spawnSync(process.execPath, [join(linked, "docs.mjs"), ...args], { cwd: repo, encoding: "utf8" });
   const gate = (repo, who, tool_input) => runHook("doc-gate", { tool_input, cwd: repo, session_id: "s", ...who }).stdout;
   const HELD = /only the doc-curator agent writes docs/;
   // a commit of `files` ({ path: text }), with a `Doc-curator:` trailer of
