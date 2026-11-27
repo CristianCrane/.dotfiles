@@ -20,7 +20,7 @@ Say only what you've seen. A cause, a claim about how code behaves, or where wor
 - **Quality over quick fixes.** When fixes differ, recommend the one that fixes the cause for good (one rule over a second copy, a fix at its source over a workaround), giving the quick one only as the alternative; where the pick is yours, build that one (2026-11-09).
 - **A long wait** (CI, a build, a test run) runs with `run_in_background` and ends in its notification, never a check each turn (2026-11-10). An agent, whose cache lasts 5 minutes, waits past that in ~4-minute slices, the work itself in the background: a foreground `timeout 230 gh pr checks --watch`, or an until-loop on its output, again until done (2026-11-23).
 - **My own repos (CristianCrane/*):** comment on their issues and PRs without asking; if auto mode blocks a routine `gh` write there, say so, save any body to a file, and give me the `! gh …` command (until .dotfiles#32). Others' repos wait for my word.
-- **Writing for me** (a PR body, a report, chat): plain, relaxed words, big picture first, an analogy where one fits, then the technical detail in as few words as it takes, as Feynman explained heat as atoms "jiggling" (2026-11-23: long, tiring PRs and reports).
+- **Writing for me** (a PR body, a report, chat): plain, relaxed words, big picture first, then the technical detail in as few words as it takes. An analogy only when something is very complex and a plain explanation hasn't got it across (2026-11-23: long, tiring PRs and reports; 2026-11-27: forced analogies).
 - **Anything sent as me** is casual, like texting family: short sentences, no office speak, no formal sign-offs (2026-10-31).
 
 # This machine
