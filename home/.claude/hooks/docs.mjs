@@ -21,7 +21,6 @@
 // own edits too (#61 Q12).
 import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
 // lib imports this module too; neither uses the other while it loads
 import { git, topOf } from "./lib.mjs";
 
@@ -263,4 +262,4 @@ const main = (args) => {
   return 1;
 };
 
-if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) process.exit(main(process.argv.slice(2)));
+if (import.meta.main) process.exit(main(process.argv.slice(2)));
